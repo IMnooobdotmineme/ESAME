@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-// 1. Explicitly define the unified structure to satisfy TypeScript's compiler
 interface ExamItem {
   id: string;
   title: string;
@@ -11,34 +10,44 @@ interface ExamItem {
   duration: string;
   questions: number;
   code: string;
-  students?: string;  // Optional: Only used in active exams
-  date?: string;      // Optional: Only used in scheduled exams
-  graded?: string;    // Optional: Only used in completed exams
+  students?: string;
+  date?: string;
+  graded?: string;
 }
+
+const INITIAL_EXAMS_DATA: Record<'active' | 'scheduled' | 'completed', ExamItem[]> = {
+  active: [
+    { id: '1', title: 'Introduction to Computer Science (Midterm)', course: 'CS101', duration: '60 mins', questions: 30, code: 'CS101-MID', students: '45/50' },
+    { id: '2', title: 'Data Structures & Algorithms Quiz 3', course: 'CS204', duration: '45 mins', questions: 15, code: 'DS-QZ3', students: '22/25' }
+  ],
+  scheduled: [
+    { id: '3', title: 'Advanced Database Systems Final', course: 'CS404', duration: '120 mins', questions: 50, code: 'DB-FINAL', date: 'July 24, 2026' },
+    { id: '4', title: 'Discrete Mathematics Retake', course: 'MATH201', duration: '90 mins', questions: 25, code: 'MATH-RET', date: 'Aug 02, 2026' }
+  ],
+  completed: [
+    { id: '5', title: 'Software Engineering Ethics Baseline Test', course: 'SE302', duration: '30 mins', questions: 20, code: 'SE-ETH', graded: 'Fully Graded' },
+    { id: '6', title: 'Web Development Practical Exam 1', course: 'CS108', duration: '180 mins', questions: 5, code: 'WEB-P1', graded: '12 Pending Review' }
+  ]
+};
 
 export default function MyExamsPage() {
   const [activeTab, setActiveTab] = useState<'active' | 'scheduled' | 'completed'>('active');
+  const [examsData, setExamsData] = useState<Record<'active' | 'scheduled' | 'completed', ExamItem[]>>(INITIAL_EXAMS_DATA);
 
-  // 2. Type the data structure explicitly using our new interface
-  const examsData: Record<'active' | 'scheduled' | 'completed', ExamItem[]> = {
-    active: [
-      { id: '1', title: 'Introduction to Computer Science (Midterm)', course: 'CS101', duration: '60 mins', questions: 30, code: 'CS101-MID', students: '45/50' },
-      { id: '2', title: 'Data Structures & Algorithms Quiz 3', course: 'CS204', duration: '45 mins', questions: 15, code: 'DS-QZ3', students: '22/25' }
-    ],
-    scheduled: [
-      { id: '3', title: 'Advanced Database Systems Final', course: 'CS404', duration: '120 mins', questions: 50, code: 'DB-FINAL', date: 'July 24, 2026' },
-      { id: '4', title: 'Discrete Mathematics Retake', course: 'MATH201', duration: '90 mins', questions: 25, code: 'MATH-RET', date: 'Aug 02, 2026' }
-    ],
-    completed: [
-      { id: '5', title: 'Software Engineering Ethics Baseline Test', course: 'SE302', duration: '30 mins', questions: 20, code: 'SE-ETH', graded: 'Fully Graded' },
-      { id: '6', title: 'Web Development Practical Exam 1', course: 'CS108', duration: '180 mins', questions: 5, code: 'WEB-P1', graded: '12 Pending Review' }
-    ]
-  };
+  // Load saved exams from browser storage on startup
+  useEffect(() => {
+    const saved = localStorage.getItem('localExamsData');
+    if (saved) {
+      setExamsData(JSON.parse(saved));
+    } else {
+      localStorage.setItem('localExamsData', JSON.stringify(INITIAL_EXAMS_DATA));
+    }
+  }, []);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-200">
+    <div className="w-full max-w-7xl mx-auto space-y-8 p-6 animate-in fade-in duration-200 text-gray-900">
       
-      {/* Upper Action Banner */}
+      {/* Top Banner */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-black text-gray-900">Examination Repository</h2>
@@ -55,7 +64,7 @@ export default function MyExamsPage() {
         </Link>
       </div>
 
-      {/* Chunky Navigation Status Tabs */}
+      {/* Navigation Status Tabs */}
       <div className="flex border-b border-gray-200 gap-2 bg-gray-100/60 p-1.5 rounded-xl max-w-md">
         {(['active', 'scheduled', 'completed'] as const).map((tab) => (
           <button
@@ -82,7 +91,6 @@ export default function MyExamsPage() {
           examsData[activeTab].map((exam) => (
             <div key={exam.id} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:border-gray-200 transition-all">
               
-              {/* Info Block */}
               <div className="space-y-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="px-3 py-1 bg-slate-100 text-slate-800 rounded-md text-xs font-bold tracking-wide">
@@ -101,12 +109,11 @@ export default function MyExamsPage() {
                 </div>
               </div>
 
-              {/* Dynamic Action Buttons */}
               <div className="flex items-center gap-3 border-t lg:border-t-0 pt-4 lg:pt-0 justify-end">
                 {activeTab === 'active' && (
                   <>
                     <div className="text-right hidden sm:block mr-2">
-                      <p className="text-sm font-bold text-gray-900">{exam.students} Active</p>
+                      <p className="text-sm font-bold text-gray-900">{exam.students || '0/0'} Active</p>
                       <p className="text-xs text-emerald-500 font-medium">Streams connected</p>
                     </div>
                     <Link href="/teacher/monitor" className="px-5 py-3 bg-[#0B7A93] hover:bg-[#09667c] text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
@@ -118,7 +125,7 @@ export default function MyExamsPage() {
                 {activeTab === 'scheduled' && (
                   <>
                     <div className="text-right hidden sm:block mr-2">
-                      <p className="text-sm font-bold text-gray-900">{exam.date}</p>
+                      <p className="text-sm font-bold text-gray-900">{exam.date || 'TBD'}</p>
                       <p className="text-xs text-amber-500 font-medium">Launch Pending</p>
                     </div>
                     <button className="px-5 py-3 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-bold rounded-xl transition-colors">
@@ -130,7 +137,7 @@ export default function MyExamsPage() {
                 {activeTab === 'completed' && (
                   <>
                     <div className="text-right hidden sm:block mr-2">
-                      <p className="text-sm font-bold text-gray-900">{exam.graded}</p>
+                      <p className="text-sm font-bold text-gray-900">{exam.graded || 'Archived'}</p>
                       <p className="text-xs text-gray-400 font-medium">Final collection records</p>
                     </div>
                     <Link href="/teacher/grading" className="px-5 py-3 bg-gray-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
