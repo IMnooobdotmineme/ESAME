@@ -1,155 +1,226 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-interface ExamItem {
+interface ActiveExam {
   id: string;
-  title: string;
+  code: string;
   course: string;
+  title: string;
   duration: string;
   questions: number;
-  code: string;
-  students?: string;
-  date?: string;
-  graded?: string;
+  studentsConnected: string;
+  totalStudents: string;
 }
 
-const INITIAL_EXAMS_DATA: Record<'active' | 'scheduled' | 'completed', ExamItem[]> = {
-  active: [
-    { id: '1', title: 'Introduction to Computer Science (Midterm)', course: 'CS101', duration: '60 mins', questions: 30, code: 'CS101-MID', students: '45/50' },
-    { id: '2', title: 'Data Structures & Algorithms Quiz 3', course: 'CS204', duration: '45 mins', questions: 15, code: 'DS-QZ3', students: '22/25' }
-  ],
-  scheduled: [
-    { id: '3', title: 'Advanced Database Systems Final', course: 'CS404', duration: '120 mins', questions: 50, code: 'DB-FINAL', date: 'July 24, 2026' },
-    { id: '4', title: 'Discrete Mathematics Retake', course: 'MATH201', duration: '90 mins', questions: 25, code: 'MATH-RET', date: 'Aug 02, 2026' }
-  ],
-  completed: [
-    { id: '5', title: 'Software Engineering Ethics Baseline Test', course: 'SE302', duration: '30 mins', questions: 20, code: 'SE-ETH', graded: 'Fully Graded' },
-    { id: '6', title: 'Web Development Practical Exam 1', course: 'CS108', duration: '180 mins', questions: 5, code: 'WEB-P1', graded: '12 Pending Review' }
-  ]
-};
+export default function TeacherDashboard() {
+  const router = useRouter();
+  
+  // Local state for active running exams
+  const [activeExams, setActiveExams] = useState<ActiveExam[]>([
+    {
+      id: 'active-1',
+      code: 'CS101-MID',
+      course: 'CS101',
+      title: 'Introduction to Computer Science (Midterm)',
+      duration: '60 mins',
+      questions: 30,
+      studentsConnected: '45',
+      totalStudents: '50'
+    },
+    {
+      id: 'active-2',
+      code: 'DS-QZ3',
+      course: 'CS204',
+      title: 'Data Structures & Algorithms Quiz 3',
+      duration: '45 mins',
+      questions: 15,
+      studentsConnected: '22',
+      totalStudents: '25'
+    }
+  ]);
 
-export default function MyExamsPage() {
-  const [activeTab, setActiveTab] = useState<'active' | 'scheduled' | 'completed'>('active');
-  const [examsData, setExamsData] = useState<Record<'active' | 'scheduled' | 'completed', ExamItem[]>>(INITIAL_EXAMS_DATA);
-
-  // Load saved exams from browser storage on startup
+  // Load dynamically added exams from localStorage if they are active
   useEffect(() => {
-    const saved = localStorage.getItem('localExamsData');
-    if (saved) {
-      setExamsData(JSON.parse(saved));
-    } else {
-      localStorage.setItem('localExamsData', JSON.stringify(INITIAL_EXAMS_DATA));
+    const rawData = localStorage.getItem('localExamsData');
+    if (rawData) {
+      try {
+        const currentExams = JSON.parse(rawData);
+        // If there's an active list in local storage, we sync it
+        if (currentExams.active && currentExams.active.length > 0) {
+          setActiveExams(currentExams.active);
+        }
+      } catch (e) {
+        console.error("Failed to parse local dashboard exam data", e);
+      }
     }
   }, []);
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-8 p-6 animate-in fade-in duration-200 text-gray-900">
+    <div className="w-full max-w-6xl mx-auto space-y-6 p-6 text-slate-900 animate-in fade-in duration-200">
       
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
+      {/* WELCOME BANNER AREA */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-black text-gray-900">Examination Repository</h2>
-          <p className="text-gray-500 text-sm mt-1">Review live feeds, coordinate dynamic test schedules, or access completed grading suites.</p>
+          <span className="text-[10px] font-black uppercase text-[#0B7A93] tracking-wider">Workspace Hub</span>
+          <h2 className="text-xl font-bold text-slate-900 mt-1">Teacher Dashboard Overview</h2>
+          <p className="text-slate-400 text-xs mt-0.5">Welcome back! Here is a running analytical snapshot of your current courses.</p>
         </div>
-        <Link 
-          href="/teacher/exams/new" 
-          className="px-6 py-3.5 bg-[#0B7A93] text-white text-base font-bold rounded-xl hover:bg-[#09667c] transition-colors shadow-sm shrink-0 flex items-center gap-2"
+        <button 
+          onClick={() => router.push('/teacher/exams/new')}
+          className="bg-[#0B7A93] hover:bg-[#09667c] text-white text-xs font-bold px-5 py-3 rounded-xl shadow-sm transition-all"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Create New Exam
-        </Link>
+          + Create New Exam
+        </button>
       </div>
 
-      {/* Navigation Status Tabs */}
-      <div className="flex border-b border-gray-200 gap-2 bg-gray-100/60 p-1.5 rounded-xl max-w-md">
-        {(['active', 'scheduled', 'completed'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-bold capitalize rounded-lg transition-all ${
-              activeTab === tab 
-                ? 'bg-white text-gray-900 shadow-sm' 
-                : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            {tab} Exams
-          </button>
-        ))}
-      </div>
-
-      {/* Exam Collection Grid */}
-      <div className="grid grid-cols-1 gap-4">
-        {examsData[activeTab].length === 0 ? (
-          <div className="bg-white text-center p-16 rounded-2xl border border-dashed border-gray-200">
-            <p className="text-gray-400 font-medium">No tests exist in this operational status folder.</p>
+      {/* 1. QUICK METRICS STATISTICS GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-[10px] font-black uppercase tracking-wider">Live Exam Sessions</span>
+            <span className="text-base">📡</span>
           </div>
-        ) : (
-          examsData[activeTab].map((exam) => (
-            <div key={exam.id} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:border-gray-200 transition-all">
-              
-              <div className="space-y-2">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="px-3 py-1 bg-slate-100 text-slate-800 rounded-md text-xs font-bold tracking-wide">
-                    {exam.course}
-                  </span>
-                  <span className="text-sm text-gray-400 font-medium">
-                    Duration: {exam.duration} • {exam.questions} Questions
-                  </span>
-                </div>
-                <h3 className="text-xl font-extrabold text-gray-900">{exam.title}</h3>
-                <div className="pt-1 flex items-center gap-2">
-                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Access Join Code:</span>
-                  <span className="font-mono font-bold text-xs bg-teal-50 text-[#0B7A93] px-2.5 py-1 rounded border border-teal-100">
-                    {exam.code}
-                  </span>
-                </div>
-              </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900">{activeExams.length}</span>
+            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">Active Now</span>
+          </div>
+        </div>
 
-              <div className="flex items-center gap-3 border-t lg:border-t-0 pt-4 lg:pt-0 justify-end">
-                {activeTab === 'active' && (
-                  <>
-                    <div className="text-right hidden sm:block mr-2">
-                      <p className="text-sm font-bold text-gray-900">{exam.students || '0/0'} Active</p>
-                      <p className="text-xs text-emerald-500 font-medium">Streams connected</p>
-                    </div>
-                    <Link href="/teacher/monitor" className="px-5 py-3 bg-[#0B7A93] hover:bg-[#09667c] text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
-                      Launch Live Monitor
-                    </Link>
-                  </>
-                )}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-[10px] font-black uppercase tracking-wider">Total Active Students</span>
+            <span className="text-base">👥</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900">67</span>
+            <span className="text-[10px] text-slate-400">across streams</span>
+          </div>
+        </div>
 
-                {activeTab === 'scheduled' && (
-                  <>
-                    <div className="text-right hidden sm:block mr-2">
-                      <p className="text-sm font-bold text-gray-900">{exam.date || 'TBD'}</p>
-                      <p className="text-xs text-amber-500 font-medium">Launch Pending</p>
-                    </div>
-                    <button className="px-5 py-3 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-bold rounded-xl transition-colors">
-                      Modify Parameters
-                    </button>
-                  </>
-                )}
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-[10px] font-black uppercase tracking-wider">Pending Evaluations</span>
+            <span className="text-base">📝</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-rose-600">12</span>
+            <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded">Requires Grading</span>
+          </div>
+        </div>
 
-                {activeTab === 'completed' && (
-                  <>
-                    <div className="text-right hidden sm:block mr-2">
-                      <p className="text-sm font-bold text-gray-900">{exam.graded || 'Archived'}</p>
-                      <p className="text-xs text-gray-400 font-medium">Final collection records</p>
-                    </div>
-                    <Link href="/teacher/grading" className="px-5 py-3 bg-gray-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
-                      Evaluate Grading Suite
-                    </Link>
-                  </>
-                )}
-              </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-[10px] font-black uppercase tracking-wider">Question Bank Sheets</span>
+            <span className="text-base">🗂️</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900">148</span>
+            <span className="text-[10px] text-slate-400">indexed entries</span>
+          </div>
+        </div>
 
+      </div>
+
+      {/* 2. QUICK SHORTCUT PANEL */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+        <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Quick Navigation Links</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button 
+            onClick={() => router.push('/teacher/exams')}
+            className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all text-left"
+          >
+            <span className="p-2 rounded-lg bg-teal-50 text-[#0B7A93] text-sm font-bold">📄</span>
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">Manage Full Repository</span>
+              <span className="text-[10px] text-slate-400">View all past and upcoming tests</span>
             </div>
-          ))
-        )}
+          </button>
+
+          <button 
+            onClick={() => router.push('/teacher/question-bank')}
+            className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all text-left"
+          >
+            <span className="p-2 rounded-lg bg-blue-50 text-blue-600 text-sm font-bold">📂</span>
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">Open Question Bank</span>
+              <span className="text-[10px] text-slate-400">Configure reused section forms</span>
+            </div>
+          </button>
+
+          <button 
+            onClick={() => router.push('/teacher/grading')}
+            className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all text-left"
+          >
+            <span className="p-2 rounded-lg bg-purple-50 text-purple-600 text-sm font-bold">🎯</span>
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">Review Student Submissions</span>
+              <span className="text-[10px] text-slate-400">12 items pending automated check</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. CORE REAL-TIME RUNNING EXAMS STATUS */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
+        <div>
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Live Active Stream Monitoring</h3>
+          <p className="text-[11px] text-slate-400 mt-0.5">Currently open exam test portals running concurrent student browser connections.</p>
+        </div>
+
+        <div className="space-y-3">
+          {activeExams.length === 0 ? (
+            <div className="p-8 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+              <span className="text-slate-300 text-xl block mb-1">📭</span>
+              <p className="text-xs text-slate-400 font-medium">No live exam streams currently processing connections.</p>
+            </div>
+          ) : (
+            activeExams.map((exam) => (
+              <div 
+                key={exam.id} 
+                className="p-5 border border-slate-100 bg-white rounded-xl shadow-sm hover:border-slate-200 transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
+                      {exam.course}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      Duration: {exam.duration} • {exam.questions} Questions
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900">{exam.title}</h4>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Access Join Code:</span>
+                    <span className="bg-teal-50 border border-teal-100/80 text-[#0B7A93] px-2 py-0.5 rounded font-mono font-bold text-[10px]">
+                      {exam.code}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-slate-50 pt-3 md:pt-0">
+                  <div className="text-left md:text-right">
+                    <span className="text-xs font-bold text-slate-800 block">
+                      {exam.studentsConnected}/{exam.totalStudents} Active
+                    </span>
+                    <span className="text-[10px] text-emerald-500 font-medium tracking-wide flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Streams connected
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => router.push(`/teacher/monitor/${exam.id}`)}
+                    className="bg-[#0B7A93] hover:bg-[#09667c] text-white text-xs font-bold px-4 py-2.5 rounded-lg transition-all shadow-sm"
+                  >
+                    Launch Live Monitor
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
     </div>
