@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function ResetPassword() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token") || "";
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -21,7 +23,7 @@ export default function ResetPassword() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -37,11 +39,24 @@ export default function ResetPassword() {
 
     setIsSubmitting(true);
 
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to reset password.");
+      }
+
+      router.push(data.redirectTo || "/login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to reset password.");
+    } finally {
       setIsSubmitting(false);
-      console.log("Password successfully reset.");
-      router.push("/login");
-    }, 1200);
+    }
   };
 
   return (
@@ -51,7 +66,7 @@ export default function ResetPassword() {
         {/* Back to Login link */}
         <a
           href="/login"
-          className="inline-flex items-center text-sm font-semibold text-[#8AAEE0] hover:text-[#395886] transition-colors mb-6"
+          className="inline-flex items-center text-sm font-semibold text-[#1F2A44] mb-6"
         >
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
