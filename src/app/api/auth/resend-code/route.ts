@@ -1,43 +1,43 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { verificationCodes } from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
+import { createAndSendVerificationCode } from "../../../../lib/verification";
 
-import {
-  createAndSendVerificationCode,
-  findUserByEmail,
-  jsonError,
-  normalizeEmail,
-  normalizePurpose,
-} from "../../../../lib/auth/service";
-
-export const runtime = "nodejs";
-
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const email = normalizeEmail(String(body.email || ""));
-    const purpose = normalizePurpose(String(body.purpose || ""));
-
-    if (!email || !purpose) {
-      return jsonError("Email and verification purpose are required.");
+    const { email } = await req.json();
+    if (!email) {
+      return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
+    const emailLower = String(email).toLowerCase().trim();
 
-    const user = await findUserByEmail(email);
-    if (!user) {
-      return jsonError("No account was found for this email.", 404);
-    }
+    const [lastRecord] = await db
+      .select()
+      .from(verificationCodes)
+      .where(eq(verificationCodes.email, emailLower))
+      .orderBy(desc(verificationCodes.createdAt))
+      .limit(1);
 
-    if (purpose === "login" && user.status !== "active") {
-      return jsonError("This account is not active.", 403);
+    if (!lastRecord) {
+      return NextResponse.json(
+        { error: "No previous request found for this email." },
+        { status: 400 }
+      );
     }
 
     await createAndSendVerificationCode({
-      email,
-      userId: user.id,
-      purpose,
+      email: emailLower,
+      purpose: lastRecord.purpose,
+      userType: lastRecord.userType,
     });
 
-    return NextResponse.json({ message: "Verification code resent.", email, purpose });
-  } catch (error) {
-    console.error("Resend verification code failed:", error);
-    return jsonError("Unable to resend verification code.", 500);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("resend-code error", err);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }

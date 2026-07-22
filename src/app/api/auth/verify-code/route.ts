@@ -1,107 +1,119 @@
+import crypto from "crypto";
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { organizations, teachers, verificationCodes, resetTokens } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { NextRequest, NextResponse } from "next/server";
+import { hashCode, getLatestActiveCode, MAX_ATTEMPTS } from "../../../../lib/verification";
+import { createSession, setSessionCookie, RESET_COOKIE } from "../../../../lib/session";
 
-import { organizations, users } from "../../../../db/schema";
-import { getDb } from "../../../../lib/auth/db";
-import {
-  attachSessionCookie,
-  consumeVerificationCode,
-  createPasswordResetToken,
-  dashboardUrlForUser,
-  jsonError,
-  normalizeEmail,
-  normalizePurpose,
-} from "../../../../lib/auth/service";
-
-export const runtime = "nodejs";
-
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const email = normalizeEmail(String(body.email || ""));
-    const code = String(body.code || "").replace(/\D/g, "");
-    const purpose = normalizePurpose(String(body.purpose || ""));
+    const { email, code } = await req.json();
+    if (!email || !code) {
+      return NextResponse.json(
+        { error: "Email and code are required." },
+        { status: 400 }
+      );
+    }
+    const emailLower = String(email).toLowerCase().trim();
 
-    if (!email || code.length !== 6 || !purpose) {
-      return jsonError("Email, 6-digit code, and purpose are required.");
+    const record = await getLatestActiveCode(emailLower);
+    if (!record) {
+      return NextResponse.json(
+        { error: "No active verification code found. Please request a new one." },
+        { status: 400 }
+      );
+    }
+    if (record.expiresAt < new Date()) {
+      return NextResponse.json(
+        { error: "This code has expired. Please request a new one." },
+        { status: 400 }
+      );
+    }
+    if (record.attempts >= MAX_ATTEMPTS) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please request a new code." },
+        { status: 400 }
+      );
     }
 
-    const result = await consumeVerificationCode({ email, code, purpose });
-    if (!result.ok) {
-      return jsonError(result.error, 400);
-    }
-
-    const db = getDb();
-    if (!result.record.userId) {
-      return jsonError("Verification code is not linked to an account.", 400);
-    }
-
-    const [user] = await db.select().from(users).where(eq(users.id, result.record.userId)).limit(1);
-    if (!user) {
-      return jsonError("Account was not found.", 404);
-    }
-
-    if (purpose === "forgot_password") {
-      const token = await createPasswordResetToken(user.id);
-      return NextResponse.json({
-        message: "Code verified. You can reset your password.",
-        redirectTo: `/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`,
-      });
-    }
-
-    if (purpose === "signup") {
-      if (user.role !== "organization" || !user.orgId) {
-        return jsonError("Only organization sign-up can use this verification flow.", 400);
-      }
-
+    if (hashCode(String(code)) !== record.code) {
       await db
-        .update(users)
-        .set({
-          status: "active",
-          emailVerifiedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id));
-
-      await db
-        .update(organizations)
-        .set({
-          status: "active",
-          updatedAt: new Date(),
-        })
-        .where(eq(organizations.id, user.orgId));
-
-      const activeUser = { ...user, status: "active" };
-      const response = NextResponse.json({
-        message: "Organization verified.",
-        role: activeUser.role,
-        redirectTo: dashboardUrlForUser(activeUser),
-      });
-
-      return attachSessionCookie(response, user.id, request);
-    }
-
-    if (user.status !== "active") {
-      return jsonError("This account is not active.", 403);
+        .update(verificationCodes)
+        .set({ attempts: record.attempts + 1 })
+        .where(eq(verificationCodes.id, record.id));
+      return NextResponse.json({ error: "Invalid code." }, { status: 400 });
     }
 
     await db
-      .update(users)
-      .set({
-        emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, user.id));
+      .update(verificationCodes)
+      .set({ consumedAt: new Date() })
+      .where(eq(verificationCodes.id, record.id));
 
-    const response = NextResponse.json({
-      message: "Login verified.",
-      role: user.role,
-      redirectTo: dashboardUrlForUser(user),
-    });
+    const userType = record.userType;
+    let userId: string;
 
-    return attachSessionCookie(response, user.id, request);
-  } catch (error) {
-    console.error("Verify code failed:", error);
-    return jsonError("Unable to verify code.", 500);
+    if (userType === "org") {
+      const [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.email, emailLower));
+      if (!org) {
+        return NextResponse.json({ error: "Account not found." }, { status: 404 });
+      }
+      userId = org.id;
+      if (record.purpose === "signup" && org.status === "pending_verification") {
+        await db
+          .update(organizations)
+          .set({ status: "active" })
+          .where(eq(organizations.id, org.id));
+      }
+    } else {
+      const [teacher] = await db
+        .select()
+        .from(teachers)
+        .where(eq(teachers.email, emailLower));
+      if (!teacher) {
+        return NextResponse.json({ error: "Account not found." }, { status: 404 });
+      }
+      userId = teacher.id;
+    }
+
+    if (record.purpose === "forgot_password") {
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      await db.insert(resetTokens).values({
+        id: resetToken,
+        userType,
+        userId,
+        email: emailLower,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      });
+      const res = NextResponse.json({
+        ok: true,
+        purpose: "forgot_password",
+        redirect: "/reset-password",
+      });
+      res.cookies.set(RESET_COOKIE, resetToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 15 * 60,
+      });
+      return res;
+    }
+
+    // signup or login -> establish a real session
+    const { token, expiresAt } = await createSession(userType, userId);
+    const redirect = userType === "org" ? "/org/dashboard" : "/teacher/dashboard";
+    const res = NextResponse.json({ ok: true, purpose: record.purpose, redirect });
+    setSessionCookie(res, token, expiresAt);
+    return res;
+  } catch (err) {
+    console.error("verify-code error", err);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }

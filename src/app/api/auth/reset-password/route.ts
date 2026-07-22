@@ -1,124 +1,106 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { db } from "@/db";
+import { organizations, teachers, passwordHistory, resetTokens } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { hashPassword, isPasswordReused } from "../../../../lib/password";
+import { destroyAllSessionsForUser, RESET_COOKIE } from "../../../../lib/session";
 
-import { passwordResetTokens, teacherInvitations, users } from "../../../../db/schema";
-import { hashPassword, hashSecret, verifyPassword } from "../../../../lib/auth/crypto";
-import { getDb } from "../../../../lib/auth/db";
-import { jsonError, revokeUserSessions, validatePassword } from "../../../../lib/auth/service";
-
-export const runtime = "nodejs";
-
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const token = String(body.token || "");
-    const password = String(body.password || "");
+    const { password, confirmPassword } = await req.json();
+    if (!password || !confirmPassword) {
+      return NextResponse.json(
+        { error: "Both password fields are required." },
+        { status: 400 }
+      );
+    }
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters long." },
+        { status: 400 }
+      );
+    }
+    if (password !== confirmPassword) {
+      return NextResponse.json(
+        { error: "Passwords do not match." },
+        { status: 400 }
+      );
+    }
 
+    const cookieStore = await cookies();
+    const token = cookieStore.get(RESET_COOKIE)?.value;
     if (!token) {
-      return jsonError("Reset token is required.");
+      return NextResponse.json(
+        { error: "Your reset session has expired. Please start over." },
+        { status: 401 }
+      );
     }
 
-    const passwordError = validatePassword(password);
-    if (passwordError) return jsonError(passwordError);
-
-    const db = getDb();
-    const tokenHash = hashSecret(token);
-
-    const [resetToken] = await db
+    const [resetRecord] = await db
       .select()
-      .from(passwordResetTokens)
-      .where(
-        and(
-          eq(passwordResetTokens.tokenHash, tokenHash),
-          isNull(passwordResetTokens.consumedAt),
-          gt(passwordResetTokens.expiresAt, new Date()),
-        ),
-      )
-      .limit(1);
+      .from(resetTokens)
+      .where(eq(resetTokens.id, token));
 
-    if (resetToken) {
-      const [user] = await db.select().from(users).where(eq(users.id, resetToken.userId)).limit(1);
-      if (!user) return jsonError("Account was not found.", 404);
+    if (
+      !resetRecord ||
+      resetRecord.consumedAt ||
+      resetRecord.expiresAt < new Date()
+    ) {
+      return NextResponse.json(
+        { error: "Your reset session has expired. Please start over." },
+        { status: 401 }
+      );
+    }
 
-      const isOldPassword = await verifyPassword(password, user.passwordHash);
-      if (isOldPassword) {
-        return jsonError("New password cannot be the same as your old password.");
-      }
+    const reused = await isPasswordReused(
+      resetRecord.userType,
+      resetRecord.userId,
+      password
+    );
+    if (reused) {
+      return NextResponse.json(
+        { error: "You cannot reuse a previous password. Please choose a new one." },
+        { status: 400 }
+      );
+    }
 
+    const passwordHash = await hashPassword(password);
+
+    if (resetRecord.userType === "org") {
       await db
-        .update(users)
-        .set({
-          passwordHash: await hashPassword(password),
-          authProvider: user.googleSub ? "google_password" : "password",
-          status: "active",
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id));
-
+        .update(organizations)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(organizations.id, resetRecord.userId));
+    } else {
       await db
-        .update(passwordResetTokens)
-        .set({ consumedAt: new Date() })
-        .where(eq(passwordResetTokens.id, resetToken.id));
-
-      await revokeUserSessions(user.id);
-
-      return NextResponse.json({
-        message: "Password reset successfully.",
-        redirectTo: "/login",
-      });
+        .update(teachers)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(teachers.id, resetRecord.userId));
     }
 
-    const [invitation] = await db
-      .select()
-      .from(teacherInvitations)
-      .where(
-        and(
-          eq(teacherInvitations.tokenHash, tokenHash),
-          eq(teacherInvitations.status, "pending"),
-          gt(teacherInvitations.expiresAt, new Date()),
-        ),
-      )
-      .limit(1);
-
-    if (!invitation) {
-      return jsonError("Invalid or expired reset link.", 400);
-    }
-
-    const [teacher] = await db.select().from(users).where(eq(users.id, invitation.teacherId)).limit(1);
-    if (!teacher) return jsonError("Teacher account was not found.", 404);
-
-    const isOldPassword = await verifyPassword(password, teacher.passwordHash);
-    if (isOldPassword) {
-      return jsonError("New password cannot be the same as your old password.");
-    }
-
-    await db
-      .update(users)
-      .set({
-        passwordHash: await hashPassword(password),
-        authProvider: "password",
-        status: "active",
-        emailVerifiedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, teacher.id));
-
-    await db
-      .update(teacherInvitations)
-      .set({
-        status: "accepted",
-        acceptedAt: new Date(),
-      })
-      .where(eq(teacherInvitations.id, invitation.id));
-
-    await revokeUserSessions(teacher.id);
-
-    return NextResponse.json({
-      message: "Invitation accepted. Password created.",
-      redirectTo: "/login",
+    await db.insert(passwordHistory).values({
+      userType: resetRecord.userType,
+      userId: resetRecord.userId,
+      passwordHash,
     });
-  } catch (error) {
-    console.error("Reset password failed:", error);
-    return jsonError("Unable to reset password.", 500);
+
+    await db
+      .update(resetTokens)
+      .set({ consumedAt: new Date() })
+      .where(eq(resetTokens.id, token));
+
+    // Force re-login everywhere with the new password.
+    await destroyAllSessionsForUser(resetRecord.userType, resetRecord.userId);
+
+    const res = NextResponse.json({ ok: true, redirect: "/login" });
+    res.cookies.set(RESET_COOKIE, "", { path: "/", maxAge: 0 });
+    return res;
+  } catch (err) {
+    console.error("reset-password error", err);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }

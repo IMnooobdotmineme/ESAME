@@ -1,12 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function ResetPassword() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token") || "";
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -40,21 +38,22 @@ export default function ResetPassword() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/auth/reset-password", {
+      const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ password, confirmPassword }),
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to reset password.");
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        setIsSubmitting(false);
+        return;
       }
 
-      router.push(data.redirectTo || "/login");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to reset password.");
-    } finally {
+      router.push(data.redirect || "/login");
+    } catch {
+      setError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
   };

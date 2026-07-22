@@ -1,39 +1,40 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { organizations, teachers } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { createAndSendVerificationCode } from "../../../../lib/verification";
 
-import {
-  createAndSendVerificationCode,
-  findUserByEmail,
-  jsonError,
-  normalizeEmail,
-} from "../../../../lib/auth/service";
-
-export const runtime = "nodejs";
-
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const email = normalizeEmail(String(body.email || ""));
-
+    const { email } = await req.json();
     if (!email) {
-      return jsonError("Email is required.");
+      return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
+    const emailLower = String(email).toLowerCase().trim();
 
-    const user = await findUserByEmail(email);
-    if (user && user.status === "active") {
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.email, emailLower));
+    const [teacher] = org
+      ? [null]
+      : await db.select().from(teachers).where(eq(teachers.email, emailLower));
+
+    // Don't reveal whether an account exists — always respond ok.
+    if ((org && org.status === "active") || (teacher && teacher.status === "active")) {
       await createAndSendVerificationCode({
-        email,
-        userId: user.id,
+        email: emailLower,
         purpose: "forgot_password",
+        userType: org ? "org" : "teacher",
       });
     }
 
-    return NextResponse.json({
-      message: "If this email has an account, a verification code has been sent.",
-      email,
-      purpose: "forgot_password",
-    });
-  } catch (error) {
-    console.error("Forgot password failed:", error);
-    return jsonError("Unable to send password reset code.", 500);
+    return NextResponse.json({ ok: true, email: emailLower });
+  } catch (err) {
+    console.error("forgot-password error", err);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }

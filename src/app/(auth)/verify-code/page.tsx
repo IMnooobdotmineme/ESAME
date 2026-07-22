@@ -13,9 +13,6 @@ export default function VerifyCode() {
   
   // Get the 'from' parameter from the URL (e.g., /verify-code?email=abc@test.com&from=login)
   const fromPage = searchParams.get("from") || "forgot-password";
-  const purpose =
-    searchParams.get("purpose") ||
-    (fromPage === "login" ? "login" : fromPage === "signup" || fromPage === "sign-up" ? "signup" : "forgot_password");
 
   // Determine the dynamic back route based on the 'from' parameter
   let backRoute = "/forgot-password";
@@ -27,7 +24,8 @@ export default function VerifyCode() {
 
   const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(""));
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("Please fill in all 6 boxes."); // Added dynamic error message
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -48,7 +46,7 @@ export default function VerifyCode() {
   };
 
   const updateDigit = (index: number, value: string) => {
-    if (error) setError("");
+    if (error) setError(false);
     const next = [...digits];
     next[index] = value;
     setDigits(next);
@@ -87,62 +85,63 @@ export default function VerifyCode() {
     const next = Array(CODE_LENGTH).fill("");
     pasted.split("").forEach((char, i) => (next[i] = char));
     setDigits(next);
-    setError("");
+    setError(false);
     focusInput(Math.min(pasted.length, CODE_LENGTH - 1));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isComplete) {
-      setError("Please fill in all 6 boxes.");
+      setErrorMessage("Please fill in all 6 boxes.");
+      setError(true);
       focusInput(digits.findIndex((d) => !d));
       return;
     }
     setIsSubmitting(true);
-    setError("");
+    setError(false);
 
     try {
-      const response = await fetch("/api/auth/verify-code", {
+      const res = await fetch("/api/auth/verify-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code, purpose }),
+        body: JSON.stringify({ email, code }),
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to verify code.");
+      if (!res.ok) {
+        setErrorMessage(data.error || "Invalid code.");
+        setError(true);
+        setIsSubmitting(false);
+        focusInput(0);
+        return;
       }
 
-      router.push(data.redirectTo || "/login");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to verify code.");
-      focusInput(0);
-    } finally {
+      // The backend tells us where to go next (org/teacher dashboard, or
+      // reset-password for the forgot-password flow).
+      router.push(data.redirect || "/login");
+    } catch {
+      setErrorMessage("Something went wrong. Please try again.");
+      setError(true);
       setIsSubmitting(false);
     }
   };
 
   const handleResend = async () => {
     if (secondsLeft > 0) return;
+    setSecondsLeft(RESEND_SECONDS);
+    setDigits(Array(CODE_LENGTH).fill(""));
+    setError(false);
+    focusInput(0);
 
     try {
-      const response = await fetch("/api/auth/resend-code", {
+      await fetch("/api/auth/resend-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, purpose }),
+        body: JSON.stringify({ email }),
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to resend code.");
-      }
-
-      setSecondsLeft(RESEND_SECONDS);
-      setDigits(Array(CODE_LENGTH).fill(""));
-      setError("");
-      focusInput(0);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to resend code.");
+    } catch {
+      // Resend failures aren't fatal to the current view; the countdown
+      // simply lets the user try again.
     }
   };
 
@@ -208,7 +207,7 @@ export default function VerifyCode() {
             {error && (
               <p className="mt-3 text-sm text-rose-500 font-semibold flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
-                {error}
+                {errorMessage}
               </p>
             )}
           </div>
