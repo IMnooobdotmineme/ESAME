@@ -7,18 +7,36 @@ export default function ForgotPassword() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const isValid = email.trim() !== "";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid) return;
+    setError("");
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      console.log("Verification code requested for:", email);
-      router.push(`/verify-code?email=${encodeURIComponent(email)}`);
-    }, 900);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to send verification code.");
+      }
+
+      router.push(
+        `/verify-code?email=${encodeURIComponent(data.email || email)}&from=forgot-password&purpose=forgot_password`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to send verification code.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -29,7 +47,7 @@ export default function ForgotPassword() {
         {/* Back to login */}
         <a
           href="/login"
-          className="inline-flex items-center text-sm font-semibold text-[#8AAEE0] hover:text-[#395886] transition-colors mb-6"
+          className="inline-flex items-center text-sm font-semibold text-[#1F2A44] mb-6"
         >
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -83,6 +101,12 @@ export default function ForgotPassword() {
             {isSubmitting ? "Sending code..." : "Send verification code"}
           </button>
         </form>
+
+        {error && (
+          <p className="mt-4 text-sm text-rose-500 font-semibold text-center">
+            {error}
+          </p>
+        )}
 
         <p className="mt-6 text-center text-sm text-[#8AAEE0] font-medium">
           Remembered your password?{" "}

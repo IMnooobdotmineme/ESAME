@@ -124,6 +124,8 @@ export default function OrganizationSignUp() {
 
   // Show/hide password toggle
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   // Timers so a click on a suggestion registers before blur closes the list
   const blurTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -165,12 +167,39 @@ export default function OrganizationSignUp() {
     return source.filter((item) => item.toLowerCase().includes(query));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Complete Organization Data:", formData);
-    
-    // Redirects directly to the verify-code page and passes the workEmail parameter
-    router.push(`/verify-code?email=${encodeURIComponent(formData.workEmail)}`);
+    setError("");
+
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/sign-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to register organization.");
+      }
+
+      router.push(
+        `/verify-code?email=${encodeURIComponent(data.email || formData.workEmail)}&from=sign-up&purpose=${encodeURIComponent(
+          data.purpose || "signup",
+        )}`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to register organization.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const isTab1Valid =
@@ -182,12 +211,12 @@ export default function OrganizationSignUp() {
         {/* Back to website */}
         <a
           href="https://yourwebsite.com"
-          className="inline-flex items-center text-sm font-medium text-[#9FAFCB] hover:text-[#1F2A44] transition-colors mb-6"
+          className="inline-flex items-center text-sm font-medium text-[#1F2A44]  mb-6"
         >
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to website
+          Back
         </a>
 
         {/* Header */}
@@ -373,18 +402,25 @@ export default function OrganizationSignUp() {
                 </button>
                 <button
                   type="submit"
-                  className="w-2/3 flex justify-center py-3.5 px-4 rounded-xl shadow-sm text-sm font-bold text-white bg-[#395886] hover:bg-[#2E4A73] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#395886] transition-all transform hover:-translate-y-0.5"
+                  disabled={isSubmitting}
+                  className="w-2/3 flex justify-center py-3.5 px-4 rounded-xl shadow-sm text-sm font-bold text-white bg-[#395886] hover:bg-[#2E4A73] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#395886] transition-all transform hover:-translate-y-0.5 disabled:opacity-75 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 >
-                  Register Organization
+                  {isSubmitting ? "Registering..." : "Register Organization"}
                 </button>
               </div>
             </div>
           )}
         </form>
 
+        {error && (
+          <p className="mt-4 text-sm text-rose-500 font-semibold text-center">
+            {error}
+          </p>
+        )}
+
         <p className="mt-6 text-center text-sm text-[#7D8CAB]">
           Already have an account?{" "}
-          <a href="/login" className="font-semibold text-[#395886] hover:underline">
+          <a href="/login" className="font-semibold text-[#395886] hover:text-[#638ecb] transition-colors hover:underline">
             Log in here
           </a>
         </p>

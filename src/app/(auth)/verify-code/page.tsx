@@ -13,6 +13,9 @@ export default function VerifyCode() {
   
   // Get the 'from' parameter from the URL (e.g., /verify-code?email=abc@test.com&from=login)
   const fromPage = searchParams.get("from") || "forgot-password";
+  const purpose =
+    searchParams.get("purpose") ||
+    (fromPage === "login" ? "login" : fromPage === "signup" || fromPage === "sign-up" ? "signup" : "forgot_password");
 
   // Determine the dynamic back route based on the 'from' parameter
   let backRoute = "/forgot-password";
@@ -24,7 +27,7 @@ export default function VerifyCode() {
 
   const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(""));
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -45,7 +48,7 @@ export default function VerifyCode() {
   };
 
   const updateDigit = (index: number, value: string) => {
-    if (error) setError(false);
+    if (error) setError("");
     const next = [...digits];
     next[index] = value;
     setDigits(next);
@@ -84,37 +87,63 @@ export default function VerifyCode() {
     const next = Array(CODE_LENGTH).fill("");
     pasted.split("").forEach((char, i) => (next[i] = char));
     setDigits(next);
-    setError(false);
+    setError("");
     focusInput(Math.min(pasted.length, CODE_LENGTH - 1));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isComplete) {
-      setError(true);
+      setError("Please fill in all 6 boxes.");
       focusInput(digits.findIndex((d) => !d));
       return;
     }
     setIsSubmitting(true);
-    setError(false);
+    setError("");
 
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code, purpose }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to verify code.");
+      }
+
+      router.push(data.redirectTo || "/login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to verify code.");
+      focusInput(0);
+    } finally {
       setIsSubmitting(false);
-      
-      console.log("Successfully verified code:", code);
-      
-      // Redirects the user straight to the reset-password page
-      router.push("/reset-password");
-    }, 900);
+    }
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     if (secondsLeft > 0) return;
-    setSecondsLeft(RESEND_SECONDS);
-    setDigits(Array(CODE_LENGTH).fill(""));
-    setError(false);
-    focusInput(0);
-    console.log("Resent verification code to:", email);
+
+    try {
+      const response = await fetch("/api/auth/resend-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, purpose }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to resend code.");
+      }
+
+      setSecondsLeft(RESEND_SECONDS);
+      setDigits(Array(CODE_LENGTH).fill(""));
+      setError("");
+      focusInput(0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resend code.");
+    }
   };
 
   return (
@@ -124,7 +153,7 @@ export default function VerifyCode() {
         {/* Back Link with updated conditional route configuration */}
         <a
           href={backRoute}
-          className="inline-flex items-center text-sm font-semibold text-[#8AAEE0] hover:text-[#395886] transition-colors mb-6"
+          className="inline-flex items-center text-sm font-semibold text-[#1F2A44] mb-6"
         >
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -179,7 +208,7 @@ export default function VerifyCode() {
             {error && (
               <p className="mt-3 text-sm text-rose-500 font-semibold flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
-                Please fill in all 6 boxes.
+                {error}
               </p>
             )}
           </div>

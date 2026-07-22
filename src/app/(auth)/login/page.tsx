@@ -12,24 +12,47 @@ export default function Login() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login data:", formData);
-    
-    // Redirects to /verify-code and passes the email as a query parameter
-    router.push(`/verify-code?email=${encodeURIComponent(formData.email)}`);
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to log in.");
+      }
+
+      router.push(
+        `/verify-code?email=${encodeURIComponent(data.email || formData.email)}&from=${encodeURIComponent(
+          data.from || "login",
+        )}&purpose=${encodeURIComponent(data.purpose || "login")}`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to log in.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGoogleLogin = () => {
-    console.log("Redirect to Google OAuth flow");
+    window.location.href = "/api/auth/google/start";
   };
 
-  const isValid = formData.email.trim() !== "" && formData.password.trim() !== "";
+  const isValid = formData.email.trim() !== "" && formData.password.trim() !== "" && !isSubmitting;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EDF1FA] via-[#F5F7FC] to-[#E4EAF7] py-12 px-4 sm:px-6 lg:px-8">
@@ -37,7 +60,7 @@ export default function Login() {
         {/* Back to website */}
         <a
           href="https://yourwebsite.com"
-          className="inline-flex items-center text-sm font-medium text-[#9FAFCB] hover:text-[#1F2A44] transition-colors mb-6"
+          className="inline-flex items-center text-sm font-medium text-[#1F2A44] mb-6"
         >
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -119,6 +142,12 @@ export default function Login() {
             <span className="text-sm text-[#4B5468]">Remember me</span>
           </label>
 
+          {error && (
+            <p className="text-sm text-rose-500 font-semibold">
+              {error}
+            </p>
+          )}
+
           {/* Submit */}
           <div className="pt-3">
             <button
@@ -130,7 +159,7 @@ export default function Login() {
                   : "bg-[#C9D2E3] cursor-not-allowed"
               }`}
             >
-              Log in
+              {isSubmitting ? "Sending code..." : "Log in"}
             </button>
           </div>
         </form>
@@ -171,7 +200,7 @@ export default function Login() {
 
         <p className="mt-6 text-center text-sm text-[#7D8CAB]">
           Don't have an account?{" "}
-          <a href="/sign-up" className="font-semibold text-[#395886] hover:underline">
+          <a href="/sign-up" className="font-semibold text-[#395886] hover:text-[#638ecb] transition-colors hover:underline">
             Sign Up
           </a>
         </p>
