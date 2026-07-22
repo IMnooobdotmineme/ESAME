@@ -1,74 +1,92 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { organizations, teachers } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { verifyPassword } from "../../../../lib/password";
+import { createAndSendVerificationCode } from "../../../../lib/verification";
 
-import {
-  createAndSendVerificationCode,
-  findUserByEmail,
-  jsonError,
-  normalizeEmail,
-} from "../../../../lib/auth/service";
-import { verifyPassword } from "../../../../lib/auth/crypto";
+const GENERIC_ERROR = "Invalid email or password.";
 
-export const runtime = "nodejs";
-
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const email = normalizeEmail(String(body.email || ""));
-    const password = String(body.password || "");
-
+    const { email, password } = await req.json();
     if (!email || !password) {
-      return jsonError("Email and password are required.");
+      return NextResponse.json(
+        { error: "Email and password are required." },
+        { status: 400 }
+      );
     }
+    const emailLower = String(email).toLowerCase().trim();
 
-    const user = await findUserByEmail(email);
-    if (!user) {
-      return jsonError("Invalid email or password.", 401);
-    }
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.email, emailLower));
 
-    const passwordMatches = await verifyPassword(password, user.passwordHash);
-    if (!passwordMatches) {
-      return jsonError("Invalid email or password.", 401);
-    }
-
-    if (user.status === "pending_verification" && user.role === "organization") {
+    if (org) {
+      if (org.status === "suspended") {
+        return NextResponse.json(
+          { error: "This account has been suspended." },
+          { status: 403 }
+        );
+      }
+      if (org.status === "pending_verification") {
+        return NextResponse.json(
+          { error: "Please verify your account before logging in." },
+          { status: 403 }
+        );
+      }
+      const valid = await verifyPassword(password, org.passwordHash);
+      if (!valid) {
+        return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+      }
       await createAndSendVerificationCode({
-        email,
-        userId: user.id,
-        purpose: "signup",
+        email: emailLower,
+        purpose: "login",
+        userType: "org",
       });
+      return NextResponse.json({ ok: true, email: emailLower });
+    }
 
-      return NextResponse.json({
-        message: "Please verify your organization email.",
-        email,
-        purpose: "signup",
-        from: "sign-up",
-        role: user.role,
+    const [teacher] = await db
+      .select()
+      .from(teachers)
+      .where(eq(teachers.email, emailLower));
+
+    if (teacher) {
+      if (teacher.status === "invited" || !teacher.passwordHash) {
+        return NextResponse.json(
+          {
+            error:
+              "Please use the invite link sent to your email to set a password first.",
+          },
+          { status: 403 }
+        );
+      }
+      if (teacher.status === "suspended") {
+        return NextResponse.json(
+          { error: "This account has been suspended." },
+          { status: 403 }
+        );
+      }
+      const valid = await verifyPassword(password, teacher.passwordHash);
+      if (!valid) {
+        return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+      }
+      await createAndSendVerificationCode({
+        email: emailLower,
+        purpose: "login",
+        userType: "teacher",
       });
+      return NextResponse.json({ ok: true, email: emailLower });
     }
 
-    if (user.status === "invited") {
-      return jsonError("This teacher invitation has not been accepted yet.", 403);
-    }
-
-    if (user.status !== "active") {
-      return jsonError("This account is not active.", 403);
-    }
-
-    await createAndSendVerificationCode({
-      email,
-      userId: user.id,
-      purpose: "login",
-    });
-
-    return NextResponse.json({
-      message: "Verification code sent.",
-      email,
-      purpose: "login",
-      from: "login",
-      role: user.role,
-    });
-  } catch (error) {
-    console.error("Login failed:", error);
-    return jsonError("Unable to log in.", 500);
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+  } catch (err) {
+    console.error("login error", err);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }

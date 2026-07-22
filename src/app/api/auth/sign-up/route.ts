@@ -1,81 +1,96 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { organizations, teachers, passwordHistory } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { hashPassword } from "../../../../lib/password";
+import { createAndSendVerificationCode } from "../../../../lib/verification";
 
-import { organizations, users } from "../../../../db/schema";
-import { hashPassword } from "../../../../lib/auth/crypto";
-import { getDb } from "../../../../lib/auth/db";
-import {
-  createAndSendVerificationCode,
-  findUserByEmail,
-  jsonError,
-  normalizeEmail,
-  validatePassword,
-} from "../../../../lib/auth/service";
-
-export const runtime = "nodejs";
-
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const orgName = String(body.orgName || "").trim();
-    const orgType = String(body.orgType || "").trim();
-    const country = String(body.country || "").trim();
-    const region = String(body.region || "").trim();
-    const orgAddress = String(body.orgAddress || "").trim();
-    const email = normalizeEmail(String(body.workEmail || ""));
-    const password = String(body.password || "");
+    const {
+      orgName,
+      workEmail,
+      password,
+      orgAddress,
+      country,
+      region,
+      orgType,
+    } = await req.json();
 
-    if (!orgName || !orgType || !country || !email) {
-      return jsonError("Please fill all required organization fields.");
+    if (!orgName || !workEmail || !password) {
+      return NextResponse.json(
+        { error: "Organization name, work email and password are required." },
+        { status: 400 }
+      );
+    }
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters long." },
+        { status: 400 }
+      );
     }
 
-    const passwordError = validatePassword(password);
-    if (passwordError) return jsonError(passwordError);
+    const emailLower = String(workEmail).toLowerCase().trim();
 
-    const existingUser = await findUserByEmail(email);
-    if (existingUser) {
-      return jsonError("An account already exists with this email.", 409);
+    const [existingOrg] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.email, emailLower));
+    const [existingTeacher] = await db
+      .select()
+      .from(teachers)
+      .where(eq(teachers.email, emailLower));
+
+    if (existingOrg || existingTeacher) {
+      return NextResponse.json(
+        { error: "An account with this email already exists." },
+        { status: 409 }
+      );
     }
 
-    const db = getDb();
-    const [organization] = await db
+    const passwordHash = await hashPassword(password);
+
+    const [org] = await db
       .insert(organizations)
       .values({
         name: orgName,
-        email,
-        orgType,
-        address: orgAddress || null,
-        country,
-        region: region || null,
+        email: emailLower,
+        passwordHash,
         status: "pending_verification",
+        orgType: orgType || null,
+        country: country || null,
+        region: region || null,
+        address: orgAddress || null,
       })
       .returning();
 
-    const [user] = await db
-      .insert(users)
-      .values({
-        orgId: organization.id,
-        role: "organization",
-        email,
-        name: orgName,
-        passwordHash: await hashPassword(password),
-        authProvider: "password",
-        status: "pending_verification",
-      })
-      .returning();
+    await db
+      .insert(passwordHistory)
+      .values({ userType: "org", userId: org.id, passwordHash });
 
     await createAndSendVerificationCode({
-      email,
-      userId: user.id,
+      email: emailLower,
       purpose: "signup",
+      userType: "org",
     });
 
-    return NextResponse.json({
-      message: "Organization created. Verification code sent.",
-      email,
-      purpose: "signup",
-    });
-  } catch (error) {
-    console.error("Organization sign-up failed:", error);
-    return jsonError("Unable to create organization account.", 500);
+    return NextResponse.json({ ok: true, email: emailLower, purpose: "signup" });
+  } catch (err: unknown) {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: string }).code === "23505"
+    ) {
+      return NextResponse.json(
+        { error: "An account with this email already exists." },
+        { status: 409 }
+      );
+    }
+    console.error("sign-up error", err);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }

@@ -7,7 +7,7 @@ export default function ForgotPassword() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(""); // Added error state
 
   const isValid = email.trim() !== "";
 
@@ -18,23 +18,22 @@ export default function ForgotPassword() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/auth/forgot-password", {
+      const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to send verification code.");
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        setIsSubmitting(false);
+        return;
       }
 
-      router.push(
-        `/verify-code?email=${encodeURIComponent(data.email || email)}&from=forgot-password&purpose=forgot_password`,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to send verification code.");
-    } finally {
+      router.push(`/verify-code?email=${encodeURIComponent(email)}&from=forgot-password`);
+    } catch {
+      setError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
   };
@@ -87,6 +86,14 @@ export default function ForgotPassword() {
             />
           </div>
 
+          {/* Error message (added to surface backend errors) */}
+          {error && (
+            <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+              {error}
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={isSubmitting}
@@ -101,12 +108,6 @@ export default function ForgotPassword() {
             {isSubmitting ? "Sending code..." : "Send verification code"}
           </button>
         </form>
-
-        {error && (
-          <p className="mt-4 text-sm text-rose-500 font-semibold text-center">
-            {error}
-          </p>
-        )}
 
         <p className="mt-6 text-center text-sm text-[#8AAEE0] font-medium">
           Remembered your password?{" "}

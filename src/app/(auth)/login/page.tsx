@@ -1,19 +1,26 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation"; // Added router import
+import React, { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation"; // Added useSearchParams
 
 export default function Login() {
   const router = useRouter(); // Initialized router
-  
+  const searchParams = useSearchParams();
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false); // Added submitting state
+  const [error, setError] = useState(""); // Added error state
+
+  // Surface errors coming back from the Google OAuth redirect flow
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError) setError(oauthError);
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -25,34 +32,34 @@ export default function Login() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to log in.");
+      if (!res.ok) {
+        setError(data.error || "Invalid email or password.");
+        setIsSubmitting(false);
+        return;
       }
 
-      router.push(
-        `/verify-code?email=${encodeURIComponent(data.email || formData.email)}&from=${encodeURIComponent(
-          data.from || "login",
-        )}&purpose=${encodeURIComponent(data.purpose || "login")}`,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to log in.");
-    } finally {
+      // A verification code was just emailed — go verify it.
+      router.push(`/verify-code?email=${encodeURIComponent(data.email)}&from=login`);
+    } catch {
+      setError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = "/api/auth/google/start";
+    // Kicks off the standard Google OAuth redirect flow; the callback route
+    // checks the email exists, then sends the mandatory verification code.
+    window.location.href = "/api/auth/google/redirect";
   };
 
-  const isValid = formData.email.trim() !== "" && formData.password.trim() !== "" && !isSubmitting;
+  const isValid = formData.email.trim() !== "" && formData.password.trim() !== "";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EDF1FA] via-[#F5F7FC] to-[#E4EAF7] py-12 px-4 sm:px-6 lg:px-8">
@@ -142,8 +149,10 @@ export default function Login() {
             <span className="text-sm text-[#4B5468]">Remember me</span>
           </label>
 
+          {/* Error message (added to surface backend/login errors) */}
           {error && (
-            <p className="text-sm text-rose-500 font-semibold">
+            <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
               {error}
             </p>
           )}
@@ -152,14 +161,14 @@ export default function Login() {
           <div className="pt-3">
             <button
               type="submit"
-              disabled={!isValid}
+              disabled={!isValid || isSubmitting}
               className={`w-full flex justify-center py-3.5 px-4 rounded-xl shadow-sm text-sm font-bold text-white transition-all transform ${
-                isValid
+                isValid && !isSubmitting
                   ? "bg-[#395886] hover:bg-[#2E4A73] hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#395886] cursor-pointer"
                   : "bg-[#C9D2E3] cursor-not-allowed"
               }`}
             >
-              {isSubmitting ? "Sending code..." : "Log in"}
+              {isSubmitting ? "Logging in..." : "Log in"}
             </button>
           </div>
         </form>
@@ -199,7 +208,7 @@ export default function Login() {
         </button>
 
         <p className="mt-6 text-center text-sm text-[#7D8CAB]">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <a href="/sign-up" className="font-semibold text-[#395886] hover:text-[#638ecb] transition-colors hover:underline">
             Sign Up
           </a>
