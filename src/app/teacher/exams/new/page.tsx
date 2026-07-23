@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // --- TYPE DEFINITIONS ---
 type QuestionType = 
@@ -51,18 +51,30 @@ interface ExamPart {
   questions: Question[];
 }
 
-export default function CreateExamPage() {
+const DEFAULT_INITIAL_PART: ExamPart = {
+  id: 'default-section-1',
+  title: 'Section A: General Questions',
+  marks: 100,
+  description: 'Default section for exam questionnaire setup.',
+  allowedType: 'mcq',
+  questions: []
+};
+
+function ExamBuilderContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
-  // FORCE STEP 1 LANDING AS DEFAULT
+  const editId = searchParams.get('edit');
+  const tabParam = searchParams.get('tab');
+
+  // STEP STATE (Defaults to 1, updated automatically if editing or tab=questions)
   const [step, setStep] = useState<1 | 2>(1); 
 
-  // --- STEP 1: EXAM PARAMETERS STATE (CLEAN & UNFILLED FOR EXPLICIT VALIDATION) ---
+  // --- STEP 1: EXAM PARAMETERS STATE ---
   const [examData, setExamData] = useState({
     title: '',
     description: '',
     department: 'Computer Science',
-    subject: '',
     academicYear: '2026-2027',
     semester: 'Semester 1',
     duration: 60,
@@ -71,9 +83,15 @@ export default function CreateExamPage() {
     saveAsTemplate: false,
   });
 
+  // Launch & Access Code States
+  const [isLaunched, setIsLaunched] = useState(false);
+  const [accessCode, setAccessCode] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
+
   // --- STEP 2: MULTI-PART EXAM STRUCTURE STATE ---
-  const [parts, setParts] = useState<ExamPart[]>([]);
-  const [activePartId, setActivePartId] = useState<string>('');
+  // Defaults with 1 section pre-created so screen is never empty
+  const [parts, setParts] = useState<ExamPart[]>([DEFAULT_INITIAL_PART]);
+  const [activePartId, setActivePartId] = useState<string>('default-section-1');
   
   // Section Creator Form States
   const [newPartTitle, setNewPartTitle] = useState('');
@@ -104,6 +122,60 @@ export default function CreateExamPage() {
   const [orderingItems, setOrderingItems] = useState<string[]>(['Item 1', 'Item 2']);
   const [numericAnswer, setNumericAnswer] = useState({ val: 0, tolerance: 0, unit: '' });
 
+  // LOAD EXISTING EXAM FOR EDITING AND AUTOMATICALLY RESTORE ALL SECTIONS & QUESTIONS
+  useEffect(() => {
+    if (editId) {
+      const rawData = localStorage.getItem('localExamsData');
+      if (rawData) {
+        try {
+          const currentExams = JSON.parse(rawData);
+          const allExams = [
+            ...(currentExams.active || []),
+            ...(currentExams.scheduled || []),
+            ...(currentExams.completed || [])
+          ];
+          const found = allExams.find((e: any) => e.id === editId);
+          if (found) {
+            setExamData(prev => ({
+              ...prev,
+              title: found.title || prev.title,
+              department: found.course || prev.department,
+              duration: parseInt(found.duration) || prev.duration,
+            }));
+
+            // If structured parts exist, restore them
+            if (found.parts && Array.isArray(found.parts) && found.parts.length > 0) {
+              setParts(found.parts);
+              setActivePartId(found.parts[0].id);
+              setQType(found.parts[0].allowedType);
+            } 
+            // If questions were saved as a flat array, wrap them inside a section automatically
+            else if (found.questions && Array.isArray(found.questions) && found.questions.length > 0) {
+              const convertedPart: ExamPart = {
+                id: 'restored-section-1',
+                title: 'Section A: Restored Questions',
+                marks: 100,
+                description: 'Section automatically generated from saved exam questions.',
+                allowedType: found.questions[0]?.type || 'mcq',
+                questions: found.questions
+              };
+              setParts([convertedPart]);
+              setActivePartId(convertedPart.id);
+              setQType(convertedPart.allowedType);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to parse local exams data for edit:", err);
+        }
+      }
+    }
+
+    // Direct navigation to Step 2 when editing or tab=questions is specified
+    if (editId || tabParam === 'questions') {
+      setStep(2);
+    }
+  }, [editId, tabParam]);
+
   // Sync builder layout whenever the active section layout shifts
   useEffect(() => {
     const currentActivePart = parts.find(p => p.id === activePartId);
@@ -112,11 +184,28 @@ export default function CreateExamPage() {
     }
   }, [activePartId, parts]);
 
+  // Generate 6-character uppercase alphanumeric access code
+  const generateAccessCode = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  };
+
+  const handleCopyCode = () => {
+    if (!accessCode) return;
+    navigator.clipboard.writeText(accessCode);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
   // --- WORKFLOW STEP 1 PARAMETER VALIDATION CHECK ---
   const isSettingsFormComplete = () => {
+    if (editId) return true;
     return (
       examData.title.trim() !== '' &&
-      examData.subject.trim() !== '' &&
       examData.duration > 0 &&
       examData.startDate !== '' &&
       examData.endDate !== ''
@@ -137,7 +226,7 @@ export default function CreateExamPage() {
       questions: []
     };
 
-    setParts([...parts, newPart]);
+    setParts(prev => [...prev, newPart]);
     setActivePartId(newPart.id);
     setQType(newPartType);
     setNewPartTitle('');
@@ -148,6 +237,17 @@ export default function CreateExamPage() {
     if (!qText.trim()) {
       alert("Please enter the question text prompt before saving!");
       return;
+    }
+
+    // Ensure there is at least one active section available
+    let targetPartId = activePartId;
+    let updatedParts = [...parts];
+
+    if (updatedParts.length === 0) {
+      const fallbackPart = { ...DEFAULT_INITIAL_PART, id: Date.now().toString() };
+      updatedParts = [fallbackPart];
+      targetPartId = fallbackPart.id;
+      setActivePartId(fallbackPart.id);
     }
 
     const newQuestion: Question = {
@@ -173,14 +273,14 @@ export default function CreateExamPage() {
       ...(qType === 'numeric' && { numericAnswer: { ...numericAnswer } })
     };
 
-    setParts(parts.map(part => {
-      if (part.id === activePartId) {
+    setParts(updatedParts.map(part => {
+      if (part.id === targetPartId) {
         return { ...part, questions: [...part.questions, newQuestion] };
       }
       return part;
     }));
 
-    // Reset layout builder text blocks but preserve structure configuration types
+    // Reset working states
     setQText('');
     setQExplanation('');
     setQMediaType('none');
@@ -192,8 +292,6 @@ export default function CreateExamPage() {
     setShortAnswers(['']);
     setMatchingPairs([{ left: '', right: '' }]);
     setOrderingItems(['Item 1', 'Item 2']);
-    
-    alert("Question committed and indexed under active section rule bounds!");
   };
 
   const handleDeleteQuestion = (partId: string, questionId: string) => {
@@ -210,35 +308,49 @@ export default function CreateExamPage() {
   const handlePublish = () => {
     const totalQCount = countTotalQuestions();
     if (totalQCount === 0) {
-      alert("Please construct at least one question within your exam parts layout configuration before deployment.");
+      alert("Please construct at least one question within your exam layout before deployment.");
       return;
     }
 
+    const generatedCode = generateAccessCode();
+    setAccessCode(generatedCode);
+
     const finalExam = {
-      id: Date.now().toString(),
+      id: editId || Date.now().toString(),
       title: examData.title || "Untitled Assessment Session",
-      course: examData.subject,
+      course: examData.department,
       duration: `${examData.duration} mins`,
       questions: totalQCount,
-      code: `${examData.subject.toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`,
+      code: generatedCode,
       date: examData.startDate ? new Date(examData.startDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Jul 16, 2026',
       students: '0/0',
-      isTemplate: examData.saveAsTemplate
+      isTemplate: examData.saveAsTemplate,
+      parts: parts
     };
 
     const rawData = localStorage.getItem('localExamsData');
     const defaultData = { active: [], scheduled: [], completed: [] };
     const currentExams = rawData ? JSON.parse(rawData) : defaultData;
 
-    currentExams.scheduled = [finalExam, ...currentExams.scheduled];
+    if (editId) {
+      ['active', 'scheduled', 'completed'].forEach((key) => {
+        if (Array.isArray(currentExams[key])) {
+          currentExams[key] = currentExams[key].map((item: any) => 
+            item.id === editId ? finalExam : item
+          );
+        }
+      });
+    } else {
+      currentExams.scheduled = [finalExam, ...currentExams.scheduled];
+    }
+
     localStorage.setItem('localExamsData', JSON.stringify(currentExams));
 
-    alert(`Successfully deployed exam sheet! System Join Code generated: ${finalExam.code}`);
-    router.push('/teacher/exams');
+    setIsLaunched(true);
   };
 
   const handleSaveDraft = () => {
-    alert("Exam sheet hierarchy successfully committed to active draft repository.");
+    alert("Exam configuration successfully saved as a draft.");
     router.push('/teacher/exams');
   };
 
@@ -279,9 +391,8 @@ export default function CreateExamPage() {
                 ? 'opacity-40 cursor-not-allowed hover:text-slate-400' 
                 : ''
             }`}
-            title={!isSettingsFormComplete() ? "Complete all required settings parameters to unlock this section" : ""}
           >
-            2. Sections & Questions
+            2. Sections & Questions ({countTotalQuestions()})
           </button>
         </div>
       </div>
@@ -327,18 +438,6 @@ export default function CreateExamPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Subject / Course Code *</label>
-              <input 
-                type="text" 
-                placeholder="e.g., CS101"
-                value={examData.subject}
-                onChange={(e) => setExamData({...examData, subject: e.target.value})}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-[#0B7A93]"
-                required
-              />
-            </div>
-
-            <div>
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Academic Year</label>
               <input 
                 type="text" 
@@ -373,7 +472,7 @@ export default function CreateExamPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 md:col-span-2">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Start Window *</label>
                 <input 
@@ -420,7 +519,7 @@ export default function CreateExamPage() {
                 if (isSettingsFormComplete()) {
                   setStep(2);
                 } else {
-                  alert("Please ensure all mandatory parameter configurations marked with (*) are filled accurately (Title, Course Code, Duration, and Timetable windows) before moving forward.");
+                  alert("Please ensure all mandatory parameter configurations marked with (*) are filled accurately.");
                 }
               }} 
               className="px-8 py-3.5 bg-[#0B7A93] text-white text-xs font-bold rounded-xl hover:bg-[#09667c] transition-all"
@@ -435,7 +534,7 @@ export default function CreateExamPage() {
       {step === 2 && (
         <div className="space-y-8">
 
-          {/* BLOCK A: SECTIONAL SECTION CREATOR */}
+          {/* BLOCK A: SECTIONAL CREATOR & TABS */}
           <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4">1. Sectional Structural Hierarchy Blueprint</h3>
             
@@ -486,585 +585,519 @@ export default function CreateExamPage() {
               </div>
             </form>
 
-            {/* SEGMENTED TAB SELECTOR INDEX */}
-            {parts.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-5 border-t border-slate-100 pt-5">
-                {parts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setActivePartId(p.id)}
-                    className={`px-5 py-2.5 text-xs font-bold rounded-xl transition-all border ${
-                      activePartId === p.id 
-                        ? 'bg-[#0B7A93] text-white border-[#0B7A93] shadow-sm' 
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    {p.title} <span className="opacity-60 ml-1">({p.allowedType.replace('_', ' ').toUpperCase()})</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* SECTION SELECTOR TABS */}
+            <div className="flex flex-wrap gap-2 mt-5 border-t border-slate-100 pt-5 items-center">
+              <span className="text-[10px] font-black uppercase text-slate-400 mr-2">Active Sections:</span>
+              {parts.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setActivePartId(p.id)}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all border ${
+                    activePartId === p.id 
+                      ? 'bg-[#0B7A93] text-white border-[#0B7A93] shadow-sm' 
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {p.title} <span className="opacity-75 font-mono ml-1">({p.questions.length})</span>
+                </button>
+              ))}
+              {parts.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fallback = { ...DEFAULT_INITIAL_PART, id: Date.now().toString() };
+                    setParts([fallback]);
+                    setActivePartId(fallback.id);
+                  }}
+                  className="text-xs font-bold text-[#0B7A93] hover:underline"
+                >
+                  + Add Default Section
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* DYNAMIC LAYOUT SWITCHER: EMPTY STATE vs FORM SPECIFICATION VIEW */}
-          {parts.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center shadow-sm max-w-5xl mx-auto flex flex-col items-center justify-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 text-lg">
-                📋
+          {/* BLOCK B: HIGH-FIDELITY BUILDER FORM FOR ACTIVE SECTION */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-8 shadow-sm space-y-6">
+            
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-6">
+              <div>
+                <span className="text-[10px] bg-teal-50 text-[#0B7A93] px-3 py-1 rounded-md font-black uppercase tracking-wider">
+                  Target Section: {parts.find(p => p.id === activePartId)?.title || "Section A"}
+                </span>
+                <h3 className="text-lg font-bold text-slate-900 mt-2">Add Question to Section</h3>
               </div>
-              <h4 className="text-sm font-bold text-slate-700">No Exam Sections Defined Yet</h4>
-              <p className="text-xs text-slate-400 max-w-md">
-                Create your first customized exam segment above using the <strong>Blueprint</strong> matrix to instantly unlock your isolated question sheets.
-              </p>
+              
+              <div className="flex flex-col items-end">
+                <select 
+                  value={qType}
+                  onChange={(e) => setQType(e.target.value as QuestionType)}
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#0B7A93]"
+                >
+                  <option value="mcq">Multiple Choice</option>
+                  <option value="true_false">True / False</option>
+                  <option value="multi_select">Multiple Select</option>
+                  <option value="short_answer">Short Answer</option>
+                  <option value="essay">Essay / Long Answer</option>
+                  <option value="coding">Coding Sandbox</option>
+                  <option value="fill_blank">Fill in the Blank</option>
+                  <option value="matching">Matching Pairs</option>
+                  <option value="ordering">Ordering Stack</option>
+                  <option value="numeric">Numeric Value</option>
+                </select>
+              </div>
             </div>
-          ) : (
-            <>
-              {/* BLOCK B: HIGH-FIDELITY BUILDER SHEET FOR ACTIVE SELECTION */}
-              <div className="bg-white rounded-2xl border border-slate-100 p-8 shadow-sm space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-6">
-                  <div>
-                    <span className="text-[10px] bg-teal-50 text-[#0B7A93] px-3 py-1 rounded-md font-black uppercase tracking-wider">
-                      Target Destination: {parts.find(p => p.id === activePartId)?.title}
-                    </span>
-                    <h3 className="text-lg font-bold text-slate-900 mt-2">Configure Question Specifications</h3>
-                  </div>
-                  
-                  <div className="flex flex-col items-end">
-                    <select 
-                      value={qType}
-                      disabled // LOCKED DOWN - Cannot change question type outside section schema rules!
-                      className="bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-500 outline-none cursor-not-allowed border-dashed"
-                    >
-                      <option value="mcq">Multiple Choice</option>
-                      <option value="multi_select">Multiple Select</option>
-                      <option value="true_false">True / False</option>
-                      <option value="short_answer">Short Answer</option>
-                      <option value="essay">Essay / Long Answer</option>
-                      <option value="coding">Coding Sandbox</option>
-                      <option value="fill_blank">Fill in the Blank</option>
-                      <option value="matching">Matching Pairs</option>
-                      <option value="ordering">Ordering Stack</option>
-                      <option value="numeric">Numeric Value</option>
-                    </select>
-                    <span className="text-[9px] font-black text-[#0B7A93] uppercase tracking-wider mt-1.5 italic">Locked to section type setup</span>
-                  </div>
-                </div>
 
-                {/* COMMON FIELDS CONFIG MATRIX */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-50/50 p-5 rounded-xl border border-slate-100">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Marks Metric</label>
-                    <input 
-                      type="number" 
-                      value={qMarks}
-                      onChange={(e) => setQMarks(parseInt(e.target.value) || 1)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-[#0B7A93]"
-                    />
-                  </div>
-                  <div className="flex items-center pt-6">
-                    <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-slate-600">
-                      <input 
-                        type="checkbox" 
-                        checked={qMandatory} 
-                        onChange={(e) => setQMandatory(e.target.checked)} 
-                        className="w-4 h-4 rounded text-[#0B7A93] border-slate-300 focus:ring-[#0B7A93]" 
-                      />
-                      Mandatory Flag
-                    </label>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Media Core Mode</label>
-                    <select 
-                      value={qMediaType} 
-                      onChange={(e) => setQMediaType(e.target.value as any)} 
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-[#0B7A93]"
-                    >
-                      <option value="none">No Media Attachment</option>
-                      <option value="image">Attach Image Matrix</option>
-                      <option value="audio">Attach Audio Prompt</option>
-                      <option value="video">Attach Video Reel</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Resource URL</label>
-                    <input 
-                      type="text" 
-                      disabled={qMediaType === 'none'}
-                      placeholder="https://domain.com/asset.mp4"
-                      value={qMediaUrl}
-                      onChange={(e) => setQMediaUrl(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs disabled:bg-slate-100 disabled:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                {/* QUERY BLOCK */}
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Question Text Prompt</label>
-                  <textarea 
-                    rows={3}
-                    placeholder={`Formulate your structural ${qType.replace('_', ' ').toUpperCase()} text template question...`}
-                    value={qText}
-                    onChange={(e) => setQText(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:border-[#0B7A93] focus:ring-1 focus:ring-[#0B7A93] outline-none"
+            {/* COMMON FIELDS CONFIG MATRIX */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-50/50 p-5 rounded-xl border border-slate-100">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Marks Metric</label>
+                <input 
+                  type="number" 
+                  value={qMarks}
+                  onChange={(e) => setQMarks(parseInt(e.target.value) || 1)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-[#0B7A93]"
+                />
+              </div>
+              <div className="flex items-center pt-6">
+                <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-slate-600">
+                  <input 
+                    type="checkbox" 
+                    checked={qMandatory} 
+                    onChange={(e) => setQMandatory(e.target.checked)} 
+                    className="w-4 h-4 rounded text-[#0B7A93] border-slate-300 focus:ring-[#0B7A93]" 
                   />
-                </div>
+                  Mandatory Flag
+                </label>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Media Attachment</label>
+                <select 
+                  value={qMediaType} 
+                  onChange={(e) => setQMediaType(e.target.value as any)} 
+                  className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-[#0B7A93]"
+                >
+                  <option value="none">No Media</option>
+                  <option value="image">Image Attachment</option>
+                  <option value="audio">Audio Prompt</option>
+                  <option value="video">Video Reel</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Media URL</label>
+                <input 
+                  type="text" 
+                  disabled={qMediaType === 'none'}
+                  placeholder="https://..."
+                  value={qMediaUrl}
+                  onChange={(e) => setQMediaUrl(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs disabled:bg-slate-100 disabled:text-slate-400"
+                />
+              </div>
+            </div>
 
-                {/* DYNAMIC ADAPTIVE FIELDS BLOCK */}
-                <div className="border-t border-dashed border-slate-100 pt-6">
-                  
-                  {qType === 'mcq' && (
-                    <div className="space-y-4">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Multiple Choice Options Grid (QCM)</label>
-                      <div className="space-y-3">
-                        {mcqOptions.map((opt, i) => (
-                          <div key={i} className="flex items-center gap-4">
-                            <button 
-                              type="button" 
-                              onClick={() => setMcqCorrect(i)}
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                                mcqCorrect === i 
-                                  ? 'border-[#0B7A93] bg-[#0B7A93]/10 text-[#0B7A93]' 
-                                  : 'border-slate-300 hover:border-slate-400'
-                              }`}
-                            >
-                              {mcqCorrect === i && <span className="w-2.5 h-2.5 rounded-full bg-[#0B7A93]" />}
-                            </button>
-                            
-                            <input 
-                              type="text" 
-                              value={opt} 
-                              onChange={(e) => { 
-                                const c = [...mcqOptions]; 
-                                c[i] = e.target.value; 
-                                setMcqOptions(c); 
-                              }} 
-                              className={`flex-grow border rounded-xl px-4 py-3 text-xs focus:outline-none transition-all ${
-                                mcqCorrect === i 
-                                  ? 'border-[#0B7A93] ring-1 ring-[#0B7A93]' 
-                                  : 'border-slate-200 focus:border-[#0B7A93]'
-                              }`} 
-                            />
-                            
-                            <button 
-                              type="button" 
-                              onClick={() => setMcqOptions(mcqOptions.filter((_, idx) => idx !== i))} 
-                              disabled={mcqOptions.length <= 2} 
-                              className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => setMcqOptions([...mcqOptions, `Option ${String.fromCharCode(65 + mcqOptions.length)}`])} 
-                        className="text-xs font-bold text-[#0B7A93] hover:underline block mt-2"
-                      >
-                        + Append Grid Node
-                      </button>
-                    </div>
-                  )}
+            {/* QUESTION TEXT */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Question Text Prompt *</label>
+              <textarea 
+                rows={3}
+                placeholder={`Formulate your ${qType.replace('_', ' ').toUpperCase()} question prompt here...`}
+                value={qText}
+                onChange={(e) => setQText(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:border-[#0B7A93] focus:ring-1 focus:ring-[#0B7A93] outline-none"
+              />
+            </div>
 
-                  {qType === 'true_false' && (
-                    <div className="space-y-3">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Assign Solution Identity</label>
-                      <div className="flex gap-4">
-                        <button type="button" onClick={() => setTfCorrect(true)} className={`px-8 py-3.5 border rounded-xl text-xs font-bold transition-all ${tfCorrect ? 'bg-teal-50 border-[#0B7A93] text-[#0B7A93]' : 'border-slate-200 text-slate-600'}`}>True</button>
-                        <button type="button" onClick={() => setTfCorrect(false)} className={`px-8 py-3.5 border rounded-xl text-xs font-bold transition-all ${!tfCorrect ? 'bg-teal-50 border-[#0B7A93] text-[#0B7A93]' : 'border-slate-200 text-slate-600'}`}>False</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {qType === 'multi_select' && (
-                    <div className="space-y-4">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Multiple Selection Bounds Matrix</label>
-                      <div className="space-y-3">
-                        {multiOptions.map((opt, i) => (
-                          <div key={i} className="flex items-center gap-4">
-                            <input 
-                              type="checkbox"
-                              checked={multiCorrect[i] || false}
-                              onChange={(e) => {
-                                const c = [...multiCorrect];
-                                c[i] = e.target.checked;
-                                setMultiCorrect(c);
-                              }}
-                              className="w-4 h-4 rounded text-[#0B7A93] border-slate-300 focus:ring-[#0B7A93]"
-                            />
-                            <input 
-                              type="text"
-                              value={opt}
-                              onChange={(e) => {
-                                const o = [...multiOptions];
-                                o[i] = e.target.value;
-                                setMultiOptions(o);
-                              }}
-                              className="flex-grow border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => {
-                                setMultiOptions(multiOptions.filter((_, idx) => idx !== i));
-                                setMultiCorrect(multiCorrect.filter((_, idx) => idx !== i));
-                              }}
-                              disabled={multiOptions.length <= 2}
-                              className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          setMultiOptions([...multiOptions, `Option ${String.fromCharCode(65 + multiOptions.length)}`]);
-                          setMultiCorrect([...multiCorrect, false]);
-                        }} 
-                        className="text-xs font-bold text-[#0B7A93] hover:underline block mt-2"
-                      >
-                        + Append Grid Node
-                      </button>
-                    </div>
-                  )}
-
-                  {qType === 'short_answer' && (
-                    <div className="space-y-3">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Accepted Literal Match Criteria</label>
-                      {shortAnswers.map((ans, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <input 
-                            type="text"
-                            placeholder="Accepted evaluation parsing phrase value..."
-                            value={ans}
-                            onChange={(e) => {
-                              const s = [...shortAnswers];
-                              s[i] = e.target.value;
-                              setShortAnswers(s);
-                            }}
-                            className="flex-grow border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => setShortAnswers(shortAnswers.filter((_, idx) => idx !== i))}
-                            disabled={shortAnswers.length <= 1}
-                            className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ))}
-                      <button 
-                        type="button"
-                        onClick={() => setShortAnswers([...shortAnswers, ''])}
-                        className="text-xs font-bold text-[#0B7A93] hover:underline block mt-1"
-                      >
-                        + Append Alternative Matching Formula
-                      </button>
-                    </div>
-                  )}
-
-                  {qType === 'essay' && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Minimum Character Count</label>
-                        <input 
-                          type="number"
-                          value={essayMinMax.min}
-                          onChange={(e) => setEssayMinMax({ ...essayMinMax, min: parseInt(e.target.value) || 0 })}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Maximum Character Count</label>
-                        <input 
-                          type="number"
-                          value={essayMinMax.max}
-                          onChange={(e) => setEssayMinMax({ ...essayMinMax, max: parseInt(e.target.value) || 0 })}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {qType === 'coding' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Target Sandbox Language</label>
-                        <select 
-                          value={codingLang}
-                          onChange={(e) => setCodingLang(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold focus:outline-none focus:border-[#0B7A93]"
+            {/* DYNAMIC FIELDS PER QUESTION TYPE */}
+            <div className="border-t border-dashed border-slate-100 pt-6">
+              {qType === 'mcq' && (
+                <div className="space-y-4">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Multiple Choice Options Grid (Select Correct Option)</label>
+                  <div className="space-y-3">
+                    {mcqOptions.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <button 
+                          type="button" 
+                          onClick={() => setMcqCorrect(i)}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                            mcqCorrect === i 
+                              ? 'border-[#0B7A93] bg-[#0B7A93]/10 text-[#0B7A93]' 
+                              : 'border-slate-300 hover:border-slate-400'
+                          }`}
                         >
-                          <option value="python">Python</option>
-                          <option value="javascript">JavaScript</option>
-                          <option value="java">Java</option>
-                          <option value="cpp">C++</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Starter Code Template</label>
-                        <textarea 
-                          rows={4}
-                          placeholder="# Write your initialization code boilerplate here..."
-                          value={codingStarter}
-                          onChange={(e) => setCodingStarter(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:border-[#0B7A93]"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {qType === 'fill_blank' && (
-                    <div className="space-y-2">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Sentence Blueprint Configuration</label>
-                      <input 
-                        type="text"
-                        value={blanksText}
-                        onChange={(e) => setBlanksText(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                      />
-                      <span className="text-[10px] text-slate-400 block mt-1">Use brackets like <code>[blank1]</code> to anchor system parsers to custom input states.</span>
-                    </div>
-                  )}
-
-                  {qType === 'matching' && (
-                    <div className="space-y-3">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Identity Pairs Association Matrix</label>
-                      {matchingPairs.map((pair, i) => (
-                        <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                          <div className="sm:col-span-5">
-                            <input 
-                              type="text"
-                              placeholder="Left Term (Premise)"
-                              value={pair.left}
-                              onChange={(e) => {
-                                const m = [...matchingPairs];
-                                m[i].left = e.target.value;
-                                setMatchingPairs(m);
-                              }}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                            />
-                          </div>
-                          <div className="sm:col-span-1 text-center font-bold text-slate-400 text-xs">=</div>
-                          <div className="sm:col-span-5">
-                            <input 
-                              type="text"
-                              placeholder="Right Term (Target Match)"
-                              value={pair.right}
-                              onChange={(e) => {
-                                const m = [...matchingPairs];
-                                m[i].right = e.target.value;
-                                setMatchingPairs(m);
-                              }}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                            />
-                          </div>
-                          <div className="sm:col-span-1 text-right">
-                            <button 
-                              type="button"
-                              onClick={() => setMatchingPairs(matchingPairs.filter((_, idx) => idx !== i))}
-                              disabled={matchingPairs.length <= 1}
-                              className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      <button 
-                        type="button"
-                        onClick={() => setMatchingPairs([...matchingPairs, { left: '', right: '' }])}
-                        className="text-xs font-bold text-[#0B7A93] hover:underline block mt-1"
-                      >
-                        + Append Identity Pair Row
-                      </button>
-                    </div>
-                  )}
-
-                  {qType === 'ordering' && (
-                    <div className="space-y-3">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Sequence Order Stack (Correct Top-Down Order)</label>
-                      {orderingItems.map((item, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <span className="text-xs font-mono font-bold text-slate-400 w-4">{i + 1}.</span>
-                          <input 
-                            type="text"
-                            value={item}
-                            onChange={(e) => {
-                              const o = [...orderingItems];
-                              o[i] = e.target.value;
-                              setOrderingItems(o);
-                            }}
-                            className="flex-grow border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => setOrderingItems(orderingItems.filter((_, idx) => idx !== i))}
-                            disabled={orderingItems.length <= 2}
-                            className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ))}
-                      <button 
-                        type="button"
-                        onClick={() => setOrderingItems([...orderingItems, `Item ${orderingItems.length + 1}`])}
-                        className="text-xs font-bold text-[#0B7A93] hover:underline block mt-1"
-                      >
-                        + Append Sequence Item Node
-                      </button>
-                    </div>
-                  )}
-
-                  {qType === 'numeric' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Exact Solution Value</label>
+                          {mcqCorrect === i && <span className="w-2.5 h-2.5 rounded-full bg-[#0B7A93]" />}
+                        </button>
+                        
                         <input 
-                          type="number"
-                          value={numericAnswer.val}
-                          onChange={(e) => setNumericAnswer({ ...numericAnswer, val: parseFloat(e.target.value) || 0 })}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
+                          type="text" 
+                          value={opt} 
+                          onChange={(e) => { 
+                            const c = [...mcqOptions]; 
+                            c[i] = e.target.value; 
+                            setMcqOptions(c); 
+                          }} 
+                          className={`flex-grow border rounded-xl px-4 py-3 text-xs focus:outline-none transition-all ${
+                            mcqCorrect === i 
+                              ? 'border-[#0B7A93] ring-1 ring-[#0B7A93]' 
+                              : 'border-slate-200 focus:border-[#0B7A93]'
+                          }`} 
                         />
+                        
+                        <button 
+                          type="button" 
+                          onClick={() => setMcqOptions(mcqOptions.filter((_, idx) => idx !== i))} 
+                          disabled={mcqOptions.length <= 2} 
+                          className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
+                        >
+                          Delete
+                        </button>
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Accepted Tolerance (±)</label>
+                    ))}
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setMcqOptions([...mcqOptions, `Option ${String.fromCharCode(65 + mcqOptions.length)}`])} 
+                    className="text-xs font-bold text-[#0B7A93] hover:underline block mt-2"
+                  >
+                    + Add Option
+                  </button>
+                </div>
+              )}
+
+              {qType === 'true_false' && (
+                <div className="space-y-3">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Correct Answer</label>
+                  <div className="flex gap-4">
+                    <button type="button" onClick={() => setTfCorrect(true)} className={`px-8 py-3.5 border rounded-xl text-xs font-bold transition-all ${tfCorrect ? 'bg-teal-50 border-[#0B7A93] text-[#0B7A93]' : 'border-slate-200 text-slate-600'}`}>True</button>
+                    <button type="button" onClick={() => setTfCorrect(false)} className={`px-8 py-3.5 border rounded-xl text-xs font-bold transition-all ${!tfCorrect ? 'bg-teal-50 border-[#0B7A93] text-[#0B7A93]' : 'border-slate-200 text-slate-600'}`}>False</button>
+                  </div>
+                </div>
+              )}
+
+              {qType === 'multi_select' && (
+                <div className="space-y-4">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Multiple Select Options (Check all correct)</label>
+                  <div className="space-y-3">
+                    {multiOptions.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-4">
                         <input 
-                          type="number"
-                          value={numericAnswer.tolerance}
-                          onChange={(e) => setNumericAnswer({ ...numericAnswer, tolerance: parseFloat(e.target.value) || 0 })}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
+                          type="checkbox"
+                          checked={multiCorrect[i] || false}
+                          onChange={(e) => {
+                            const c = [...multiCorrect];
+                            c[i] = e.target.checked;
+                            setMultiCorrect(c);
+                          }}
+                          className="w-4 h-4 rounded text-[#0B7A93] border-slate-300 focus:ring-[#0B7A93]"
                         />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Unit Descriptor Label</label>
                         <input 
                           type="text"
-                          placeholder="e.g., kg, m/s, %"
-                          value={numericAnswer.unit}
-                          onChange={(e) => setNumericAnswer({ ...numericAnswer, unit: e.target.value })}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
+                          value={opt}
+                          onChange={(e) => {
+                            const o = [...multiOptions];
+                            o[i] = e.target.value;
+                            setMultiOptions(o);
+                          }}
+                          className="flex-grow border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
                         />
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setMultiOptions(multiOptions.filter((_, idx) => idx !== i));
+                            setMultiCorrect(multiCorrect.filter((_, idx) => idx !== i));
+                          }}
+                          disabled={multiOptions.length <= 2}
+                          className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
+                        >
+                          Delete
+                        </button>
                       </div>
-                    </div>
-                  )}
-
-                </div>
-
-                {/* EXPLANATION / SOLUTION NOTES */}
-                <div className="pt-4 border-t border-slate-100">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Post-Release Solutions Assessment Explanatory Feedback Notes</label>
-                  <input 
-                    type="text"
-                    placeholder="Explanatory evaluation guidelines visible during distributions..."
-                    value={qExplanation}
-                    onChange={(e) => setQExplanation(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
-                  />
-                </div>
-
-                {/* ACTIONS FOR QUESTION COMPOSER */}
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    ))}
+                  </div>
                   <button 
                     type="button" 
                     onClick={() => {
-                      setQText('');
-                      setQExplanation('');
-                      setQMediaType('none');
-                      setQMediaUrl('');
-                    }}
-                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800"
+                      setMultiOptions([...multiOptions, `Option ${String.fromCharCode(65 + multiOptions.length)}`]);
+                      setMultiCorrect([...multiCorrect, false]);
+                    }} 
+                    className="text-xs font-bold text-[#0B7A93] hover:underline block mt-2"
                   >
-                    Clear Workspace Configuration
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={handleAddQuestionToPart}
-                    className="px-6 py-2.5 bg-[#0d1527] text-white font-bold text-xs rounded-xl hover:bg-[#1a253d] transition-all"
-                  >
-                    Save & Commit Question
+                    + Add Option
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* BLOCK C: SUMMARY PIPELINE DECK */}
-              <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
-                <div>
-                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Exam Questionnaire Pipeline Deck Summary</h3>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Hierarchical structural breakdown view of currently built sections.</p>
-                </div>
-
-                <div className="space-y-4">
-                  {parts.map((part) => (
-                    <div key={part.id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-800">{part.title}</h4>
-                          <span className="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Strict Format Constraint: {part.allowedType.replace('_', ' ').toUpperCase()}</span>
-                        </div>
-                        <span className="text-[10px] font-bold bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-md">
-                          {part.questions.length} Items Total
-                        </span>
-                      </div>
-
-                      {part.questions.length > 0 && (
-                        <div className="space-y-2 pl-3 border-l border-slate-200 mt-2">
-                          {part.questions.map((q, idx) => (
-                            <div key={q.id} className="text-xs bg-white p-2.5 rounded-xl border border-slate-100 flex justify-between items-center">
-                              <span className="text-slate-600 font-medium">Q{idx + 1}: {q.text.substring(0, 60)}{q.text.length > 60 ? '...' : ''}</span>
-                              <div className="flex items-center gap-3">
-                                <span className="text-slate-400 font-bold text-[10px]">{q.marks} pts</span>
-                                <button 
-                                  type="button" 
-                                  onClick={() => handleDeleteQuestion(part.id, q.id)}
-                                  className="text-rose-500 font-bold hover:underline text-[10px]"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+              {qType === 'short_answer' && (
+                <div className="space-y-3">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Accepted Answers</label>
+                  {shortAnswers.map((ans, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <input 
+                        type="text"
+                        placeholder="Accepted answer phrase..."
+                        value={ans}
+                        onChange={(e) => {
+                          const s = [...shortAnswers];
+                          s[i] = e.target.value;
+                          setShortAnswers(s);
+                        }}
+                        className="flex-grow border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setShortAnswers(shortAnswers.filter((_, idx) => idx !== i))}
+                        disabled={shortAnswers.length <= 1}
+                        className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
+                      >
+                        Delete
+                      </button>
                     </div>
                   ))}
+                  <button 
+                    type="button"
+                    onClick={() => setShortAnswers([...shortAnswers, ''])}
+                    className="text-xs font-bold text-[#0B7A93] hover:underline block mt-1"
+                  >
+                    + Add Alternative Answer
+                  </button>
                 </div>
+              )}
 
-                {/* GLOBAL PIPELINE CONTROLS */}
-                <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
-                  <button 
-                    type="button"
-                    onClick={() => setStep(1)} 
-                    className="px-6 py-3 border border-slate-200 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-50 transition-all mr-auto"
-                  >
-                    ← Back to Settings Params
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => router.push('/teacher/exams')} 
-                    className="px-6 py-3 border border-slate-200 text-slate-400 text-xs font-bold rounded-xl hover:bg-slate-50 transition-all"
-                  >
-                    Abort Project
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={handlePublish}
-                    className="px-8 py-3.5 bg-[#0B7A93] text-white text-xs font-bold rounded-xl hover:bg-[#09667c] transition-all shadow-md"
-                  >
-                    Deploy Full Exam Architecture
-                  </button>
+              {qType === 'essay' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Minimum Words</label>
+                    <input 
+                      type="number"
+                      value={essayMinMax.min}
+                      onChange={(e) => setEssayMinMax({ ...essayMinMax, min: parseInt(e.target.value) || 0 })}
+                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Maximum Words</label>
+                    <input 
+                      type="number"
+                      value={essayMinMax.max}
+                      onChange={(e) => setEssayMinMax({ ...essayMinMax, max: parseInt(e.target.value) || 0 })}
+                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
+                    />
+                  </div>
                 </div>
+              )}
+            </div>
+
+            {/* EXPLANATION / SOLUTION NOTES */}
+            <div className="pt-4 border-t border-slate-100">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Feedback / Answer Explanation</label>
+              <input 
+                type="text"
+                placeholder="Explanatory notes shown during review..."
+                value={qExplanation}
+                onChange={(e) => setQExplanation(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#0B7A93]"
+              />
+            </div>
+
+            {/* ACTIONS FOR QUESTION COMPOSER */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setQText('');
+                  setQExplanation('');
+                  setQMediaType('none');
+                  setQMediaUrl('');
+                }}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800"
+              >
+                Clear Form
+              </button>
+              <button 
+                type="button"
+                onClick={handleAddQuestionToPart}
+                className="px-6 py-3 bg-[#0d1527] text-white font-bold text-xs rounded-xl hover:bg-[#1a253d] transition-all shadow-sm"
+              >
+                + Add Question to Section
+              </button>
+            </div>
+          </div>
+
+          {/* BLOCK C: LIVE ALL QUESTIONS INSPECTOR PANEL */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Exam Questions ({countTotalQuestions()})</h3>
+                <p className="text-slate-400 text-xs mt-0.5">Complete list of all questions created across all sections.</p>
               </div>
-            </>
-          )}
+              <span className="text-xs font-bold bg-teal-50 text-[#0B7A93] px-3 py-1.5 rounded-lg border border-teal-100">
+                Total Score: {parts.reduce((acc, p) => acc + p.questions.reduce((qAcc, q) => qAcc + q.marks, 0), 0)} pts
+              </span>
+            </div>
+
+            {countTotalQuestions() === 0 ? (
+              <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
+                <p className="text-xs text-slate-400 font-medium">No questions added yet. Use the composer form above to add your first question.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {parts.map((part) => (
+                  <div key={part.id} className="border border-slate-200/80 rounded-2xl p-5 bg-slate-50/30 space-y-3">
+                    <div className="flex justify-between items-center border-b border-slate-200/60 pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black bg-[#0B7A93] text-white px-2.5 py-1 rounded-md">
+                          {part.title}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                          Type: {part.allowedType.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500">{part.questions.length} questions</span>
+                    </div>
+
+                    {part.questions.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-2">No questions inside this section yet.</p>
+                    ) : (
+                      <div className="space-y-3 pt-1">
+                        {part.questions.map((q, idx) => (
+                          <div key={q.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start gap-4">
+                            <div className="space-y-1.5 flex-grow">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-slate-800">Q{idx + 1}.</span>
+                                <span className="text-xs font-bold text-slate-900">{q.text}</span>
+                              </div>
+
+                              {/* MCQ Render preview */}
+                              {q.type === 'mcq' && q.mcqOptions && (
+                                <div className="grid grid-cols-2 gap-1.5 pl-6 pt-1">
+                                  {q.mcqOptions.map((opt, oIdx) => (
+                                    <div key={oIdx} className={`text-[11px] px-2.5 py-1 rounded-md border ${oIdx === q.mcqCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-bold' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+                                      {String.fromCharCode(65 + oIdx)}. {opt} {oIdx === q.mcqCorrect && '✓'}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* True/False Render preview */}
+                              {q.type === 'true_false' && (
+                                <p className="text-[11px] text-emerald-700 font-bold pl-6">
+                                  Correct Answer: {q.tfCorrect ? 'True' : 'False'}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 gap-2 shrink-0">
+                              <span className="text-xs font-black text-[#0B7A93] bg-teal-50 px-2.5 py-1 rounded-md border border-teal-100">
+                                {q.marks} pts
+                              </span>
+                              <button 
+                                type="button" 
+                                onClick={() => handleDeleteQuestion(part.id, q.id)}
+                                className="text-xs text-rose-500 font-bold hover:underline"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* GLOBAL PIPELINE CONTROLS */}
+            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+              <button 
+                type="button"
+                onClick={() => setStep(1)} 
+                className="px-6 py-3 border border-slate-200 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-50 transition-all mr-auto"
+              >
+                ← Back to Settings Params
+              </button>
+              <button 
+                type="button"
+                onClick={() => router.push('/teacher/exams')} 
+                className="px-6 py-3 border border-slate-200 text-slate-400 text-xs font-bold rounded-xl hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handlePublish}
+                className="px-8 py-3.5 bg-[#0B7A93] text-white text-xs font-bold rounded-xl hover:bg-[#09667c] transition-all shadow-md"
+              >
+                Deploy Exam Architecture
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
+
+      {/* POST-LAUNCH SUCCESS OVERLAY MODAL */}
+      {isLaunched && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center space-y-6">
+            <div className="w-16 h-16 bg-[#0B7A93]/10 text-[#0B7A93] rounded-2xl flex items-center justify-center mx-auto">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-bold text-slate-900">Exam Live & Active</h3>
+              <p className="text-sm text-slate-500 mt-1.5 font-medium">
+                Provide students with this unique 6-character access code to join the assessment.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-6 rounded-2xl flex flex-col items-center justify-center gap-3">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Student Access Code
+              </span>
+              <span className="text-4xl font-black font-mono tracking-widest text-[#0D1527] select-all">
+                {accessCode}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className={`mt-1 text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                  isCopied
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                {isCopied ? "Copied to Clipboard!" : "Copy Access Code"}
+              </button>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLaunched(false);
+                  router.push('/teacher/exams');
+                }}
+                className="w-full bg-[#0B7A93] hover:bg-[#09667c] text-white font-bold text-sm py-3.5 rounded-xl transition-all shadow-sm"
+              >
+                Done & View All Exams
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
+  );
+}
+
+export default function CreateExamPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-slate-500 font-bold text-center">Loading Exam Builder...</div>}>
+      <ExamBuilderContent />
+    </Suspense>
   );
 }
