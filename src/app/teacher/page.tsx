@@ -1,225 +1,251 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { 
+  Radio, 
+  Users, 
+  FileCheck, 
+  FolderKanban, 
+  Plus, 
+  Play, 
+  ArrowRight,
+  Key,
+  Clock,
+  ExternalLink
+} from "lucide-react";
 
-interface ActiveExam {
-  id: string;
-  code: string;
-  course: string;
-  title: string;
-  duration: string;
-  questions: number;
-  studentsConnected: string;
-  totalStudents: string;
-}
-
-export default function TeacherDashboard() {
+export default function TeacherDashboardPage() {
   const router = useRouter();
-  
-  // Local state for active running exams
-  const [activeExams, setActiveExams] = useState<ActiveExam[]>([
-    {
-      id: 'active-1',
-      code: 'CS101-MID',
-      course: 'CS101',
-      title: 'Introduction to Computer Science (Midterm)',
-      duration: '60 mins',
-      questions: 30,
-      studentsConnected: '45',
-      totalStudents: '50'
-    },
-    {
-      id: 'active-2',
-      code: 'DS-QZ3',
-      course: 'CS204',
-      title: 'Data Structures & Algorithms Quiz 3',
-      duration: '45 mins',
-      questions: 15,
-      studentsConnected: '22',
-      totalStudents: '25'
-    }
-  ]);
-
-  // Load dynamically added exams from localStorage if they are active
-  useEffect(() => {
-    const rawData = localStorage.getItem('localExamsData');
-    if (rawData) {
-      try {
-        const currentExams = JSON.parse(rawData);
-        // If there's an active list in local storage, we sync it
-        if (currentExams.active && currentExams.active.length > 0) {
-          setActiveExams(currentExams.active);
-        }
-      } catch (e) {
-        console.error("Failed to parse local dashboard exam data", e);
-      }
-    }
-  }, []);
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 p-6 text-slate-900 animate-in fade-in duration-200">
+    <div className="space-y-8 p-6 md:p-8 bg-slate-50/60 min-h-screen">
       
-      {/* WELCOME BANNER AREA */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* 1. HEADER SECTION (Clean, single unified header) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
         <div>
-          <span className="text-[10px] font-black uppercase text-[#0B7A93] tracking-wider">Workspace Hub</span>
-          <h2 className="text-xl font-bold text-slate-900 mt-1">Teacher Dashboard Overview</h2>
-          <p className="text-slate-400 text-xs mt-0.5">Welcome back! Here is a running analytical snapshot of your current courses.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-xs font-medium text-slate-500 mt-0.5">
+            Manage your classes, live examinations, and analytical insights.
+          </p>
         </div>
+
         <button 
-          onClick={() => router.push('/teacher/exams/new')}
-          className="bg-[#0B7A93] hover:bg-[#09667c] text-white text-xs font-bold px-5 py-3 rounded-xl shadow-sm transition-all"
+          onClick={() => router.push("/teacher/exams/new")}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0B7A93] hover:bg-[#086377] text-white text-xs font-semibold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-[0.98]"
         >
-          + Create New Exam
+          <Plus className="w-4 h-4" />
+          Create New Exam
         </button>
       </div>
 
-      {/* 1. QUICK METRICS STATISTICS GRID */}
+      {/* 2. METRICS SNAPSHOT GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[10px] font-black uppercase tracking-wider">Live Exam Sessions</span>
-            <span className="text-base">📡</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900">{activeExams.length}</span>
-            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded">Active Now</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[10px] font-black uppercase tracking-wider">Total Active Students</span>
-            <span className="text-base">👥</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900">67</span>
-            <span className="text-[10px] text-slate-400">across streams</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[10px] font-black uppercase tracking-wider">Pending Evaluations</span>
-            <span className="text-base">📝</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-rose-600">12</span>
-            <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded">Requires Grading</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-[10px] font-black uppercase tracking-wider">Question Bank Sheets</span>
-            <span className="text-base">🗂️</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900">148</span>
-            <span className="text-[10px] text-slate-400">indexed entries</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 2. QUICK SHORTCUT PANEL */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Quick Navigation Links</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button 
-            onClick={() => router.push('/teacher/exams')}
-            className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all text-left"
-          >
-            <span className="p-2 rounded-lg bg-teal-50 text-[#0B7A93] text-sm font-bold">📄</span>
-            <div>
-              <span className="text-xs font-bold text-slate-800 block">Manage Full Repository</span>
-              <span className="text-[10px] text-slate-400">View all past and upcoming tests</span>
+        {/* Live Exam Sessions */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+              Live Exam Sessions
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-slate-900">3</span>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Active Now
+              </span>
             </div>
-          </button>
+          </div>
+          <div className="p-3 rounded-xl bg-teal-50 text-[#0B7A93]">
+            <Radio className="w-5 h-5" />
+          </div>
+        </div>
 
-          <button 
-            onClick={() => router.push('/teacher/question-bank')}
-            className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all text-left"
-          >
-            <span className="p-2 rounded-lg bg-blue-50 text-blue-600 text-sm font-bold">📂</span>
-            <div>
-              <span className="text-xs font-bold text-slate-800 block">Open Question Bank</span>
-              <span className="text-[10px] text-slate-400">Configure reused section forms</span>
+        {/* Total Active Students */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+              Total Active Students
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-slate-900">67</span>
+              <span className="text-xs font-medium text-slate-400">across streams</span>
             </div>
-          </button>
+          </div>
+          <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
 
-          <button 
-            onClick={() => router.push('/teacher/grading')}
-            className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all text-left"
-          >
-            <span className="p-2 rounded-lg bg-purple-50 text-purple-600 text-sm font-bold">🎯</span>
-            <div>
-              <span className="text-xs font-bold text-slate-800 block">Review Student Submissions</span>
-              <span className="text-[10px] text-slate-400">12 items pending automated check</span>
+        {/* Pending Evaluations */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+              Pending Evaluations
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-rose-600">12</span>
+              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+                Requires Grading
+              </span>
             </div>
-          </button>
+          </div>
+          <div className="p-3 rounded-xl bg-rose-50 text-rose-500">
+            <FileCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Question Bank Sheets */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+              Question Bank Sheets
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-slate-900">148</span>
+              <span className="text-xs font-medium text-slate-400">indexed entries</span>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
+            <FolderKanban className="w-5 h-5" />
+          </div>
         </div>
       </div>
 
-      {/* 3. CORE REAL-TIME RUNNING EXAMS STATUS */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
+      {/* 3. QUICK NAVIGATION LINKS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Link 
+          href="/teacher/exams"
+          className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#0B7A93]/50 transition-all flex items-center justify-between group"
+        >
+          <div className="space-y-1">
+            <h3 className="text-xs font-bold text-slate-900 group-hover:text-[#0B7A93] transition-colors">
+              Manage Full Repository
+            </h3>
+            <p className="text-[11px] text-slate-500">View all past and upcoming tests</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-[#0B7A93] transition-all" />
+        </Link>
+
+        <Link 
+          href="/teacher/exams"
+          className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#0B7A93]/50 transition-all flex items-center justify-between group"
+        >
+          <div className="space-y-1">
+            <h3 className="text-xs font-bold text-slate-900 group-hover:text-[#0B7A93] transition-colors">
+              Open Question Bank
+            </h3>
+            <p className="text-[11px] text-slate-500">Configure reused section forms</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-[#0B7A93] transition-all" />
+        </Link>
+
+        <Link 
+          href="/teacher/grading"
+          className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#0B7A93]/50 transition-all flex items-center justify-between group"
+        >
+          <div className="space-y-1">
+            <h3 className="text-xs font-bold text-slate-900 group-hover:text-[#0B7A93] transition-colors">
+              Review Student Submissions
+            </h3>
+            <p className="text-[11px] text-slate-500">12 items pending automated check</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-[#0B7A93] transition-all" />
+        </Link>
+      </div>
+
+      {/* 4. LIVE ACTIVE STREAM MONITORING */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-5">
         <div>
-          <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Live Active Stream Monitoring</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">Currently open exam test portals running concurrent student browser connections.</p>
+          <h2 className="text-xs font-bold tracking-wider text-slate-400 uppercase">
+            Live Active Stream Monitoring
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Currently open exam portals running concurrent student connections.
+          </p>
         </div>
 
         <div className="space-y-3">
-          {activeExams.length === 0 ? (
-            <div className="p-8 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-              <span className="text-slate-300 text-xl block mb-1">📭</span>
-              <p className="text-xs text-slate-400 font-medium">No live exam streams currently processing connections.</p>
-            </div>
-          ) : (
-            activeExams.map((exam) => (
-              <div 
-                key={exam.id} 
-                className="p-5 border border-slate-100 bg-white rounded-xl shadow-sm hover:border-slate-200 transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
-                      {exam.course}
-                    </span>
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      Duration: {exam.duration} • {exam.questions} Questions
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-slate-900">{exam.title}</h4>
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Access Join Code:</span>
-                    <span className="bg-teal-50 border border-teal-100/80 text-[#0B7A93] px-2 py-0.5 rounded font-mono font-bold text-[10px]">
-                      {exam.code}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-slate-50 pt-3 md:pt-0">
-                  <div className="text-left md:text-right">
-                    <span className="text-xs font-bold text-slate-800 block">
-                      {exam.studentsConnected}/{exam.totalStudents} Active
-                    </span>
-                    <span className="text-[10px] text-emerald-500 font-medium tracking-wide flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Streams connected
-                    </span>
-                  </div>
-                  <button 
-                    onClick={() => router.push(`/teacher/monitor/${exam.id}`)}
-                    className="bg-[#0B7A93] hover:bg-[#09667c] text-white text-xs font-bold px-4 py-2.5 rounded-lg transition-all shadow-sm"
-                  >
-                    Launch Live Monitor
-                  </button>
-                </div>
+          {/* Active Stream Card 1 */}
+          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/40 hover:bg-white hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded tracking-wide">
+                  qqwe
+                </span>
+                <span className="text-xs text-slate-400 flex items-center gap-1 font-medium">
+                  <Clock className="w-3 h-3 text-slate-400" /> 80 mins • 30 Questions
+                </span>
               </div>
-            ))
-          )}
+              <h3 className="text-sm font-bold text-slate-900">QWE</h3>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Key className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-[11px]">ACCESS JOIN CODE:</span>
+                <span className="px-2 py-0.5 bg-teal-50 text-[#0B7A93] font-mono font-bold rounded border border-teal-200/60">
+                  qweqwe
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-0 pt-3 md:pt-0 border-slate-200/80">
+              <div className="text-right">
+                <p className="text-xs font-bold text-slate-900">0 Active</p>
+                <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Streams connected
+                </p>
+              </div>
+              <button 
+                onClick={() => router.push("/teacher/monitor")}
+                className="px-3.5 py-2 bg-[#0B7A93] hover:bg-[#086377] text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all active:scale-[0.98]"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                Launch Monitor
+              </button>
+            </div>
+          </div>
+
+          {/* Active Stream Card 2 */}
+          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/40 hover:bg-white hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded tracking-wide">
+                  CS101
+                </span>
+                <span className="text-xs text-slate-400 flex items-center gap-1 font-medium">
+                  <Clock className="w-3 h-3 text-slate-400" /> 60 mins • 30 Questions
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">Introduction to Computer Science (Midterm)</h3>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Key className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-[11px]">ACCESS JOIN CODE:</span>
+                <span className="px-2 py-0.5 bg-teal-50 text-[#0B7A93] font-mono font-bold rounded border border-teal-200/60">
+                  CS101-MID
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-0 pt-3 md:pt-0 border-slate-200/80">
+              <div className="text-right">
+                <p className="text-xs font-bold text-slate-900">12 Active</p>
+                <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Streams connected
+                </p>
+              </div>
+              <button 
+                onClick={() => router.push("/teacher/monitor")}
+                className="px-3.5 py-2 bg-[#0B7A93] hover:bg-[#086377] text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all active:scale-[0.98]"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                Launch Monitor
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

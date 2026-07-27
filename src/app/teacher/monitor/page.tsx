@@ -1,337 +1,503 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
-type MonitorStatus = 'all' | 'active' | 'flagged' | 'completed';
-
-interface StudentStream {
+interface StudentSession {
   id: string;
   name: string;
-  rollNumber: string;
-  progress: number; // percentage completed
-  status: 'Online' | 'Tab Switched' | 'Disconnected' | 'Finished';
-  flagsCount: number;
-  ipAddress: string;
-  startedAt: string;
+  studentId: string;
+  status: "active" | "flagged" | "submitted" | "terminated";
+  progress: number; // percentage
+  timeSpent: string;
+  violations: {
+    type: string;
+    timestamp: string;
+    severity: "high" | "medium";
+  }[];
 }
 
-export default function LiveMonitoringPage() {
-  const [selectedExam, setSelectedExam] = useState('CS101-MID');
-  const [statusFilter, setStatusFilter] = useState<MonitorStatus>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+function LiveMonitorContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const accessCode = searchParams.get("code") || "SEN79Z";
 
-  // Realistic mock data matching the active stream view from your dashboard
-  const [students, setStudents] = useState<StudentStream[]>([
+  // Global Session State
+  const [isExamEnded, setIsExamEnded] = useState(false);
+  const [showEndExamModal, setShowEndExamModal] = useState(false);
+
+  // Mock Live Student Sessions
+  const [students, setStudents] = useState<StudentSession[]>([
     {
-      id: 'st-01',
-      name: 'Alexander Wright',
-      rollNumber: 'CS-2026-0042',
-      progress: 68,
-      status: 'Online',
-      flagsCount: 0,
-      ipAddress: '192.168.1.104',
-      startedAt: '10:02 AM'
+      id: "s1",
+      name: "Alex Johnson",
+      studentId: "STU-8821",
+      status: "active",
+      progress: 65,
+      timeSpent: "32 mins",
+      violations: [],
     },
     {
-      id: 'st-02',
-      name: 'Sarah Jenkins',
-      rollNumber: 'CS-2026-0115',
-      progress: 45,
-      status: 'Tab Switched',
-      flagsCount: 3,
-      ipAddress: '172.56.21.99',
-      startedAt: '10:05 AM'
+      id: "s2",
+      name: "Marcus Vance",
+      studentId: "STU-4019",
+      status: "flagged",
+      progress: 40,
+      timeSpent: "18 mins",
+      violations: [
+        { type: "Tab Switch Detected (3x)", timestamp: "1:22 PM", severity: "high" },
+        { type: "Secondary Monitor Detected", timestamp: "1:20 PM", severity: "high" },
+      ],
     },
     {
-      id: 'st-03',
-      name: 'Marcus Chen',
-      rollNumber: 'CS-2026-0089',
-      progress: 92,
-      status: 'Online',
-      flagsCount: 0,
-      ipAddress: '192.168.1.112',
-      startedAt: '10:00 AM'
+      id: "s3",
+      name: "Sophia Chen",
+      studentId: "STU-9102",
+      status: "active",
+      progress: 85,
+      timeSpent: "41 mins",
+      violations: [],
     },
     {
-      id: 'st-04',
-      name: 'Emily Ross',
-      rollNumber: 'CS-2026-0201',
-      progress: 100,
-      status: 'Finished',
-      flagsCount: 1,
-      ipAddress: '108.45.162.4',
-      startedAt: '10:01 AM'
+      id: "s4",
+      name: "David Miller",
+      studentId: "STU-3321",
+      status: "flagged",
+      progress: 25,
+      timeSpent: "12 mins",
+      violations: [
+        { type: "Multiple Faces in Camera Feed", timestamp: "1:23 PM", severity: "high" },
+      ],
     },
     {
-      id: 'st-05',
-      name: 'David Kim',
-      rollNumber: 'CS-2026-0144',
-      progress: 12,
-      status: 'Disconnected',
-      flagsCount: 0,
-      ipAddress: 'unknown',
-      startedAt: '10:15 AM'
-    }
+      id: "s5",
+      name: "Emma Watson",
+      studentId: "STU-1044",
+      status: "active",
+      progress: 90,
+      timeSpent: "45 mins",
+      violations: [],
+    },
   ]);
 
-  // Handle mock alerts / actions
-  const handlePingStudent = (name: string) => {
-    alert(`Sent real-time system warning notification to ${name}.`);
+  // Selected student for the decision modal
+  const [selectedStudent, setSelectedStudent] = useState<StudentSession | null>(null);
+
+  // AUTO-SORT: Flagged students automatically move to the VERY TOP
+  const sortedStudents = useMemo(() => {
+    return [...students].sort((a, b) => {
+      // Priority 1: Flagged students first
+      if (a.status === "flagged" && b.status !== "flagged") return -1;
+      if (a.status !== "flagged" && b.status === "flagged") return 1;
+      // Priority 2: Terminated / Submitted last
+      if (a.status === "terminated" || a.status === "submitted") return 1;
+      return 0;
+    });
+  }, [students]);
+
+  // Action: Single Student Allow to Continue
+  const handleAllowContinue = (studentId: string) => {
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId ? { ...s, status: "active", violations: [] } : s
+      )
+    );
+    setSelectedStudent(null);
   };
 
-  const handleForceSubmit = (name: string) => {
-    const confirmSubmit = confirm(`Are you sure you want to forcibly submit the exam session for ${name}? This action cannot be undone.`);
-    if (confirmSubmit) {
-      alert(`Session terminated. Paper submitted automatically for ${name}.`);
-    }
+  // Action: Single Student Force Submit
+  const handleForceSubmit = (studentId: string) => {
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId ? { ...s, status: "terminated", progress: s.progress } : s
+      )
+    );
+    setSelectedStudent(null);
   };
 
-  // Filter & Search Logic
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          student.rollNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    if (!matchesSearch) return false;
-
-    if (statusFilter === 'active') return student.status === 'Online';
-    if (statusFilter === 'flagged') return student.flagsCount > 0 || student.status === 'Tab Switched';
-    if (statusFilter === 'completed') return student.status === 'Finished';
-    return true;
-  });
-
-  const getStatusBadge = (status: StudentStream['status']) => {
-    switch (status) {
-      case 'Online':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active Focus
-          </span>
-        );
-      case 'Tab Switched':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Focus Lost
-          </span>
-        );
-      case 'Disconnected':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
-          </span>
-        );
-      case 'Finished':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-            Submitted
-          </span>
-        );
-    }
+  // Action: Global End Exam for All
+  const handleEndExamForEveryone = () => {
+    setStudents((prev) =>
+      prev.map((s) => ({
+        ...s,
+        status: s.status === "terminated" ? "terminated" : "submitted",
+      }))
+    );
+    setIsExamEnded(true);
+    setShowEndExamModal(false);
   };
+
+  const flaggedCount = students.filter((s) => s.status === "flagged").length;
+  const activeCount = students.filter((s) => s.status === "active").length;
+  const submittedCount = students.filter((s) => s.status === "submitted").length;
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-8 text-slate-900 space-y-8 animate-in fade-in duration-200">
-      
-      {/* HEADER BAR */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-        <div>
-          <span className="text-[11px] font-bold uppercase text-[#0B7A93] tracking-widest">Live Engine</span>
-          <h2 className="text-2xl font-bold text-slate-900 mt-1">Live Active Stream Monitoring</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
-            Observing concurrent student browser connection integrity and proctor flags.
-          </p>
+    <div className="max-w-7xl mx-auto space-y-6 font-sans">
+      {/* TOP MONITOR HEADER & SESSION DETAILS */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            {!isExamEnded ? (
+              <>
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs font-black tracking-widest text-emerald-600 uppercase">
+                  Live Monitoring Room
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="h-3 w-3 rounded-full bg-slate-400"></span>
+                <span className="text-xs font-black tracking-widest text-slate-500 uppercase">
+                  Session Closed / Exam Stopped
+                </span>
+              </>
+            )}
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">
+            Active Examination Feed
+          </h2>
         </div>
 
-        {/* ACTIVE EXAM RUN SELECTOR */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <label className="text-xs font-bold text-slate-400 uppercase whitespace-nowrap hidden sm:inline">Active Run:</label>
-          <select
-            value={selectedExam}
-            onChange={(e) => setSelectedExam(e.target.value)}
-            className="w-full md:w-72 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#0B7A93] focus:bg-white transition-all"
-          >
-            <option value="CS101-MID">Introduction to Computer Science (Midterm)</option>
-            <option value="CS302-FIN">Advanced Software Engineering Frameworks</option>
-          </select>
-        </div>
-      </div>
-
-      {/* CORE RUNTIME OVERVIEW METRICS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Total Enrolled</span>
-            <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{students.length}</h3>
-          </div>
-          <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-400">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Connected Active</span>
-            <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">
-              {students.filter(s => s.status === 'Online').length}
-            </h3>
-          </div>
-          <div className="p-3 bg-emerald-50 text-emerald-500 rounded-xl">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Integrity Incidents</span>
-            <h3 className="text-2xl font-extrabold text-amber-600 mt-1">
-              {students.filter(s => s.status === 'Tab Switched' || s.flagsCount > 0).length}
-            </h3>
-          </div>
-          <div className="p-3 bg-amber-50 text-amber-500 rounded-xl">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Finished Returns</span>
-            <h3 className="text-2xl font-extrabold text-slate-500 mt-1">
-              {students.filter(s => s.status === 'Finished').length}
-            </h3>
-          </div>
-          <div className="p-3 bg-slate-100 text-slate-500 rounded-xl">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-          </div>
-        </div>
-      </div>
-
-      {/* FILTER TOOLBAR CONTAINER */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-center">
-        
-        {/* Status Segmented Controls */}
-        <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/40 w-full sm:w-auto">
-          {(['all', 'active', 'flagged', 'completed'] as MonitorStatus[]).map((tab) => (
+        {/* CONTROLS: ACCESS CODE & STOP EXAM BUTTON */}
+        <div className="flex flex-wrap items-center gap-4 shrink-0">
+          {/* ACCESS JOIN CODE CARD */}
+          <div className="flex items-center gap-4 bg-slate-900 text-white px-5 py-2.5 rounded-2xl shadow-sm">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                Access Code
+              </p>
+              <p className="text-xl font-black tracking-widest font-mono text-[#0B7A93]">
+                {accessCode}
+              </p>
+            </div>
             <button
-              key={tab}
-              type="button"
-              onClick={() => setStatusFilter(tab)}
-              className={`flex-grow sm:flex-grow-0 px-4 py-2.5 text-xs font-bold rounded-lg capitalize transition-all ${
-                statusFilter === tab
-                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
+              onClick={() => navigator.clipboard.writeText(accessCode)}
+              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors"
+              title="Copy Code"
             >
-              {tab === 'all' ? 'All Connections' : `${tab} profiles`}
+              <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v9.25c0 .621-.504 1.125-1.125 1.125z" />
+              </svg>
             </button>
-          ))}
-        </div>
+          </div>
 
-        {/* Real-time Search Box */}
-        <div className="relative w-full sm:w-80">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          </span>
-          <input 
-            type="text"
-            placeholder="Search student name or roll ID..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-xs placeholder:text-slate-400 focus:outline-none focus:border-[#0B7A93] focus:bg-white transition-all"
-          />
+          {/* STOP EXAM BUTTON */}
+          {!isExamEnded ? (
+            <button
+              onClick={() => setShowEndExamModal(true)}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold px-5 py-3 rounded-2xl flex items-center gap-2 transition-all shadow-md active:scale-95"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+              </svg>
+              <span>Stop Exam for All</span>
+            </button>
+          ) : (
+            <span className="bg-slate-100 text-slate-500 font-extrabold px-5 py-3 rounded-2xl border border-slate-200">
+              Exam Stopped
+            </span>
+          )}
         </div>
       </div>
 
-      {/* LIVE MONITORED ROSTER LIST */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        {filteredStudents.length === 0 ? (
-          <div className="p-16 text-center text-slate-400 text-xs">
-            No live students match the selected filter query criteria.
+      {/* STATS OVERVIEW */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Enrolled</p>
+            <p className="text-2xl font-black text-gray-900 mt-1">{students.length}</p>
           </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {filteredStudents.map((student) => (
-              <div 
-                key={student.id} 
-                className="p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:bg-slate-50/50 transition-all"
+          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+            {students.length}
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Active & Clean</p>
+            <p className="text-2xl font-black text-emerald-600 mt-1">{isExamEnded ? 0 : activeCount}</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+        </div>
+
+        <div className={`p-5 rounded-2xl border flex items-center justify-between transition-all ${
+          flaggedCount > 0 && !isExamEnded ? "bg-rose-50 border-rose-200" : "bg-white border-gray-200"
+        }`}>
+          <div>
+            <p className={`text-xs font-bold uppercase tracking-wider ${flaggedCount > 0 && !isExamEnded ? "text-rose-600" : "text-gray-400"}`}>
+              Attention Required
+            </p>
+            <p className={`text-2xl font-black mt-1 ${flaggedCount > 0 && !isExamEnded ? "text-rose-600" : "text-gray-900"}`}>
+              {isExamEnded ? 0 : flaggedCount}
+            </p>
+          </div>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+            flaggedCount > 0 && !isExamEnded ? "bg-rose-500 text-white animate-pulse" : "bg-slate-100 text-slate-400"
+          }`}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {/* STUDENT MONITORING GRID */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-gray-900">Live Student Cards</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {sortedStudents.map((student) => {
+            const isFlagged = student.status === "flagged";
+            const isTerminated = student.status === "terminated";
+            const isSubmitted = student.status === "submitted";
+
+            return (
+              <div
+                key={student.id}
+                className={`bg-white rounded-2xl border p-5 flex flex-col justify-between space-y-4 transition-all shadow-sm ${
+                  isFlagged
+                    ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20"
+                    : isTerminated
+                    ? "border-gray-200 opacity-60 bg-gray-50"
+                    : isSubmitted
+                    ? "border-emerald-200 bg-emerald-50/30"
+                    : "border-gray-200 hover:border-slate-300"
+                }`}
               >
-                {/* Meta details */}
-                <div className="flex items-start gap-4 min-w-[280px]">
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm">
-                    {student.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">{student.name}</h4>
-                    <p className="text-xs text-slate-400 mt-0.5 font-medium">{student.rollNumber}</p>
-                    <span className="text-[10px] font-mono font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded mt-1.5 inline-block">
-                      IP: {student.ipAddress}
+                {/* Student Info */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-gray-400 font-mono">
+                      {student.studentId}
                     </span>
+                    {isFlagged && (
+                      <span className="bg-rose-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full animate-bounce uppercase tracking-wider">
+                        Violation Detected
+                      </span>
+                    )}
+                    {isTerminated && (
+                      <span className="bg-gray-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Terminated
+                      </span>
+                    )}
+                    {isSubmitted && (
+                      <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Submitted
+                      </span>
+                    )}
                   </div>
-                </div>
 
-                {/* Status Indicator */}
-                <div className="w-36 flex items-center">
-                  {getStatusBadge(student.status)}
-                </div>
-
-                {/* Progress Visualizer Bar */}
-                <div className="flex-grow max-w-xs space-y-1.5">
-                  <div className="flex justify-between text-[11px] font-bold text-slate-500">
-                    <span>Sheet Progress</span>
-                    <span>{student.progress}%</span>
+                  <div>
+                    <h4 className="text-base font-extrabold text-gray-900">{student.name}</h4>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">Time Active: {student.timeSpent}</p>
                   </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        student.status === 'Finished' 
-                          ? 'bg-slate-400' 
-                          : student.status === 'Tab Switched' 
-                            ? 'bg-amber-400' 
-                            : 'bg-[#0B7A93]'
-                      }`}
-                      style={{ width: `${student.progress}%` }}
-                    />
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-bold text-gray-500">
+                      <span>Progress</span>
+                      <span>{student.progress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          isFlagged
+                            ? "bg-rose-500"
+                            : isSubmitted
+                            ? "bg-emerald-500"
+                            : "bg-[#0B7A93]"
+                        }`}
+                        style={{ width: `${student.progress}%` }}
+                      ></div>
+                    </div>
                   </div>
+
+                  {/* Violation Alert Snippet */}
+                  {isFlagged && student.violations.length > 0 && (
+                    <div className="bg-rose-100/70 border border-rose-200 p-3 rounded-xl space-y-1">
+                      <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                        <svg className="w-4 h-4 shrink-0 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.007v.008H12v-.008z" />
+                        </svg>
+                        <span>{student.violations[0].type}</span>
+                      </p>
+                      <p className="text-[10px] text-rose-600 font-medium pl-5">
+                        Flagged at {student.violations[0].timestamp}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {/* Integrity Log Metrics */}
-                <div className="w-28 text-left lg:text-center">
-                  <span className="text-[11px] font-bold uppercase text-slate-400 block tracking-wider">Proctor Flags</span>
-                  <span className={`text-xs font-bold mt-1 inline-block ${student.flagsCount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                    {student.flagsCount === 0 ? '0 Flags Logged' : `${student.flagsCount} Violations`}
-                  </span>
+                {/* Card Action */}
+                <div>
+                  {isFlagged ? (
+                    <button
+                      onClick={() => setSelectedStudent(student)}
+                      className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black tracking-wide flex items-center justify-center gap-2 shadow-md transition-all"
+                    >
+                      <span>Review & Resolve Violation</span>
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      className="w-full py-2.5 px-4 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold text-center"
+                    >
+                      {isTerminated
+                        ? "Exam Terminated"
+                        : isSubmitted
+                        ? "Exam Submitted"
+                        : "Session Active"}
+                    </button>
+                  )}
                 </div>
-
-                {/* Context Real-Time Controls */}
-                <div className="flex items-center justify-end gap-2 border-t lg:border-t-0 pt-4 lg:pt-0">
-                  <button 
-                    type="button"
-                    onClick={() => handlePingStudent(student.name)}
-                    disabled={student.status === 'Finished' || student.status === 'Disconnected'}
-                    className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    Send Warning
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => handleForceSubmit(student.name)}
-                    disabled={student.status === 'Finished'}
-                    className="px-4 py-2 text-xs font-bold bg-rose-50 border border-rose-100 rounded-xl text-rose-700 hover:bg-rose-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    Force Submit
-                  </button>
-                </div>
-
               </div>
-            ))}
+            );
+          })}
+        </div>
+      </div>
+
+      {/* MODAL: CONFIRM END EXAM FOR EVERYONE */}
+      {showEndExamModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-gray-100 p-6 space-y-6">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-2xl">
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-gray-900">Stop Examination?</h3>
+                <p className="text-xs text-gray-500 font-medium">This affects all active students</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Are you sure you want to end the exam now? All ongoing student sessions will be immediately locked and force-submitted with their current progress.
+            </p>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() => setShowEndExamModal(false)}
+                className="w-1/2 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEndExamForEveryone}
+                className="w-1/2 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md transition-all"
+              >
+                Yes, Stop Exam Now
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* FOOTER VAULT FEEDBACK */}
-      <div className="text-xs text-slate-400 font-medium flex justify-between items-center bg-slate-50 border border-slate-200/60 p-4 rounded-xl">
-        <span>Dynamic continuous stream pulling operational data sockets.</span>
-        <span>Secure Session ID: <b>{selectedExam}</b></span>
-      </div>
+      {/* MODAL: DECISION POP-UP FOR INDIVIDUAL RULE VIOLATIONS */}
+      {selectedStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-gray-100 p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2.5 text-rose-600">
+                <div className="p-2 bg-rose-100 rounded-xl">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-gray-900">Rule Violation Alert</h3>
+                  <p className="text-xs text-gray-500">Teacher Decision Required</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedStudent(null)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
+            {/* Student & Violation Breakdown */}
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-4 rounded-2xl flex items-center justify-between border border-slate-100">
+                <div>
+                  <p className="text-sm font-extrabold text-gray-900">{selectedStudent.name}</p>
+                  <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedStudent.studentId}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-gray-500">Exam Progress</p>
+                  <p className="text-sm font-black text-[#0B7A93]">{selectedStudent.progress}%</p>
+                </div>
+              </div>
+
+              {/* Logged Violations */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                  Detected Infractions
+                </p>
+                <div className="space-y-2">
+                  {selectedStudent.violations.map((v, idx) => (
+                    <div key={idx} className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center justify-between">
+                      <span className="text-xs font-bold text-rose-900">{v.type}</span>
+                      <span className="text-[11px] font-semibold text-rose-600 font-mono">{v.timestamp}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* TEACHER DECISION BUTTONS */}
+            <div className="space-y-3 pt-2">
+              <p className="text-xs font-bold text-center text-gray-500">
+                Choose an action to resolve this student's exam session:
+              </p>
+
+              <div className="grid grid-cols-1 gap-3">
+                {/* ALLOW TO CONTINUE */}
+                <button
+                  onClick={() => handleAllowContinue(selectedStudent.id)}
+                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black tracking-wide flex items-center justify-center gap-2 shadow-md transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                  <span>Allow Student to Continue</span>
+                </button>
+
+                {/* FORCE SUBMIT */}
+                <button
+                  onClick={() => handleForceSubmit(selectedStudent.id)}
+                  className="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-black tracking-wide flex items-center justify-center gap-2 shadow-md transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                  <span>Force Submit Exam Immediately</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function LiveMonitorPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500 font-medium">Loading Live Feed...</div>}>
+      <LiveMonitorContent />
+    </Suspense>
   );
 }
