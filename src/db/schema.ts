@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 // ---------- Enums ----------
@@ -69,6 +70,7 @@ export const verificationCodes = pgTable("verification_codes", {
   purpose: verificationPurposeEnum("purpose").notNull(),
   userType: userTypeEnum("user_type").notNull(),
   attempts: integer("attempts").notNull().default(0),
+  rememberMe: boolean("remember_me").notNull().default(false),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -101,4 +103,11 @@ export const passwordHistory = pgTable("password_history", {
   userId: uuid("user_id").notNull(),
   passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------- Generic rate limiting (IP-based and account-based throttles) ----------
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(), // e.g. "login:ip:1.2.3.4" or "failed-login:user@x.com"
+  count: integer("count").notNull().default(0),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
 });

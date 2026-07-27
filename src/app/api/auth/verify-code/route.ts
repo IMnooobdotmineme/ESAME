@@ -4,7 +4,14 @@ import { db } from "@/db";
 import { organizations, teachers, verificationCodes, resetTokens } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { hashCode, getLatestActiveCode, MAX_ATTEMPTS } from "../../../../lib/verification";
-import { createSession, setSessionCookie, RESET_COOKIE } from "../../../../lib/session";
+import {
+  createSession,
+  setSessionCookie,
+  RESET_COOKIE,
+  DEFAULT_SESSION_TTL_MS,
+  REMEMBER_ME_TTL_MS,
+  SHORT_SESSION_TTL_MS,
+} from "../../../../lib/session";
 
 export async function POST(req: Request) {
   try {
@@ -103,9 +110,17 @@ export async function POST(req: Request) {
       return res;
     }
 
-    // signup or login -> establish a real session
-    const { token, expiresAt } = await createSession(userType, userId);
-    const redirect = userType === "org" ? "/org/dashboard" : "/teacher/dashboard";
+    // signup or login -> establish a real session.
+    // "Remember me" only applies to login; signup always uses the default length.
+    const ttlMs =
+      record.purpose === "login"
+        ? record.rememberMe
+          ? REMEMBER_ME_TTL_MS
+          : SHORT_SESSION_TTL_MS
+        : DEFAULT_SESSION_TTL_MS;
+
+    const { token, expiresAt } = await createSession(userType, userId, ttlMs);
+    const redirect = userType === "org" ? "/dashboard" : "/teacher/dashboard";
     const res = NextResponse.json({ ok: true, purpose: record.purpose, redirect });
     setSessionCookie(res, token, expiresAt);
     return res;

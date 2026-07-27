@@ -210,7 +210,7 @@ export default function OrganizationSignUp() {
       <div className="w-[50%] min-w-[350px] bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-[#395886]/10 border border-[#E7ECF7]">
         {/* Back to website */}
         <a
-          href="https://yourwebsite.com"
+          href="/#"
           className="inline-flex items-center text-sm font-medium text-[#1F2A44]  mb-6"
         >
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
