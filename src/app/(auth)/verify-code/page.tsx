@@ -116,8 +116,7 @@ export default function VerifyCode() {
         return;
       }
 
-      // The backend tells us where to go next (org/teacher dashboard, or
-      // reset-password for the forgot-password flow).
+   
       router.push(data.redirect || "/login");
     } catch {
       setErrorMessage("Something went wrong. Please try again.");
@@ -140,8 +139,7 @@ export default function VerifyCode() {
         body: JSON.stringify({ email }),
       });
     } catch {
-      // Resend failures aren't fatal to the current view; the countdown
-      // simply lets the user try again.
+      
     }
   };
 

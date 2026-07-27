@@ -13,6 +13,7 @@ export default function Login() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Added submitting state
   const [error, setError] = useState(""); // Added error state
 
@@ -35,7 +36,7 @@ export default function Login() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, rememberMe }),
       });
       const data = await res.json();
 
@@ -66,7 +67,7 @@ export default function Login() {
       <div className="w-[50%] min-w-[350px] bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-[#395886]/10 border border-[#E7ECF7]">
         {/* Back to website */}
         <a
-          href="https://yourwebsite.com"
+          href="/#"
           className="inline-flex items-center text-sm font-medium text-[#1F2A44] mb-6"
         >
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -144,6 +145,8 @@ export default function Login() {
           <label className="flex items-center gap-3 cursor-pointer select-none pt-1">
             <input
               type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
               className="h-4 w-4 rounded-md border-[#C9D6EE] text-[#395886] focus:ring-2 focus:ring-[#395886]/40"
             />
             <span className="text-sm text-[#4B5468]">Remember me</span>

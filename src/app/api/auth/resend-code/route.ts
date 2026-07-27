@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { verificationCodes } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
-import { createAndSendVerificationCode } from "../../../../lib/verification";
+import {
+  createAndSendVerificationCode,
+  assertResendNotRateLimited,
+  RateLimitError,
+} from "../../../../lib/verification";
 
 export async function POST(req: Request) {
   try {
@@ -26,6 +30,8 @@ export async function POST(req: Request) {
       );
     }
 
+    await assertResendNotRateLimited(emailLower);
+
     await createAndSendVerificationCode({
       email: emailLower,
       purpose: lastRecord.purpose,
@@ -34,6 +40,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (err instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: err.message },
+        { status: 429, headers: { "Retry-After": String(err.retryAfterSeconds) } }
+      );
+    }
     console.error("resend-code error", err);
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },

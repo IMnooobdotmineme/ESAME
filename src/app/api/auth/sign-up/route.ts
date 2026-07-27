@@ -4,9 +4,13 @@ import { organizations, teachers, passwordHistory } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../../../../lib/password";
 import { createAndSendVerificationCode } from "../../../../lib/verification";
+import { checkRateLimit, getClientIp, RateLimitError } from "../../../../lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
+    await checkRateLimit(`sign-up:ip:${ip}`, 5, 60 * 60 * 1000);
+
     const {
       orgName,
       workEmail,
@@ -76,6 +80,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, email: emailLower, purpose: "signup" });
   } catch (err: unknown) {
+    if (err instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: err.message },
+        { status: 429, headers: { "Retry-After": String(err.retryAfterSeconds) } }
+      );
+    }
     if (
       typeof err === "object" &&
       err !== null &&

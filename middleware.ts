@@ -8,7 +8,7 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const sessionToken = req.cookies.get("session_token")?.value;
 
-  const protectedPrefixes = ["/org", "/teacher"];
+  const protectedPrefixes = ["/organization", "/teacher"];
   if (protectedPrefixes.some((p) => pathname.startsWith(p)) && !sessionToken) {
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
@@ -18,5 +18,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/org/:path*", "/teacher/:path*"],
+  matcher: ["/organization/:path*", "/teacher/:path*"],
 };

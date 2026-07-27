@@ -7,13 +7,19 @@ import { and, eq } from "drizzle-orm";
 export const SESSION_COOKIE = "session_token";
 export const RESET_COOKIE = "reset_token";
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+export const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (signup, Google login)
+export const REMEMBER_ME_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days ("Remember me" checked)
+export const SHORT_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 day ("Remember me" unchecked)
 
 export type UserType = "org" | "teacher";
 
-export async function createSession(userType: UserType, userId: string) {
+export async function createSession(
+  userType: UserType,
+  userId: string,
+  ttlMs: number = DEFAULT_SESSION_TTL_MS
+) {
   const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const expiresAt = new Date(Date.now() + ttlMs);
   await db.insert(sessions).values({ id: token, userType, userId, expiresAt });
   return { token, expiresAt };
 }
