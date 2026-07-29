@@ -4,12 +4,16 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
+// 1. Import your new Notification Components
+import NotificationDropdown from '@/components/NotificationDropdown';
+import NotificationToastContainer from '@/components/NotificationToastContainer';
+
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isProfileOpen, setProfileOpen] = useState(false);
   
-  // Main Navigation Items (Question Bank Removed)
+  // Main Navigation Items
   const mainNavItems = [
     { name: 'Dashboard', href: '/teacher', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
     { name: 'My Exams', href: '/teacher/exams', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
@@ -32,10 +36,10 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen bg-white flex font-sans">
       
-      {/* Sidebar - Perfectly aligned with the new header height */}
+      {/* Sidebar */}
       <aside className="w-[290px] bg-[#0A1628] flex flex-col border-r border-gray-800 shrink-0">
         
-        {/* Logo Area matches new header height (h-[92px]) */}
+        {/* Logo Area */}
         <div className="h-[92px] bg-white flex items-center px-6 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-7 h-7 flex items-center justify-center">
@@ -96,10 +100,10 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         
-        {/* BIGGER TOP DASHBOARD BAR */}
+        {/* TOP DASHBOARD BAR */}
         <header className="h-[92px] bg-white border-b border-gray-200 flex items-center justify-between px-10 shrink-0 relative z-10">
           
-          {/* Bigger Left Title Blocks */}
+          {/* Left Title Blocks */}
           <div>
             <h1 className="text-[23px] font-extrabold text-gray-900 tracking-tight leading-tight">
               {currentTitle}
@@ -107,10 +111,10 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             <p className="text-[14px] text-gray-500 mt-1 font-medium">Manage your classes and examinations</p>
           </div>
           
-          {/* Bigger Header Interactions */}
+          {/* Header Interactions */}
           <div className="flex items-center space-x-6">
             
-            {/* Expanded Search Bar */}
+            {/* Search Bar */}
             <div className="relative w-80 hidden lg:block">
               <input 
                 type="text" 
@@ -122,18 +126,14 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               </svg>
             </div>
             
-            {/* Chunky Notification Bell */}
-            <button className="text-gray-500 hover:text-gray-900 transition-colors p-2 hover:bg-gray-50 rounded-full">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
+            {/* 2. REPLACED STATIC BELL WITH INTERACTIVE NOTIFICATION DROPDOWN */}
+            <NotificationDropdown />
             
-            {/* Resized Profile Avatar */}
+            {/* Profile Avatar */}
             <div className="relative">
               <button 
                 onClick={() => setProfileOpen(!isProfileOpen)}
-                className="flex items-center justify-center w-11 h-11 rounded-full bg-[#EADDFF] text-[#6750A4] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#6750A4] transition-transform hover:scale-105"
+                className="flex items-center justify-center w-11 h-11 rounded-full bg-[#EADDFF] text-[#6750A4] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#6750A4] transition-transform hover:scale-105 cursor-pointer"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -148,7 +148,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                       <p className="text-sm font-semibold text-gray-900">Dr. Alan Grant</p>
                       <p className="text-xs text-gray-500 truncate">agrant@university.edu</p>
                     </div>
-                    <button onClick={handleSignOut} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors border-t border-gray-100 mt-1 pt-2 pb-2 rounded-b-xl">
+                    <button onClick={handleSignOut} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors border-t border-gray-100 mt-1 pt-2 pb-2 rounded-b-xl cursor-pointer">
                       Sign Out
                     </button>
                   </div>
@@ -163,6 +163,9 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
           {children}
         </main>
       </div>
+
+      {/* 3. ADDED FLOATING TOAST CONTAINER FOR REAL-TIME ALERTS */}
+      <NotificationToastContainer />
     </div>
   );
 }
