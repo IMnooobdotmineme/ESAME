@@ -1,10 +1,11 @@
 "use client";
 
+import Image from 'next/image';
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
-// 1. Import your new Notification Components
+// 1. Import Notification Components
 import NotificationDropdown from '@/components/NotificationDropdown';
 import NotificationToastContainer from '@/components/NotificationToastContainer';
 
@@ -34,27 +35,32 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const currentTitle = [...mainNavItems, ...featureNavItems].find(item => item.href === pathname)?.name || 'Teacher Portal';
 
   return (
-    <div className="min-h-screen bg-white flex font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] flex font-sans">
       
-      {/* Sidebar */}
-      <aside className="w-[290px] bg-[#0A1628] flex flex-col border-r border-gray-800 shrink-0">
+      {/* Dark Navy Sidebar Matching Figma */}
+      <aside className="w-[290px] bg-[#1C2B46] flex flex-col shrink-0 min-h-screen">
         
-        {/* Logo Area */}
-        <div className="h-[92px] bg-white flex items-center px-6 border-b border-gray-200 shrink-0">
+        {/* Top White Logo Area */}
+        <div className="h-[92px] bg-white flex items-center px-6 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 flex items-center justify-center">
-              <svg className="w-full h-full text-[#1E293B]" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 4h4v4H4V4zm6 0h10v4H10V4zM4 10h4v4H4v-4zm6 0h10v4H10v-4zM4 16h4v4H4v-4zm6 0h10v4H10v-4z" />
-              </svg>
+            <div className="w-8 h-8 relative flex items-center justify-center shrink-0">
+              <Image 
+                src="/logo-icon.png" 
+                alt="Esame Logo" 
+                width={32} 
+                height={32} 
+                className="w-full h-full object-contain"
+                priority
+              />
             </div>
-            <span className="text-2xl font-black text-[#1E293B] tracking-tight">Esame</span>
+            <span className="text-2xl font-black text-[#0F172A] tracking-tight">Esame</span>
           </div>
         </div>
 
-        {/* Sidebar Links */}
-        <div className="flex-1 py-8 px-4 overflow-y-auto space-y-8">
+        {/* Sidebar Navigation Body */}
+        <div className="flex-1 py-8 px-4 overflow-y-auto space-y-8 bg-[#1C2B46]">
           <div>
-            <p className="text-[12px] font-bold text-gray-400 tracking-[0.2em] mb-4 px-3">
+            <p className="text-[11px] font-bold text-[#6A81A5] tracking-[0.2em] mb-4 px-3 uppercase">
               TEACHER PORTAL
             </p>
             <nav className="space-y-2">
@@ -62,11 +68,15 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 const isActive = pathname === item.href || (item.href !== '/teacher' && pathname.includes(item.href));
                 return (
                   <Link key={item.name} href={item.href}>
-                    <div className={`flex items-center px-4 py-3.5 rounded-xl cursor-pointer transition-all ${isActive ? 'bg-[#0B7A93] text-white font-semibold shadow-md' : 'text-gray-400 hover:bg-slate-800/60 hover:text-white'}`}>
+                    <div className={`flex items-center px-4 py-3.5 rounded-2xl cursor-pointer transition-all ${
+                      isActive 
+                        ? 'bg-[#4A7BB0] text-white font-semibold shadow-sm' 
+                        : 'text-[#C2D3E8] hover:bg-white/10 hover:text-white'
+                    }`}>
                       <svg className="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                       </svg>
-                      <span className="ml-4 text-[16px]">{item.name}</span>
+                      <span className="ml-4 text-[15px]">{item.name}</span>
                     </div>
                   </Link>
                 );
@@ -75,7 +85,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
           </div>
 
           <div>
-            <p className="text-[12px] font-bold text-gray-400 tracking-[0.2em] mb-4 px-3">
+            <p className="text-[11px] font-bold text-[#6A81A5] tracking-[0.2em] mb-4 px-3 uppercase">
               FEATURES
             </p>
             <nav className="space-y-2">
@@ -83,11 +93,15 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 const isActive = pathname === item.href || pathname.includes(item.href);
                 return (
                   <Link key={item.name} href={item.href}>
-                    <div className={`flex items-center px-4 py-3.5 rounded-xl cursor-pointer transition-all ${isActive ? 'bg-[#0B7A93] text-white font-semibold shadow-md' : 'text-gray-400 hover:bg-slate-800/60 hover:text-white'}`}>
+                    <div className={`flex items-center px-4 py-3.5 rounded-2xl cursor-pointer transition-all ${
+                      isActive 
+                        ? 'bg-[#4A7BB0] text-white font-semibold shadow-sm' 
+                        : 'text-[#C2D3E8] hover:bg-white/10 hover:text-white'
+                    }`}>
                       <svg className="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                       </svg>
-                      <span className="ml-4 text-[16px]">{item.name}</span>
+                      <span className="ml-4 text-[15px]">{item.name}</span>
                     </div>
                   </Link>
                 );
@@ -101,14 +115,14 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* TOP DASHBOARD BAR */}
-        <header className="h-[92px] bg-white border-b border-gray-200 flex items-center justify-between px-10 shrink-0 relative z-10">
+        <header className="h-[92px] bg-white border-b border-slate-100 flex items-center justify-between px-10 shrink-0 relative z-10">
           
           {/* Left Title Blocks */}
           <div>
-            <h1 className="text-[23px] font-extrabold text-gray-900 tracking-tight leading-tight">
+            <h1 className="text-[21px] font-extrabold text-slate-900 tracking-tight leading-tight">
               {currentTitle}
             </h1>
-            <p className="text-[14px] text-gray-500 mt-1 font-medium">Manage your classes and examinations</p>
+            <p className="text-[13px] text-slate-400 mt-1 font-medium">Manage your classes and examinations</p>
           </div>
           
           {/* Header Interactions */}
@@ -119,21 +133,20 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               <input 
                 type="text" 
                 placeholder="Search everything..." 
-                className="w-full pl-5 pr-12 py-3 bg-gray-50/50 border border-gray-200 rounded-full text-[15px] focus:outline-none focus:bg-white focus:border-[#0B7A93] focus:ring-1 focus:ring-[#0B7A93] transition-all placeholder-gray-400 text-gray-800"
+                className="w-full pl-5 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-full text-[14px] focus:outline-none focus:bg-white focus:border-[#4A7BB0] focus:ring-1 focus:ring-[#4A7BB0] transition-all placeholder-slate-400 text-slate-800"
               />
-              <svg className="w-5 h-5 text-gray-400 absolute right-4 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <svg className="w-5 h-5 text-slate-400 absolute right-4 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             
-            {/* 2. REPLACED STATIC BELL WITH INTERACTIVE NOTIFICATION DROPDOWN */}
             <NotificationDropdown />
             
             {/* Profile Avatar */}
             <div className="relative">
               <button 
                 onClick={() => setProfileOpen(!isProfileOpen)}
-                className="flex items-center justify-center w-11 h-11 rounded-full bg-[#EADDFF] text-[#6750A4] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#6750A4] transition-transform hover:scale-105 cursor-pointer"
+                className="flex items-center justify-center w-11 h-11 rounded-full bg-[#E2ECF8] text-[#2C5282] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#4A7BB0] transition-transform hover:scale-105 cursor-pointer"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -143,12 +156,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               {isProfileOpen && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setProfileOpen(false)}></div>
-                  <div className="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-40">
-                    <div className="px-4 py-2 border-b border-gray-100 mb-1">
-                      <p className="text-sm font-semibold text-gray-900">Dr. Alan Grant</p>
-                      <p className="text-xs text-gray-500 truncate">agrant@university.edu</p>
+                  <div className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-40">
+                    <div className="px-4 py-2 border-b border-slate-100 mb-1">
+                      <p className="text-sm font-semibold text-slate-900">Dr. Alan Grant</p>
+                      <p className="text-xs text-slate-500 truncate">agrant@university.edu</p>
                     </div>
-                    <button onClick={handleSignOut} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors border-t border-gray-100 mt-1 pt-2 pb-2 rounded-b-xl cursor-pointer">
+                    <button onClick={handleSignOut} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors border-t border-slate-100 mt-1 pt-2 pb-2 rounded-b-2xl cursor-pointer">
                       Sign Out
                     </button>
                   </div>
@@ -159,12 +172,11 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-8 overflow-y-auto bg-gray-50">
+        <main className="flex-1 p-8 overflow-y-auto bg-[#F8FAFC]">
           {children}
         </main>
       </div>
 
-      {/* 3. ADDED FLOATING TOAST CONTAINER FOR REAL-TIME ALERTS */}
       <NotificationToastContainer />
     </div>
   );

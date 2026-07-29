@@ -1,14 +1,15 @@
 "use client";
 
+import Image from 'next/image';
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import AdminNotificationDropdown from '@/components/AdminNotificationDropdown';
+import AdminNotificationToastContainer from '@/components/AdminNotificationToastContainer';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isProfileOpen, setProfileOpen] = useState(false);
 
   const navItems = [
@@ -20,92 +21,130 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   const handleSignOut = () => {
-    // In the future, this is where you will clear the Supabase auth token
     console.log("Signing out...");
     router.push('/login');
   };
 
+  const currentTitle = navItems.find(item => item.href === pathname)?.name || 'Admin Portal';
+
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-[#F8FAFC] flex font-sans">
+      
       {/* Sidebar Navigation */}
-      <aside className={`bg-white border-r border-gray-200 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} relative z-20`}>
-        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
-          {isSidebarOpen && <span className="text-xl font-extrabold text-gray-900 tracking-tight">ESAME <span className="text-[#1E7DF8]">Admin</span></span>}
-          <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        </div>
+      <aside className="w-[280px] bg-[#132238] flex flex-col shrink-0">
         
-        <nav className="p-4 space-y-2">
-          {navItems.map((item) => (
-            <Link key={item.name} href={item.href}>
-              <div className={`flex items-center px-3 py-3 rounded-xl cursor-pointer transition-colors ${pathname === item.href ? 'bg-blue-50 text-[#1E7DF8] font-semibold' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                </svg>
-                {isSidebarOpen && <span className="ml-3 text-sm">{item.name}</span>}
-              </div>
-            </Link>
-          ))}
-        </nav>
+        {/* WHITE LOGO HEADER BOX (Identical Brand Icon & Typography to Teacher Portal) */}
+        <div className="h-[72px] bg-white flex items-center px-6 border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 relative flex items-center justify-center shrink-0">
+              <Image 
+                src="/logo-icon.png" 
+                alt="Esame Logo" 
+                width={32} 
+                height={32} 
+                className="w-full h-full object-contain"
+                priority
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-black text-[#0F172A] tracking-tight">Esame</span>
+              <span className="bg-[#E6F7FA] text-[#0B7A93] text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                ADMIN
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* DARK NAVY NAVIGATION MENU */}
+        <div className="flex-1 py-6 px-4 overflow-y-auto space-y-8 bg-[#132238]">
+          <div>
+            <p className="text-[11px] font-bold text-slate-400/80 tracking-[0.2em] mb-4 px-3 uppercase">
+              ADMIN PORTAL
+            </p>
+            <nav className="space-y-2">
+              {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link key={item.name} href={item.href}>
+                    <div className={`flex items-center px-4 py-3.5 rounded-2xl cursor-pointer transition-all ${
+                      isActive 
+                        ? 'bg-[#3E72A0] text-white font-semibold shadow-xs' 
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}>
+                      <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                      </svg>
+                      <span className="ml-3.5 text-[14px] font-medium">{item.name}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 relative z-10">
-          <h1 className="text-lg font-semibold text-gray-900 truncate">
-            {navItems.find(item => item.href === pathname)?.name || 'Admin Portal'}
-          </h1>
+      <div className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC]">
+        
+        {/* Header Bar */}
+        <header className="h-[72px] bg-[#F8FAFC] flex items-center justify-between px-10 shrink-0 relative z-10 border-b border-slate-200/50">
           
-          <div className="flex items-center space-x-4">
-            {/* Notification Bell */}
-            <button className="text-gray-400 hover:text-gray-600 transition-colors">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-            </button>
+          {/* Header Title */}
+          <div>
+            <h1 className="text-[22px] font-extrabold text-[#0F172A] tracking-tight leading-tight">
+              {currentTitle}
+            </h1>
+            <p className="text-[13px] text-slate-400 mt-0.5 font-medium">Manage platform organizations, users, and security</p>
+          </div>
+          
+          {/* Right Header Actions */}
+          <div className="flex items-center space-x-6">
             
-            {/* Profile Dropdown */}
+            {/* Search Input */}
+            <div className="relative w-80 hidden lg:block">
+              <input 
+                type="text" 
+                placeholder="Search system..." 
+                className="w-full pl-5 pr-12 py-2.5 bg-white border border-slate-200 rounded-full text-[14px] focus:outline-none focus:bg-white focus:border-[#0B7A93] focus:ring-1 focus:ring-[#0B7A93] transition-all placeholder-slate-400 text-slate-800 shadow-2xs"
+              />
+              <svg className="w-5 h-5 text-slate-400 absolute right-4 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            
+            {/* Admin Notifications Dropdown */}
+            <AdminNotificationDropdown />
+            
+            {/* Profile Avatar */}
             <div className="relative">
               <button 
                 onClick={() => setProfileOpen(!isProfileOpen)}
-                className="flex items-center space-x-2 focus:outline-none"
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-[#E6F7FA] text-[#0B7A93] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0B7A93] transition-transform hover:scale-105 cursor-pointer font-extrabold text-sm"
               >
-                <div className="h-9 w-9 rounded-full bg-[#1E7DF8] text-white flex items-center justify-center font-bold text-sm shadow-sm hover:ring-2 hover:ring-offset-2 hover:ring-[#1E7DF8] transition-all">
-                  A
-                </div>
-                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
+                A
               </button>
 
-              {/* Dropdown Menu */}
               {isProfileOpen && (
                 <>
-                  {/* Invisible overlay to close dropdown when clicking outside */}
-                  <div 
-                    className="fixed inset-0 z-30" 
-                    onClick={() => setProfileOpen(false)}
-                  ></div>
-                  
-                  <div className="absolute right-0 mt-3 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="px-4 py-2 border-b border-gray-100 mb-1">
-                      <p className="text-sm font-semibold text-gray-900">System Admin</p>
-                      <p className="text-xs text-gray-500 truncate">admin@esame.com</p>
+                  <div className="fixed inset-0 z-30" onClick={() => setProfileOpen(false)}></div>
+                  <div className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-40">
+                    <div className="px-4 py-2 border-b border-slate-100 mb-1">
+                      <p className="text-sm font-semibold text-slate-900">System Admin</p>
+                      <p className="text-xs text-slate-500 truncate">admin@esame.com</p>
                     </div>
                     
                     <Link 
-                      href="/admin/profile" 
+                      href="/admin/security" 
                       onClick={() => setProfileOpen(false)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#1E7DF8] transition-colors"
+                      className="block px-4 py-2 text-sm text-slate-700 hover:bg-[#E6F7FA]/60 hover:text-[#0B7A93] font-medium transition-colors"
                     >
-                      Account Details
+                      Security Settings
                     </Link>
                     
                     <button 
-                      onClick={handleSignOut}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors mt-1 border-t border-gray-100 pt-2"
+                      onClick={handleSignOut} 
+                      className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 font-medium transition-colors border-t border-slate-100 mt-1 pt-2 pb-2 rounded-b-2xl cursor-pointer"
                     >
                       Sign Out
                     </button>
@@ -116,11 +155,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 p-8 overflow-y-auto">
+        {/* Page Content Canvas */}
+        <main className="flex-1 p-8 overflow-y-auto bg-[#F8FAFC]">
           {children}
         </main>
       </div>
+
+      {/* Floating System Admin Toast Container */}
+      <AdminNotificationToastContainer />
     </div>
   );
 }
