@@ -64,16 +64,17 @@ export default function SettingsPage() {
     <>
       <OrgTopbar title="Setting & Privacy" description="Manage your organization's account and security" />
 
-      <main className="p-6">
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <main className="p-6 space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold text-navy-900">Account Details</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Manage your admin profile and security credentials.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
           {/* Left column */}
           <div className="xl:col-span-2 space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-navy-900">Account Details</h2>
-              <p className="text-sm text-slate-500 mt-0.5">
-                Manage your admin profile and security credentials.
-              </p>
-            </div>
 
             {/* Profile information */}
             <Card className="p-6">
@@ -88,7 +89,7 @@ export default function SettingsPage() {
                   <input
                     value={orgName}
                     onChange={(e) => setOrgName(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                   />
                 </div>
                 <div>
@@ -104,7 +105,7 @@ export default function SettingsPage() {
                     Contact system support to change your root email address.
                   </p>
                 </div>
-                <Button type="submit" size="sm">
+                <Button type="submit">
                   {savedProfile ? <Check size={15} /> : null}
                   {savedProfile ? "Saved" : "Save Profile"}
                 </Button>
@@ -125,10 +126,10 @@ export default function SettingsPage() {
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                   />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="text-sm font-medium text-navy-900 mb-1.5 block">
                       New Password
@@ -137,7 +138,7 @@ export default function SettingsPage() {
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                     />
                   </div>
                   <div>
@@ -148,14 +149,14 @@ export default function SettingsPage() {
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                     />
                   </div>
                 </div>
                 {passwordError && (
                   <p className="text-sm text-red-600">{passwordError}</p>
                 )}
-                <Button type="submit" variant="secondary" size="sm">
+                <Button type="submit" variant="secondary">
                   {savedPassword ? <Check size={15} /> : null}
                   {savedPassword ? "Password Updated" : "Update Password"}
                 </Button>
@@ -164,8 +165,8 @@ export default function SettingsPage() {
           </div>
 
           {/* Right column */}
-          <div className="space-y-4">
-            <Card className="p-6 flex flex-col items-center text-center">
+          <div>
+            <Card className="p-8 h-full flex flex-col items-center text-center">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -184,25 +185,26 @@ export default function SettingsPage() {
                 onChange={handleAvatarChange}
                 className="hidden"
               />
+              <p className="mt-3 text-base font-semibold text-navy-900">{orgName}</p>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="mt-3 flex items-center gap-1.5 text-xs text-slate-500 hover:text-sky-600"
+                className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 hover:text-sky-600"
               >
                 <Upload size={13} />
                 Upload a clear photo of yourself (JPG/PNG)
               </button>
 
-              <div className="w-full mt-5 text-left">
+              <div className="w-full mt-6 text-left">
                 <label className="text-sm font-medium text-navy-900 mb-1.5 block">
                   Description
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  rows={4}
+                  rows={5}
                   placeholder="A short description about your organization..."
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 resize-none"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 resize-none"
                 />
               </div>
             </Card>

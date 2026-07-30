@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
 interface DropdownMenuProps {
@@ -9,35 +10,81 @@ interface DropdownMenuProps {
   align?: "left" | "right";
 }
 
+// Renders the menu into a portal on document.body with fixed positioning,
+// so it can never be clipped by an ancestor's overflow-hidden (e.g. rounded table cards).
 export function DropdownMenu({ trigger, children, align = "right" }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  function updatePosition() {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPos({
+      top: rect.bottom + 6,
+      left: align === "right" ? rect.right : rect.left,
+      width: rect.width,
+    });
+  }
+
+  useLayoutEffect(() => {
+    if (open) updatePosition();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => {
+    if (!open) return;
     function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target as Node) &&
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     }
+    function onScrollOrResize() {
+      updatePosition();
+    }
     document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [open]);
 
   return (
-    <div className="relative inline-block" ref={ref}>
-      <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
-      {open && (
-        <div
-          className={cn(
-            "absolute z-20 mt-2 w-48 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg",
-            align === "right" ? "right-0" : "left-0"
-          )}
-          onClick={() => setOpen(false)}
-        >
-          {children}
-        </div>
-      )}
-    </div>
+    <>
+      <div ref={triggerRef} onClick={() => setOpen((o) => !o)}>
+        {trigger}
+      </div>
+      {open &&
+        pos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: align === "right" ? undefined : pos.left,
+              right: align === "right" ? window.innerWidth - pos.left : undefined,
+            }}
+            className={cn(
+              "z-50 w-52 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg"
+            )}
+            onClick={() => setOpen(false)}
+          >
+            {children}
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 

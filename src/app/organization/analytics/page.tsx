@@ -1,23 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import React from "react";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { ExamVolumeChart } from "@/components/organization/ExamVolumeChart";
-import {
-  Download,
-  ChevronDown,
-  ArrowRight,
-  MoreVertical,
-  FileClock,
-  ClipboardList,
-  Plus,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { ChevronDown, ArrowRight } from "lucide-react";
 
 // ---- Mock data ----
 
@@ -35,18 +23,10 @@ const LIVE_ACTIVITY = [
   { studentId: "#STU-5520", module: "Sensor Technology", progress: 63 },
 ];
 
-const REPORTS = [
-  { id: "1", title: "Weekly Faculty Summary", subtitle: "Generates every Monday at 08:00", icon: FileClock },
-  { id: "2", title: "Student Performance Ledger", subtitle: "Last generated 2 days ago", icon: ClipboardList },
-];
+// Automated reports removed
 
 export default function AnalyticsPage() {
-  const [exporting, setExporting] = useState(false);
-
-  function handleExport() {
-    setExporting(true);
-    setTimeout(() => setExporting(false), 1500);
-  }
+  
 
   return (
     <>
@@ -61,15 +41,11 @@ export default function AnalyticsPage() {
               Comprehensive performance overview across all active examination cycles.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
             <button className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 h-9 text-sm font-medium text-slate-600 hover:bg-slate-50">
               Last 30 Days
               <ChevronDown size={14} />
             </button>
-            <Button size="sm" onClick={handleExport} disabled={exporting}>
-              <Download size={15} />
-              {exporting ? "Exporting..." : "Export Report"}
-            </Button>
           </div>
         </div>
 
@@ -111,9 +87,9 @@ export default function AnalyticsPage() {
           </Card>
         </div>
 
-        {/* Live activity + Automated reports */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card className="overflow-hidden">
+        {/* Live activity */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <Card className="overflow-hidden xl:col-start-2 xl:col-span-2">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-navy-900">Live Exam Activity</h3>
               <span className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -151,43 +127,7 @@ export default function AnalyticsPage() {
             </table>
           </Card>
 
-          <Card className="p-5">
-            <h3 className="text-sm font-semibold text-navy-900 mb-4">Automated Reports</h3>
-            <div className="space-y-2">
-              {REPORTS.map((r) => (
-                <div
-                  key={r.id}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3"
-                >
-                  <div className="h-9 w-9 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-                    <r.icon size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-navy-900 truncate">{r.title}</p>
-                    <p className="text-xs text-slate-400 truncate">{r.subtitle}</p>
-                  </div>
-                  <DropdownMenu
-                    trigger={
-                      <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                        <MoreVertical size={15} />
-                      </button>
-                    }
-                  >
-                    <DropdownItem onClick={() => {}}>
-                      <Pencil size={14} /> Edit Schedule
-                    </DropdownItem>
-                    <DropdownItem danger onClick={() => {}}>
-                      <Trash2 size={14} /> Remove
-                    </DropdownItem>
-                  </DropdownMenu>
-                </div>
-              ))}
-            </div>
-            <Button variant="outline" className="w-full mt-3">
-              <Plus size={15} />
-              Schedule New Report
-            </Button>
-          </Card>
+          {/* Automated reports removed */}
         </div>
       </main>
     </>

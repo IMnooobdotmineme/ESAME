@@ -6,6 +6,8 @@ import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DEPARTMENTS as INITIAL_DEPARTMENTS, DepartmentCard, DeptSubject } from "@/lib/academic-structure-data";
 import { EXAMS } from "@/lib/exam-data";
 import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
@@ -19,6 +21,9 @@ import {
   ChevronLeft,
   FileText,
   Search,
+  MoreVertical,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 const DEFAULT_CATEGORIES: { label: string; color: DepartmentCard["categoryColor"] }[] = [
@@ -35,23 +40,29 @@ interface CategoryOption {
   color: DepartmentCard["categoryColor"];
 }
 
-function AddDepartmentModal({
+function DepartmentModal({
   open,
   onClose,
-  onAdd,
+  onSave,
   categories,
   onAddCategory,
+  initial,
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (dept: DepartmentCard) => void;
+  onSave: (dept: DepartmentCard) => void;
   categories: CategoryOption[];
   onAddCategory: (cat: CategoryOption) => void;
+  initial?: DepartmentCard;
 }) {
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState(categories[0]?.label ?? "");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [category, setCategory] = useState(initial?.category ?? categories[0]?.label ?? "");
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+
+  useState(() => {
+    // reset fields whenever a different department is opened for editing
+  });
 
   function handleAddCategory() {
     const trimmed = newCategoryName.trim().toUpperCase();
@@ -73,17 +84,17 @@ function AddDepartmentModal({
     e.preventDefault();
     if (!name || !category) return;
     const cat = categories.find((c) => c.label === category) ?? categories[0];
-    onAdd({
-      id: crypto.randomUUID(),
+    onSave({
+      id: initial?.id ?? crypto.randomUUID(),
       name,
       category: cat.label,
       categoryColor: cat.color,
-      courses: 0,
-      students: 0,
-      faculty: 0,
-      metricLabel: "Exam Completion Rate",
-      metricValue: 0,
-      subjects: [],
+      courses: initial?.courses ?? 0,
+      students: initial?.students ?? 0,
+      faculty: initial?.faculty ?? 0,
+      metricLabel: initial?.metricLabel ?? "Exam Completion Rate",
+      metricValue: initial?.metricValue ?? 0,
+      subjects: initial?.subjects ?? [],
     });
     setName("");
     onClose();
@@ -91,7 +102,11 @@ function AddDepartmentModal({
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogHeader title="Add New Department" description="Create a new department" onClose={onClose} />
+      <DialogHeader
+        title={initial ? "Edit Department" : "Add New Department"}
+        description={initial ? "Update department details" : "Create a new department"}
+        onClose={onClose}
+      />
       <form onSubmit={handleSubmit}>
         <div className="px-6 py-5 space-y-4">
           <div>
@@ -151,7 +166,7 @@ function AddDepartmentModal({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit">Add Department</Button>
+          <Button type="submit">{initial ? "Save Changes" : "Add Department"}</Button>
         </DialogFooter>
       </form>
     </Dialog>
@@ -170,23 +185,25 @@ type View =
   | { level: "subjects"; departmentId: string }
   | { level: "teacher"; departmentId: string; subjectId: string; teacherName: string };
 
-function AddSubjectModal({
+function SubjectModal({
   open,
   onClose,
-  onAdd,
+  onSave,
   departmentName,
+  initial,
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (subject: DeptSubject) => void;
+  onSave: (subject: DeptSubject) => void;
   departmentName?: string;
+  initial?: DeptSubject;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initial?.name ?? "");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
-    onAdd({ id: crypto.randomUUID(), name, teacherNames: [] });
+    onSave({ id: initial?.id ?? crypto.randomUUID(), name, teacherNames: initial?.teacherNames ?? [] });
     setName("");
     onClose();
   }
@@ -194,8 +211,8 @@ function AddSubjectModal({
   return (
     <Dialog open={open} onClose={onClose}>
       <DialogHeader
-        title="Add Subject"
-        description={departmentName ? `Create a new subject under ${departmentName}` : undefined}
+        title={initial ? "Edit Subject" : "Add Subject"}
+        description={departmentName ? `${initial ? "Update subject under" : "Create a new subject under"} ${departmentName}` : undefined}
         onClose={onClose}
       />
       <form onSubmit={handleSubmit}>
@@ -215,7 +232,7 @@ function AddSubjectModal({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit">Add Subject</Button>
+          <Button type="submit">{initial ? "Save Changes" : "Add Subject"}</Button>
         </DialogFooter>
       </form>
     </Dialog>
@@ -227,8 +244,11 @@ export default function AcademicStructurePage() {
   const [categories, setCategories] = useState<CategoryOption[]>(DEFAULT_CATEGORIES);
   const [view, setView] = useState<View>({ level: "departments" });
   const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [subjectAddOpen, setSubjectAddOpen] = useState(false);
+  const [subjectSearch, setSubjectSearch] = useState("");
+  const [deptModal, setDeptModal] = useState<{ open: boolean; edit?: DepartmentCard }>({ open: false });
+  const [subjectModal, setSubjectModal] = useState<{ open: boolean; edit?: DeptSubject }>({ open: false });
+  const [deleteDeptTarget, setDeleteDeptTarget] = useState<DepartmentCard | null>(null);
+  const [deleteSubjectTarget, setDeleteSubjectTarget] = useState<DeptSubject | null>(null);
 
   const totalDepartments = departments.length;
   const totalStudents = departments.reduce((sum, d) => sum + d.students, 0);
@@ -243,6 +263,53 @@ export default function AcademicStructurePage() {
     if (view.level !== "teacher") return [];
     return EXAMS.filter((e) => e.teacher === view.teacherName);
   }, [view]);
+
+  function saveDepartment(dept: DepartmentCard) {
+    setDepartments((prev) => {
+      const exists = prev.some((d) => d.id === dept.id);
+      return exists ? prev.map((d) => (d.id === dept.id ? dept : d)) : [...prev, dept];
+    });
+  }
+
+  function saveSubject(subject: DeptSubject) {
+    if (!activeDepartment) return;
+    setDepartments((prev) =>
+      prev.map((d) => {
+        if (d.id !== activeDepartment.id) return d;
+        const exists = d.subjects.some((s) => s.id === subject.id);
+        return {
+          ...d,
+          subjects: exists
+            ? d.subjects.map((s) => (s.id === subject.id ? subject : s))
+            : [...d.subjects, subject],
+        };
+      })
+    );
+  }
+
+  function confirmDeleteDepartment() {
+    if (!deleteDeptTarget) return;
+    setDepartments((prev) => prev.filter((d) => d.id !== deleteDeptTarget.id));
+    setDeleteDeptTarget(null);
+    if (view.level !== "departments" && view.departmentId === deleteDeptTarget.id) {
+      setView({ level: "departments" });
+    }
+  }
+
+  function confirmDeleteSubject() {
+    if (!deleteSubjectTarget || !activeDepartment) return;
+    setDepartments((prev) =>
+      prev.map((d) =>
+        d.id === activeDepartment.id
+          ? { ...d, subjects: d.subjects.filter((s) => s.id !== deleteSubjectTarget.id) }
+          : d
+      )
+    );
+    setDeleteSubjectTarget(null);
+    if (view.level === "teacher" && view.subjectId === deleteSubjectTarget.id) {
+      setView({ level: "subjects", departmentId: activeDepartment.id });
+    }
+  }
 
   return (
     <>
@@ -280,12 +347,30 @@ export default function AcademicStructurePage() {
 
             {/* Department cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-              {departments.filter((d) => d.name.toLowerCase().includes(search.toLowerCase())).map((d) => (
+              {departments
+                .filter((d) => d.name.toLowerCase().includes(search.trim().toLowerCase()))
+                .map((d) => (
                 <Card key={d.id} className="overflow-hidden">
                   <div className="bg-navy-900 p-5 text-white relative">
-                    <Badge variant={CATEGORY_BADGE[d.categoryColor]} className="bg-white/10 text-white border-white/20">
-                      {d.category}
-                    </Badge>
+                    <div className="flex items-start justify-between">
+                      <Badge variant={CATEGORY_BADGE[d.categoryColor]} className="bg-white/10 text-white border-white/20">
+                        {d.category}
+                      </Badge>
+                      <DropdownMenu
+                        trigger={
+                          <button className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-white/10 text-white/70 hover:text-white">
+                            <MoreVertical size={15} />
+                          </button>
+                        }
+                      >
+                        <DropdownItem onClick={() => setDeptModal({ open: true, edit: d })}>
+                          <Pencil size={15} /> Edit Department
+                        </DropdownItem>
+                        <DropdownItem danger onClick={() => setDeleteDeptTarget(d)}>
+                          <Trash2 size={15} /> Delete Department
+                        </DropdownItem>
+                      </DropdownMenu>
+                    </div>
                     <h3 className="mt-3 text-lg font-semibold">{d.name}</h3>
                   </div>
                   <div className="p-5">
@@ -315,7 +400,7 @@ export default function AcademicStructurePage() {
               ))}
 
               {/* Add new */}
-              <button type="button" onClick={() => setAddOpen(true)} className="text-left">
+              <button type="button" onClick={() => setDeptModal({ open: true })} className="text-left">
                 <Card className="flex flex-col items-center justify-center text-center p-8 border-dashed h-full hover:bg-slate-50 hover:border-sky-300 transition-colors cursor-pointer">
                   <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                     <Plus size={20} className="text-slate-400" />
@@ -344,7 +429,7 @@ export default function AcademicStructurePage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Button onClick={() => setSubjectAddOpen(true)}>
+                <Button onClick={() => setSubjectModal({ open: true })}>
                   <Plus size={15} /> Add Subject
                 </Button>
                 <Button variant="outline" onClick={() => setView({ level: "departments" })}>
@@ -353,12 +438,40 @@ export default function AcademicStructurePage() {
               </div>
             </div>
 
+            <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 w-full sm:w-72">
+              <Search size={15} className="text-slate-400" />
+              <input
+                value={subjectSearch}
+                onChange={(e) => setSubjectSearch(e.target.value)}
+                placeholder="Search subjects..."
+                className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400 text-navy-900"
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-              {activeDepartment.subjects.map((s) => (
+              {activeDepartment.subjects
+                .filter((s) => s.name.toLowerCase().includes(subjectSearch.trim().toLowerCase()))
+                .map((s) => (
                 <Card key={s.id} className="p-5">
-                  <div className="flex items-center gap-2 mb-3 text-sky-600">
-                    <BookOpen size={16} />
-                    <span className="text-xs font-medium uppercase tracking-wide">Subject</span>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sky-600">
+                      <BookOpen size={16} />
+                      <span className="text-xs font-medium uppercase tracking-wide">Subject</span>
+                    </div>
+                    <DropdownMenu
+                      trigger={
+                        <button className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                          <MoreVertical size={15} />
+                        </button>
+                      }
+                    >
+                      <DropdownItem onClick={() => setSubjectModal({ open: true, edit: s })}>
+                        <Pencil size={15} /> Edit Subject
+                      </DropdownItem>
+                      <DropdownItem danger onClick={() => setDeleteSubjectTarget(s)}>
+                        <Trash2 size={15} /> Delete Subject
+                      </DropdownItem>
+                    </DropdownMenu>
                   </div>
                   <h3 className="text-base font-semibold text-navy-900 mb-3">{s.name}</h3>
                   <p className="text-xs text-slate-500 mb-3">
@@ -387,7 +500,7 @@ export default function AcademicStructurePage() {
               ))}
 
               {/* Add subject */}
-              <button type="button" onClick={() => setSubjectAddOpen(true)} className="text-left">
+              <button type="button" onClick={() => setSubjectModal({ open: true })} className="text-left">
                 <Card className="flex flex-col items-center justify-center text-center p-8 border-dashed h-full hover:bg-slate-50 hover:border-sky-300 transition-colors cursor-pointer">
                   <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                     <Plus size={20} className="text-slate-400" />
@@ -486,25 +599,42 @@ export default function AcademicStructurePage() {
         )}
       </main>
 
-      <AddDepartmentModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onAdd={(dept) => setDepartments((prev) => [...prev, dept])}
+      <DepartmentModal
+        open={deptModal.open}
+        initial={deptModal.edit}
+        onClose={() => setDeptModal({ open: false })}
+        onSave={saveDepartment}
         categories={categories}
         onAddCategory={(cat) => setCategories((prev) => [...prev, cat])}
       />
-      <AddSubjectModal
-        open={subjectAddOpen}
-        onClose={() => setSubjectAddOpen(false)}
+      <SubjectModal
+        open={subjectModal.open}
+        initial={subjectModal.edit}
         departmentName={activeDepartment?.name}
-        onAdd={(subject) => {
-          if (!activeDepartment) return;
-          setDepartments((prev) =>
-            prev.map((d) =>
-              d.id === activeDepartment.id ? { ...d, subjects: [...d.subjects, subject] } : d
-            )
-          );
-        }}
+        onClose={() => setSubjectModal({ open: false })}
+        onSave={saveSubject}
+      />
+      <ConfirmDialog
+        open={deleteDeptTarget !== null}
+        onClose={() => setDeleteDeptTarget(null)}
+        onConfirm={confirmDeleteDepartment}
+        title="Delete this department?"
+        description={
+          deleteDeptTarget
+            ? `"${deleteDeptTarget.name}" and its ${deleteDeptTarget.subjects.length} subject(s) will be removed. This can't be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+      />
+      <ConfirmDialog
+        open={deleteSubjectTarget !== null}
+        onClose={() => setDeleteSubjectTarget(null)}
+        onConfirm={confirmDeleteSubject}
+        title="Delete this subject?"
+        description={
+          deleteSubjectTarget ? `"${deleteSubjectTarget.name}" will be removed. This can't be undone.` : ""
+        }
+        confirmLabel="Delete"
       />
     </>
   );

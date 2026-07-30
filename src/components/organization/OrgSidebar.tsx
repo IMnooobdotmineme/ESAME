@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EsameLogo } from "@/components/organization/EsameLogo";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/organization/dashboard", icon: LayoutDashboard },
@@ -25,6 +27,13 @@ const NAV_ITEMS = [
 
 export function OrgSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [logoutOpen, setLogoutOpen] = useState(false);
+
+  function handleLogout() {
+    // TODO: clear real auth session/token here once backend auth is wired up
+    router.push("/login");
+  }
 
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 h-screen sticky top-0 bg-navy-900 text-white">
@@ -63,11 +72,23 @@ export function OrgSidebar() {
 
       {/* Footer / logout */}
       <div className="px-3 py-4 border-t border-white/10">
-        <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors">
+        <button
+          onClick={() => setLogoutOpen(true)}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+        >
           <LogOut size={18} strokeWidth={2} />
           Log out
         </button>
       </div>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={handleLogout}
+        title="Log out?"
+        description="You'll need to sign in again to access the organization dashboard."
+        confirmLabel="Log out"
+      />
     </aside>
   );
 }
