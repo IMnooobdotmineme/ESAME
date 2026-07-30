@@ -151,4 +151,6 @@ export const EXAMS: ExamRecord[] = [
 
 export function getExamById(id: string): ExamRecord | undefined {
   return EXAMS.find((e) => e.id === id);
+
 }
+

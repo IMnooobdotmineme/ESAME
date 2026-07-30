@@ -33,6 +33,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-trace.txt
-trace-filtered.txt
+.env

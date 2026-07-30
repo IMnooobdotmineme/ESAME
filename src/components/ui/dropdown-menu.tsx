@@ -1,7 +1,11 @@
 "use client";
 
+<<<<<<< HEAD
 import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
+=======
+import { useEffect, useRef, useState } from "react";
+>>>>>>> origin/auth
 import { cn } from "@/lib/utils";
 
 interface DropdownMenuProps {
@@ -10,6 +14,7 @@ interface DropdownMenuProps {
   align?: "left" | "right";
 }
 
+<<<<<<< HEAD
 // Renders the menu into a portal on document.body with fixed positioning,
 // so it can never be clipped by an ancestor's overflow-hidden (e.g. rounded table cards).
 export function DropdownMenu({ trigger, children, align = "right" }: DropdownMenuProps) {
@@ -85,6 +90,37 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
           document.body
         )}
     </>
+=======
+export function DropdownMenu({ trigger, children, align = "right" }: DropdownMenuProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
+      {open && (
+        <div
+          className={cn(
+            "absolute z-20 mt-2 w-48 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg",
+            align === "right" ? "right-0" : "left-0"
+          )}
+          onClick={() => setOpen(false)}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+>>>>>>> origin/auth
   );
 }
 

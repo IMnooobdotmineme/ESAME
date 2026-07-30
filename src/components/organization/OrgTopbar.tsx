@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 
 interface OrgTopbarProps {
   title: string;
@@ -19,8 +19,16 @@ export function OrgTopbar({ title, description }: OrgTopbarProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 h-9 w-64">
+          <Search size={16} className="text-slate-400" />
+          <input
+            placeholder="Search..."
+            className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
+          />
+        </div>
+
         <Link
-          href="/organization/notifications"
+          href="/notifications"
           className="relative h-9 w-9 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
         >
           <Bell size={18} className="text-slate-600" />
@@ -28,7 +36,7 @@ export function OrgTopbar({ title, description }: OrgTopbarProps) {
         </Link>
 
         <Link
-          href="/organization/settings"
+          href="/settings"
           className="flex items-center gap-2 pl-2 border-l border-slate-200 rounded-full hover:bg-slate-50 transition-colors pr-2 -mr-2 py-1"
         >
           <div className="h-9 w-9 rounded-full bg-navy-900 text-white flex items-center justify-center text-sm font-medium shrink-0">

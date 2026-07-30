@@ -1,0 +1,1 @@
+ALTER TABLE "verification_codes" ADD COLUMN "remember_me" boolean DEFAULT false NOT NULL;
