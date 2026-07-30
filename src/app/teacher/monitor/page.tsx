@@ -38,19 +38,19 @@ export default function TeacherLiveMonitorPage() {
   if (!activeExam) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl border border-[#D5DEEF] shadow-sm p-8 text-center space-y-4">
-          <div className="w-12 h-12 bg-[#F0F3FA] text-[#395886] rounded-2xl flex items-center justify-center mx-auto">
+        <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-sm p-8 text-center space-y-4">
+          <div className="w-12 h-12 bg-sky-50 text-navy-900 rounded-2xl flex items-center justify-center mx-auto">
             <Radio className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h2 className="text-lg font-black text-[#395886]">No Active Examination</h2>
+            <h2 className="text-lg font-black text-navy-900">No Active Examination</h2>
             <p className="text-xs font-medium text-slate-400">
               Start an exam from your repository or lobby to monitor students here in real-time.
             </p>
           </div>
           <button
             onClick={() => router.push("/teacher/exams")}
-            className="w-full bg-[#395886] hover:bg-[#2e476d] text-white text-xs font-bold py-3 rounded-xl transition-all shadow-sm active:scale-[0.98] cursor-pointer"
+            className="w-full bg-navy-900 hover:bg-navy-800 text-white text-xs font-bold py-3 rounded-full transition-all shadow-sm active:scale-[0.98] cursor-pointer"
           >
             Go to Exams List
           </button>
@@ -120,13 +120,13 @@ export default function TeacherLiveMonitorPage() {
   return (
     <div className="space-y-6 font-sans">
       {/* 1. TOP BANNER HEADER */}
-      <div className="bg-white border border-[#D5DEEF] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 text-[#638ECB] text-[10px] font-black uppercase tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-[#395886] animate-pulse" />
+          <div className="inline-flex items-center gap-2 text-sky-700 text-[10px] font-black uppercase tracking-wider">
+            <span className="w-2 h-2 rounded-full bg-navy-900 animate-pulse" />
             Live Monitoring Room
           </div>
-          <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+          <h1 className="text-2xl font-black text-navy-900 tracking-tight">
             Active Examination Feed
           </h1>
           <p className="text-xs font-medium text-slate-400">
@@ -136,18 +136,18 @@ export default function TeacherLiveMonitorPage() {
 
         {/* Access Code & Stop Exam Button */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-[#1E2A38] text-white px-4 py-2.5 rounded-xl flex items-center gap-3 border border-slate-700">
+          <div className="bg-navy-900 text-white px-4 py-2.5 rounded-xl flex items-center gap-3 border border-slate-700">
             <div className="text-right">
-              <p className="text-[9px] uppercase font-black text-[#8AAEE0] tracking-wider">Access Code</p>
-              <p className="text-sm font-mono font-black text-[#B1C9EF] tracking-widest">{activeExam.roomCode}</p>
+              <p className="text-[9px] uppercase font-black text-sky-200 tracking-wider">Access Code</p>
+              <p className="text-sm font-mono font-black text-sky-100 tracking-widest">{activeExam.roomCode}</p>
             </div>
             <button
               onClick={() => handleCopyCode(activeExam.roomCode)}
-              className="text-[#8AAEE0] hover:text-white transition-all p-1 cursor-pointer"
+              className="text-sky-200 hover:text-white transition-all p-1 cursor-pointer"
               title="Copy Room Code"
             >
               {copied ? (
-                <Check className="w-4 h-4 text-[#638ECB]" />
+                <Check className="w-4 h-4 text-sky-500" />
               ) : (
                 <Copy className="w-4 h-4" />
               )}
@@ -156,7 +156,7 @@ export default function TeacherLiveMonitorPage() {
 
           <button
             onClick={handleStopExam}
-            className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2 cursor-pointer"
+            className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-full shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2 cursor-pointer"
           >
             <Square className="w-3.5 h-3.5 fill-current" />
             <span>Stop Exam for All</span>
@@ -170,7 +170,7 @@ export default function TeacherLiveMonitorPage() {
         <div className="bg-white border border-[#D5DEEF] rounded-2xl p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Enrolled</p>
-            <p className="text-2xl font-black text-[#395886]">{totalEnrolled}</p>
+            <p className="text-2xl font-black text-navy-900">{totalEnrolled}</p>
           </div>
           <div className="p-3 rounded-xl bg-[#F0F3FA] text-[#395886]">
             <Users className="w-5 h-5" />
@@ -181,7 +181,7 @@ export default function TeacherLiveMonitorPage() {
         <div className="bg-white border border-[#D5DEEF] rounded-2xl p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-[10px] font-black uppercase tracking-wider text-[#395886]">Active & Clean</p>
-            <p className="text-2xl font-black text-[#395886]">{activeCleanCount}</p>
+            <p className="text-2xl font-black text-navy-900">{activeCleanCount}</p>
           </div>
           <div className="p-3 rounded-xl bg-[#F0F3FA] text-[#395886]">
             <CheckCircle2 className="w-5 h-5" />
@@ -193,7 +193,7 @@ export default function TeacherLiveMonitorPage() {
           className={`border rounded-2xl p-5 shadow-xs flex items-center justify-between transition-all ${
             attentionCount > 0
               ? "bg-rose-50/60 border-rose-200"
-              : "bg-white border-[#D5DEEF]"
+              : "bg-white border-slate-200"
           }`}
         >
           <div className="space-y-1">
@@ -206,7 +206,7 @@ export default function TeacherLiveMonitorPage() {
             </p>
             <p
               className={`text-2xl font-black ${
-                attentionCount > 0 ? "text-rose-600" : "text-[#395886]"
+                attentionCount > 0 ? "text-rose-600" : "text-navy-900"
               }`}
             >
               {attentionCount}
@@ -216,7 +216,7 @@ export default function TeacherLiveMonitorPage() {
             className={`p-3 rounded-xl ${
               attentionCount > 0
                 ? "bg-rose-100 text-rose-600"
-                : "bg-[#F0F3FA] text-slate-400"
+                : "bg-sky-50 text-slate-400"
             }`}
           >
             <AlertTriangle className="w-5 h-5" />
@@ -227,10 +227,10 @@ export default function TeacherLiveMonitorPage() {
       {/* 3. LIVE STUDENT GRID */}
       <div className="space-y-4">
         <div>
-          <span className="text-[10px] font-black uppercase text-[#638ECB] tracking-wider block mb-1">
+            <span className="text-[10px] font-black uppercase text-sky-700 tracking-wider block mb-1">
             PARTICIPANTS
           </span>
-          <h2 className="text-base font-black text-[#395886]">Live Student Cards</h2>
+          <h2 className="text-base font-black text-navy-900">Live Student Cards</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -244,7 +244,7 @@ export default function TeacherLiveMonitorPage() {
                 className={`bg-white rounded-2xl p-5 border transition-all flex flex-col justify-between space-y-4 shadow-xs ${
                   isFlagged
                     ? "border-rose-300 ring-2 ring-rose-500/10"
-                    : "border-[#D5DEEF]"
+                    : "border-slate-200"
                 }`}
               >
                 <div className="space-y-3">

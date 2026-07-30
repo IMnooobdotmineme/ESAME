@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useExamStore } from "@/store/useExamStore";
+import { useExamStore, type Exam } from "@/store/useExamStore";
 import {
   Plus,
   Edit3,
@@ -17,6 +17,11 @@ import {
   FileText
 } from "lucide-react";
 
+type ExamCard = Exam & {
+  accessCode: string;
+  duration: number;
+};
+
 export default function MyExamsPage() {
   const router = useRouter();
 
@@ -25,18 +30,15 @@ export default function MyExamsPage() {
   const deleteExam = useExamStore((state) => state.deleteExam);
 
   // Modal State & Active Tab State
-  const [selectedExam, setSelectedExam] = useState<any | null>(null);
+  const [selectedExam, setSelectedExam] = useState<ExamCard | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "scheduled" | "completed">("active");
 
   // Map store structure to match UI fields cleanly
-  const exams = storeExams.map((exam) => ({
-    id: exam.id,
-    courseCode: exam.courseCode,
-    title: exam.title,
-    duration: exam.durationMinutes ?? (exam as any).duration ?? 60,
-    questionCount: exam.questionCount,
-    accessCode: exam.roomCode || (exam as any).accessCode || "DEMO123",
+  const exams: ExamCard[] = storeExams.map((exam) => ({
+    ...exam,
+    accessCode: exam.roomCode || "DEMO123",
+    duration: exam.durationMinutes ?? 60,
   }));
 
   // Handle Copying Access Code

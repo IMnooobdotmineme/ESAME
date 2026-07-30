@@ -252,7 +252,7 @@ export default function Home() {
           </h2>
           <p className="text-slate-600 text-lg leading-relaxed">
             Esame scales dynamically according to role privileges and system
-            scopes — whether you're hosting large university cohorts or fast
+            scopes — whether you are hosting large university cohorts or fast
             modular class tests.
           </p>
         </div>

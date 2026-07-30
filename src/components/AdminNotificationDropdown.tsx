@@ -52,7 +52,7 @@ export default function AdminNotificationDropdown() {
       {/* Bell Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer focus:outline-none"
+        className="relative p-2.5 text-slate-400 hover:text-navy-900 hover:bg-sky-50 rounded-full transition-colors cursor-pointer focus:outline-none"
         aria-label="Admin Notifications"
       >
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -76,7 +76,7 @@ export default function AdminNotificationDropdown() {
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-slate-900 text-sm">System Alerts</span>
                 {unreadCount > 0 && (
-                  <span className="bg-[#E6F7FA] text-[#0B7A93] text-xs font-bold px-2 py-0.5 rounded-full">
+                  <span className="bg-sky-50 text-sky-700 text-xs font-bold px-2 py-0.5 rounded-full">
                     {unreadCount} new
                   </span>
                 )}
@@ -84,7 +84,7 @@ export default function AdminNotificationDropdown() {
               {unreadCount > 0 && (
                 <button 
                   onClick={markAllAsRead} 
-                  className="text-xs font-medium text-[#0B7A93] hover:underline cursor-pointer"
+                  className="text-xs font-medium text-sky-700 hover:underline cursor-pointer"
                 >
                   Mark all read
                 </button>
@@ -137,7 +137,7 @@ export default function AdminNotificationDropdown() {
               <Link 
                 href="/admin/logs" 
                 onClick={() => setIsOpen(false)} 
-                className="text-xs font-semibold text-[#0B7A93] hover:underline block py-1"
+                className="text-xs font-semibold text-sky-700 hover:underline block py-1"
               >
                 View System Logs →
               </Link>

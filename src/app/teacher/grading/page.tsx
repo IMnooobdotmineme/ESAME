@@ -46,6 +46,16 @@ interface ExamGroup {
   submissions: StudentSubmission[];
 }
 
+type Html2PdfInstance = {
+  set: (options: Record<string, unknown>) => {
+    from: (container: HTMLElement) => { save: () => Promise<void> };
+  };
+};
+
+type Html2PdfWindow = Window & {
+  html2pdf?: () => Html2PdfInstance;
+};
+
 export default function GradingPage() {
   // Mock Data
   const [exams, setExams] = useState<ExamGroup[]>([
@@ -244,7 +254,8 @@ export default function GradingPage() {
     setIsExporting(true);
 
     try {
-      if (!(window as any).html2pdf) {
+      const pdfWindow = window as Html2PdfWindow;
+      if (!pdfWindow.html2pdf) {
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement("script");
           script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
@@ -366,7 +377,7 @@ export default function GradingPage() {
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       };
 
-      await (window as any).html2pdf().set(options).from(container).save();
+      await pdfWindow.html2pdf!().set(options).from(container).save();
     } catch (err) {
       console.error("PDF Export Error:", err);
       alert("Failed to download PDF script.");

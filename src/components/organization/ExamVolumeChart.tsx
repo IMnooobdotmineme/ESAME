@@ -22,7 +22,12 @@ export function ExamVolumeChart() {
           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#94a3b8" }} />
           <Tooltip
             contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 13 }}
-            formatter={(value: any, _name: any, item: any) => [`${Number(value)} exams`, item.payload.type]}
+            formatter={(value, _name, item) => {
+              const safeValue = Array.isArray(value) ? value[0] : value;
+              const numericValue = typeof safeValue === "number" ? safeValue : Number(safeValue ?? 0);
+              const payloadType = item?.payload?.type ?? "Projected";
+              return [`${numericValue} exams`, payloadType];
+            }}
           />
           <Bar dataKey="volume" radius={[6, 6, 0, 0]} maxBarSize={40}>
             {DATA.map((entry) => (

@@ -69,7 +69,7 @@ export default function NotificationDropdown() {
       {/* Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2.5 rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all cursor-pointer shadow-xs"
+        className="relative p-2.5 rounded-2xl bg-white border border-slate-200 text-slate-500 hover:text-navy-900 hover:bg-sky-50 transition-all cursor-pointer shadow-xs"
         aria-label="Notifications"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -87,7 +87,7 @@ export default function NotificationDropdown() {
       {isOpen && (
         <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-3xl bg-white border border-slate-100 shadow-2xl ring-1 ring-black/5 z-50 overflow-hidden font-sans">
           {/* Header */}
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-sky-50/60">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-slate-900">Notifications</h3>
               {unreadCount > 0 && (
@@ -100,7 +100,7 @@ export default function NotificationDropdown() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={markAllAsRead}
-                  className="text-[10px] font-bold text-[#0B7A93] hover:underline cursor-pointer"
+                  className="text-[10px] font-bold text-sky-700 hover:underline cursor-pointer"
                 >
                   Mark all read
                 </button>
@@ -148,7 +148,7 @@ export default function NotificationDropdown() {
                         <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
                           {item.roomCode}
                         </span>
-                        {!item.read && <span className="w-1.5 h-1.5 rounded-full bg-[#0B7A93]" />}
+                        {!item.read && <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />}
                       </div>
                     )}
                   </div>

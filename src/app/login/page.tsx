@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
+import { EsameLogo } from "@/components/organization/EsameLogo";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export default function Login() {
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ email: "", password: "" });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -11,27 +14,23 @@ export default function Login() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login Data submitted:', formData);
+    console.log("Login Data submitted:", formData);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8">
-      
-      {/* UPDATED: Matched the 50% width and rounded-3xl styling from the other pages */}
-      <div className="w-[50%] min-w-[350px] max-w-lg space-y-6 bg-white p-10 rounded-3xl shadow-xl border border-gray-100">
-        
+    <div className="min-h-screen flex items-center justify-center bg-navy-50 px-4 sm:px-6 lg:px-8">
+      <Card className="w-full max-w-lg space-y-6 p-8 sm:p-10">
         <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+          <EsameLogo height={28} />
+          <h2 className="mt-4 text-3xl font-extrabold text-navy-900 tracking-tight">
             Welcome Back
           </h2>
-          <p className="mt-2 text-sm text-gray-500">
-            Please sign in to your account.
-          </p>
+          <p className="mt-2 text-sm text-slate-500">Please sign in to your account.</p>
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="email" className="block text-sm font-medium text-navy-900">
               Email Address
             </label>
             <div className="mt-1">
@@ -43,8 +42,7 @@ export default function Login() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                // UPDATED: Changed focus ring to bright blue #1E7DF8
-                className="appearance-none block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E7DF8] focus:border-transparent text-gray-900 font-medium transition-all duration-200"
+                className="appearance-none block w-full px-4 py-3 border border-slate-200 rounded-xl shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-navy-900 font-medium transition-all duration-200"
                 placeholder="name@example.com"
               />
             </div>
@@ -52,12 +50,11 @@ export default function Login() {
 
           <div>
             <div className="flex items-center justify-between">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-navy-900">
                 Password
               </label>
               <div className="text-sm">
-                {/* UPDATED: Linked to the actual forgot-password route and updated color */}
-                <a href="/forgot-password" className="font-medium text-[#1E7DF8] hover:underline">
+                <a href="/forgot-password" className="font-medium text-sky-500 hover:underline">
                   Forgot password?
                 </a>
               </div>
@@ -71,33 +68,24 @@ export default function Login() {
                 required
                 value={formData.password}
                 onChange={handleChange}
-                // UPDATED: Changed focus ring to bright blue #1E7DF8
-                className="appearance-none block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E7DF8] focus:border-transparent text-gray-900 font-medium transition-all duration-200"
+                className="appearance-none block w-full px-4 py-3 border border-slate-200 rounded-xl shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-navy-900 font-medium transition-all duration-200"
                 placeholder="••••••••"
               />
             </div>
           </div>
 
-          <div>
-            <button
-              type="submit"
-              // UPDATED: Changed button background to bright blue #1E7DF8
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-[#1E7DF8] hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1E7DF8] transition-all duration-200 transform hover:-translate-y-0.5"
-            >
-              Sign In
-            </button>
-          </div>
+          <Button type="submit" className="w-full" size="lg">
+            Sign In
+          </Button>
         </form>
-        
-        {/* ADDED: Link back to the sign-up page for a complete loop */}
-        <p className="mt-8 text-center text-sm text-gray-500">
-          Don't have an account?{' '}
-          <a href="/" className="font-semibold text-[#1E7DF8] hover:underline">
+
+        <p className="mt-8 text-center text-sm text-slate-500">
+          Don&apos;t have an account?{" "}
+          <a href="/sign-up" className="font-semibold text-sky-500 hover:underline">
             Create an organization
           </a>
         </p>
-
-      </div>
+      </Card>
     </div>
   );
 }

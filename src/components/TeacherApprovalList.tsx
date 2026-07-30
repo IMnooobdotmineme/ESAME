@@ -33,14 +33,14 @@ export default function TeacherApprovalList({ roomCode }: TeacherApprovalListPro
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div>
-          <span className="text-[10px] font-black uppercase text-[#0B7A93] tracking-wider">
+          <span className="text-[10px] font-black uppercase text-sky-700 tracking-wider">
             Live Classroom Management
           </span>
           <h3 className="text-lg font-bold text-slate-900 mt-0.5">
             Student Access Queue
           </h3>
           <p className="text-xs text-slate-400">
-            Room Code: <span className="font-mono font-bold text-[#0B7A93]">{exam.roomCode}</span>
+            Room Code: <span className="font-mono font-bold text-sky-700">{exam.roomCode}</span>
           </p>
         </div>
         
@@ -91,7 +91,7 @@ export default function TeacherApprovalList({ roomCode }: TeacherApprovalListPro
                   <button
                     type="button"
                     onClick={() => approveStudent(exam.roomCode, req.id)}
-                    className="px-4 py-2 bg-[#0B7A93] hover:bg-[#09667c] text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                   >
                     Approve
                   </button>

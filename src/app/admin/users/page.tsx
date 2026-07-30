@@ -42,12 +42,12 @@ export default function AdminUsers() {
     <div className="space-y-6 font-sans animate-in fade-in duration-300">
       
       {/* HEADER CARD */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 sm:p-8 rounded-3xl shadow-xs border border-[#D5DEEF]">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 sm:p-8 rounded-3xl shadow-xs border border-slate-200">
         <div>
-          <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
+          <span className="text-[10px] font-black tracking-wider text-sky-700 uppercase block mb-1">
             IDENTITY & ACCESS MANAGEMENT
           </span>
-          <h2 className="text-2xl font-black text-[#395886] tracking-tight">Manage Users</h2>
+          <h2 className="text-2xl font-black text-navy-900 tracking-tight">Manage Users</h2>
           <p className="text-xs font-medium text-slate-400 mt-0.5">Control access for teachers, instructors, and organization admins.</p>
         </div>
         
@@ -59,17 +59,17 @@ export default function AdminUsers() {
             placeholder="Search users or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#F0F3FA]/60 border border-[#D5DEEF] rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-[#395886] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#395886] focus:border-[#395886] focus:bg-white transition-all"
+            className="w-full bg-sky-50/60 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-navy-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 focus:bg-white transition-all"
           />
         </div>
       </div>
 
       {/* USERS TABLE */}
-      <div className="bg-white rounded-3xl shadow-xs border border-[#D5DEEF] overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#F0F3FA] border-b border-[#D5DEEF] text-[10px] font-black text-slate-400 uppercase tracking-wider">
+              <tr className="bg-sky-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
                 <th className="px-6 py-4">Name & Email</th>
                 <th className="px-6 py-4">Role</th>
                 <th className="px-6 py-4">Status</th>
@@ -77,31 +77,31 @@ export default function AdminUsers() {
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#D5DEEF] text-xs font-medium">
+            <tbody className="divide-y divide-slate-200 text-xs font-medium">
               {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-[#F0F3FA]/50 transition-colors">
+                <tr key={user.id} className="hover:bg-sky-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#395886] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-navy-900 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
                         {user.name[0]}
                       </div>
                       <div>
-                        <div className="font-bold text-[#395886]">{user.name}</div>
+                        <div className="font-bold text-navy-900">{user.name}</div>
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5">{user.email}</div>
                       </div>
                     </div>
                   </td>
                   
                   <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-[#F0F3FA] text-[#395886] border border-[#D5DEEF]">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-sky-50 text-navy-900 border border-slate-200">
                       {user.role}
                     </span>
                   </td>
                   
                   <td className="px-6 py-4">
                     {user.status === 'Active' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-[#F0F3FA] text-[#395886] border border-[#B1C9EF]">
-                        <CheckCircle2 className="w-3 h-3 text-[#638ECB]" /> Active
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-sky-50 text-navy-900 border border-sky-200">
+                        <CheckCircle2 className="w-3 h-3 text-sky-700" /> Active
                       </span>
                     ) : user.status === 'Suspended' ? (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200">
@@ -124,14 +124,14 @@ export default function AdminUsers() {
                           e.target.value = "";
                         }
                       }}
-                      className="text-xs font-bold text-[#395886] bg-[#F0F3FA] border border-[#D5DEEF] rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#395886] transition-all cursor-pointer shadow-xs hover:bg-white"
+                      className="text-xs font-bold text-navy-900 bg-sky-50 border border-slate-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all cursor-pointer shadow-xs hover:bg-white"
                       defaultValue=""
                     >
                       <option value="" disabled className="text-slate-400 bg-white">Actions</option>
-                      {user.status !== 'Active' && <option value="Activate" className="bg-white text-[#395886]">Activate</option>}
-                      {user.status === 'Active' && <option value="Deactivate" className="bg-white text-[#395886]">Deactivate</option>}
+                      {user.status !== 'Active' && <option value="Activate" className="bg-white text-navy-900">Activate</option>}
+                      {user.status === 'Active' && <option value="Deactivate" className="bg-white text-navy-900">Deactivate</option>}
                       {user.status === 'Active' && <option value="Suspend" className="bg-white text-rose-600">Suspend</option>}
-                      {user.status === 'Active' && <option value="Force Logout" className="bg-white text-[#395886]">Force Logout</option>}
+                      {user.status === 'Active' && <option value="Force Logout" className="bg-white text-navy-900">Force Logout</option>}
                       <option value="Delete" className="bg-white text-rose-600">Delete</option>
                     </select>
                   </td>

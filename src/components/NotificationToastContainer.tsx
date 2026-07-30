@@ -18,7 +18,7 @@ export default function NotificationToastContainer() {
       {activeToasts.map((toast) => (
         <div
           key={toast.id}
-          className="pointer-events-auto bg-slate-900 text-white rounded-2xl p-4 shadow-2xl border border-slate-800 flex items-start gap-3 transition-all animate-bounce-short"
+          className="pointer-events-auto bg-navy-900 text-white rounded-2xl p-4 shadow-2xl border border-slate-800 flex items-start gap-3 transition-all animate-bounce-short"
         >
           <div className="shrink-0 mt-0.5">
             {toast.type === "violation" ? (

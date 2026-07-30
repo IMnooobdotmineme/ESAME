@@ -40,7 +40,7 @@ export default function AdminNotificationToastContainer() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className="pointer-events-auto bg-[#0F172A] text-white p-4 rounded-2xl shadow-2xl border border-slate-800 flex flex-col gap-2 animate-in slide-in-from-bottom-5 duration-300"
+          className="pointer-events-auto bg-navy-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-800 flex flex-col gap-2 animate-in slide-in-from-bottom-5 duration-300"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -89,7 +89,7 @@ export default function AdminNotificationToastContainer() {
           <div className="flex items-center gap-4 pt-1">
             <Link
               href={toast.type === 'security' ? '/admin/security' : '/admin/organizations'}
-              className="text-xs font-bold text-[#38BDF8] hover:underline"
+              className="text-xs font-bold text-sky-400 hover:underline"
             >
               View Details &rarr;
             </Link>

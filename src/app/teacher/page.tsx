@@ -35,7 +35,7 @@ export default function TeacherDashboardPage() {
 
         <button 
           onClick={() => router.push("/teacher/exams/new")}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#395886] hover:bg-[#2e476d] text-white text-xs font-semibold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-[0.98]"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold rounded-full shadow-xs hover:shadow-md transition-all active:scale-[0.98]"
         >
           <Plus className="w-4 h-4" />
           Create New Exam

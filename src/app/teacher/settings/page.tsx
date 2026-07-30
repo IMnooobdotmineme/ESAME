@@ -56,12 +56,12 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 font-sans">
       {/* HEADER CARD */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#D5DEEF] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
+          <span className="text-[10px] font-black tracking-wider text-sky-700 uppercase block mb-1">
             SYSTEM CONFIGURATION
           </span>
-          <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+          <h1 className="text-2xl font-black text-navy-900 tracking-tight">
             Portal Settings
           </h1>
           <p className="text-xs font-medium text-slate-400 mt-0.5">
@@ -70,8 +70,8 @@ export default function SettingsPage() {
         </div>
 
         {savedSuccess && (
-          <div className="bg-[#F0F3FA] border border-[#D5DEEF] text-[#395886] px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
-            <CheckCircle2 className="w-4 h-4 text-[#395886]" />
+          <div className="bg-sky-50 border border-slate-200 text-navy-900 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
+            <CheckCircle2 className="w-4 h-4 text-navy-900" />
             <span>Settings committed to active session cache!</span>
           </div>
         )}
@@ -83,7 +83,7 @@ export default function SettingsPage() {
           {/* PROFILE CARD */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#D5DEEF] shadow-xs space-y-6">
             <div className="flex items-center gap-2 border-b border-[#D5DEEF] pb-4">
-              <User className="w-4 h-4 text-[#638ECB]" />
+              <User className="w-4 h-4 text-sky-700" />
               <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                 Educator Profile Matrix
               </h3>
@@ -126,7 +126,7 @@ export default function SettingsPage() {
                   type="text"
                   value={profile.department}
                   disabled
-                  className="w-full bg-[#F0F3FA] border border-[#D5DEEF] text-slate-400 rounded-xl px-4 py-3 text-xs font-semibold cursor-not-allowed"
+                  className="w-full bg-sky-50 border border-slate-200 text-slate-400 rounded-xl px-4 py-3 text-xs font-semibold cursor-not-allowed"
                 />
               </div>
 
@@ -147,7 +147,7 @@ export default function SettingsPage() {
           {/* ASSESSMENT SYSTEM TEMPLATE DEFAULTS */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#D5DEEF] shadow-xs space-y-6">
             <div className="flex items-center gap-2 border-b border-[#D5DEEF] pb-4">
-              <Sliders className="w-4 h-4 text-[#638ECB]" />
+              <Sliders className="w-4 h-4 text-sky-700" />
               <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                 Global Assessment Blueprints
               </h3>

@@ -50,6 +50,16 @@ interface ExamPart {
   questions: Question[];
 }
 
+interface PersistedExamRecord {
+  id: string;
+  title?: string;
+  course?: string;
+  duration?: string | number;
+  parts?: ExamPart[];
+  questions?: Question[];
+  [key: string]: unknown;
+}
+
 const DEFAULT_INITIAL_PART: ExamPart = {
   id: 'default-section-1',
   title: 'Section A: General Assessment',
@@ -115,19 +125,29 @@ function ExamBuilderContent() {
       const rawData = localStorage.getItem('localExamsData');
       if (rawData) {
         try {
-          const currentExams = JSON.parse(rawData);
+          const currentExams = JSON.parse(rawData) as {
+            active?: PersistedExamRecord[];
+            scheduled?: PersistedExamRecord[];
+            completed?: PersistedExamRecord[];
+          };
           const allExams = [
             ...(currentExams.active || []),
             ...(currentExams.scheduled || []),
             ...(currentExams.completed || [])
           ];
-          const found = allExams.find((e: any) => e.id === editId);
+          const found = allExams.find((e) => e.id === editId);
           if (found) {
+            const restoredDuration = typeof found.duration === 'number'
+              ? found.duration
+              : typeof found.duration === 'string'
+                ? Number.parseInt(found.duration, 10)
+                : Number.NaN;
+
             setExamData(prev => ({
               ...prev,
-              title: found.title || prev.title,
-              department: found.course || prev.department,
-              duration: parseInt(found.duration) || prev.duration,
+              title: typeof found.title === 'string' ? found.title : prev.title,
+              department: typeof found.course === 'string' ? found.course : prev.department,
+              duration: Number.isFinite(restoredDuration) ? restoredDuration : prev.duration,
             }));
 
             if (found.parts && Array.isArray(found.parts) && found.parts.length > 0) {
@@ -298,19 +318,20 @@ function ExamBuilderContent() {
     };
 
     const rawData = localStorage.getItem('localExamsData');
-    const defaultData = { active: [], scheduled: [], completed: [] };
-    const currentExams = rawData ? JSON.parse(rawData) : defaultData;
+    const defaultData: { active: PersistedExamRecord[]; scheduled: PersistedExamRecord[]; completed: PersistedExamRecord[] } = { active: [], scheduled: [], completed: [] };
+    const currentExams = rawData ? JSON.parse(rawData) as { active?: PersistedExamRecord[]; scheduled?: PersistedExamRecord[]; completed?: PersistedExamRecord[] } : defaultData;
 
     if (editId) {
       ['active', 'scheduled', 'completed'].forEach((key) => {
-        if (Array.isArray(currentExams[key])) {
-          currentExams[key] = currentExams[key].map((item: any) => 
-            item.id === editId ? finalExam : item
-          );
+        const list = currentExams[key as keyof typeof currentExams];
+        if (Array.isArray(list)) {
+          currentExams[key as keyof typeof currentExams] = list.map((item) =>
+            item.id === editId ? ({ ...finalExam, questions: parts.flatMap((part) => part.questions) } as unknown as PersistedExamRecord) : item
+          ) as PersistedExamRecord[];
         }
       });
     } else {
-      currentExams.scheduled = [finalExam, ...currentExams.scheduled];
+      currentExams.scheduled = [{ ...finalExam, questions: parts.flatMap((part) => part.questions) } as unknown as PersistedExamRecord, ...(currentExams.scheduled || [])];
     }
 
     localStorage.setItem('localExamsData', JSON.stringify(currentExams));
