@@ -3,179 +3,227 @@
 import React, { useState } from "react";
 import {
   ShieldCheck,
-  Maximize,
-  AppWindow,
+  Lock,
+  Maximize2,
   Copy,
-  Layers,
+  Eye,
   AlertTriangle,
   Save,
+  CheckCircle2,
+  Sliders,
 } from "lucide-react";
 
+interface GlobalSecurityPolicy {
+  enableFullscreenDefault: boolean;
+  enableTabDetectionDefault: boolean;
+  enableClipboardBlockDefault: boolean;
+  maxWarningThreshold: number;
+  autoLockOnThreshold: boolean;
+  allowTeacherOverrides: boolean;
+}
+
 export default function AdminSecurityPage() {
-  const [settings, setSettings] = useState({
-    fullscreenRequired: true,
-    tabDetection: true,
-    copyPasteDetection: true,
-    multipleTabDetection: true,
-    warningLimit: 2,
+  const [policy, setPolicy] = useState<GlobalSecurityPolicy>({
+    enableFullscreenDefault: true,
+    enableTabDetectionDefault: true,
+    enableClipboardBlockDefault: true,
+    maxWarningThreshold: 3,
+    autoLockOnThreshold: true,
+    allowTeacherOverrides: true,
   });
 
-  const handleToggle = (key: keyof typeof settings) => {
-    setSettings({ ...settings, [key]: !settings[key] });
-  };
+  const [isSaved, setIsSaved] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert("Security configurations saved successfully!");
+  const handleSavePolicy = () => {
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 3000);
   };
-
-  const securityFeatures = [
-    {
-      id: "fullscreenRequired",
-      label: "Enforce Fullscreen Mode",
-      desc: "Require students to remain in dedicated fullscreen mode during exams.",
-      icon: Maximize,
-    },
-    {
-      id: "tabDetection",
-      label: "Tab Switching Detection",
-      desc: "Flag and record instances when students navigate away from the active exam.",
-      icon: AppWindow,
-    },
-    {
-      id: "copyPasteDetection",
-      label: "Copy / Paste Interception",
-      desc: "Disable context menus, copying questions, or pasting external clipboard text.",
-      icon: Copy,
-    },
-    {
-      id: "multipleTabDetection",
-      label: "Multiple Device / Tab Prevention",
-      desc: "Prevent concurrent exam attempts on different browsers or devices.",
-      icon: Layers,
-    },
-  ];
 
   return (
-    /* Added mx-auto here to center the container within the page body */
-    <div className="space-y-6 font-sans animate-in fade-in duration-300 max-w-4xl mx-auto">
-      {/* PAGE HEADER */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xs border border-[#D5DEEF]">
-        <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
-          GLOBAL RULES
-        </span>
-        <h2 className="text-2xl font-black text-[#395886] tracking-tight">
-          Security Configuration
-        </h2>
-        <p className="text-xs font-medium text-slate-400 mt-0.5">
-          Configure anti-cheating protocols and automated session response
-          triggers.
-        </p>
+    <div className="w-full space-y-6 font-sans bg-[#F0F3FA]/30 p-6 rounded-3xl min-h-screen text-slate-800">
+      {/* FLAT PAGE HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#D5DEEF]/60">
+        <div>
+          <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
+            PLATFORM GOVERNANCE
+          </span>
+          <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+            Global Security Policies
+          </h1>
+          <p className="text-xs font-medium text-slate-500 mt-0.5">
+            Configure system-wide default proctoring policies and security guardrails enforced across all organizations[cite: 1].
+          </p>
+        </div>
+
+        <button
+          onClick={handleSavePolicy}
+          className="px-4 py-2.5 bg-[#395886] hover:bg-[#2e476d] text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-[0.98] inline-flex items-center gap-2 cursor-pointer self-start md:self-auto"
+        >
+          {isSaved ? (
+            <>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Policies Updated!</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              <span>Save System Defaults</span>
+            </>
+          )}
+        </button>
       </div>
 
-      <form
-        onSubmit={handleSave}
-        className="bg-white p-6 sm:p-8 rounded-3xl shadow-xs border border-[#D5DEEF] space-y-8"
-      >
-        {/* DETECTION TOGGLES */}
-        <div className="space-y-6">
+      {/* POLICY CONFIGURATION GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* DEFAULT ANTI-CHEATING TOGGLES */}
+        <div className="bg-white p-6 rounded-2xl border border-[#D5DEEF] shadow-xs space-y-5">
           <div className="flex items-center gap-2 border-b border-[#D5DEEF] pb-3">
             <ShieldCheck className="w-5 h-5 text-[#395886]" />
-            <h3 className="text-base font-black text-[#395886]">
-              Proctoring & Detection Controls
-            </h3>
+            <h2 className="text-sm font-black text-[#395886]">
+              Default Assessment Guardrails
+            </h2>
           </div>
 
           <div className="space-y-4">
-            {securityFeatures.map((feature) => {
-              const Icon = feature.icon;
-              const isEnabled = settings[feature.id as keyof typeof settings];
-
-              return (
-                <div
-                  key={feature.id}
-                  className="flex items-start justify-between gap-4 p-4 rounded-2xl hover:bg-[#F0F3FA]/50 transition-colors"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="p-2.5 bg-[#F0F3FA] rounded-xl text-[#395886] mt-0.5">
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-[#395886] text-sm">
-                        {feature.label}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5 font-medium leading-relaxed">
-                        {feature.desc}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Custom Palette Toggle */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleToggle(feature.id as keyof typeof settings)
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      isEnabled ? "bg-[#395886]" : "bg-[#D5DEEF]"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                        isEnabled ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
+            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Maximize2 className="w-3.5 h-3.5 text-[#395886]" />
+                  <span className="text-xs font-black text-[#395886]">
+                    Mandatory Fullscreen Mode
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* WARNING RULES */}
-        <div className="space-y-4 pt-6 border-t border-[#D5DEEF]">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h3 className="text-base font-black text-[#395886]">
-              Session Interception & Lock Thresholds
-            </h3>
-          </div>
-
-          <div className="bg-[#F0F3FA]/60 p-6 rounded-2xl border border-[#D5DEEF] space-y-3">
-            <label className="block text-xs font-bold text-[#395886]">
-              Violation Warning Limit
+                <p className="text-[11px] font-medium text-slate-500">
+                  Enforce compulsory full-screen mode by default on new examinations[cite: 1].
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={policy.enableFullscreenDefault}
+                onChange={(e) =>
+                  setPolicy({ ...policy, enableFullscreenDefault: e.target.checked })
+                }
+                className="accent-[#395886] w-4 h-4 mt-1"
+              />
             </label>
-            <p className="text-xs text-slate-400 font-medium">
-              Maximum allowable infractions before the platform automatically
-              locks the exam and notifies the proctor.
-            </p>
-            <input
-              type="number"
-              min="1"
-              max="5"
-              value={settings.warningLimit}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  warningLimit: parseInt(e.target.value) || 1,
-                })
-              }
-              className="w-32 px-4 py-2.5 bg-white border border-[#D5DEEF] rounded-xl text-[#395886] font-bold text-xs focus:outline-none focus:border-[#395886] focus:ring-2 focus:ring-[#395886] transition-all"
-            />
+
+            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-3.5 h-3.5 text-[#395886]" />
+                  <span className="text-xs font-black text-[#395886]">
+                    Tab & Window Focus Detection
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500">
+                  Track tab switching and window blurring events during active tests[cite: 1].
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={policy.enableTabDetectionDefault}
+                onChange={(e) =>
+                  setPolicy({ ...policy, enableTabDetectionDefault: e.target.checked })
+                }
+                className="accent-[#395886] w-4 h-4 mt-1"
+              />
+            </label>
+
+            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Copy className="w-3.5 h-3.5 text-[#395886]" />
+                  <span className="text-xs font-black text-[#395886]">
+                    Clipboard Restrictions
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500">
+                  Disable copy and paste functions inside exam text editors by default[cite: 1].
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={policy.enableClipboardBlockDefault}
+                onChange={(e) =>
+                  setPolicy({ ...policy, enableClipboardBlockDefault: e.target.checked })
+                }
+                className="accent-[#395886] w-4 h-4 mt-1"
+              />
+            </label>
           </div>
         </div>
 
-        {/* SUBMIT */}
-        <div className="pt-4 border-t border-[#D5DEEF] flex justify-end">
-          <button
-            type="submit"
-            className="flex items-center gap-2 px-6 py-3 bg-[#395886] hover:bg-[#2e476d] text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            Save Configurations
-          </button>
+        {/* THRESHOLD & OVERRIDE RULES */}
+        <div className="bg-white p-6 rounded-2xl border border-[#D5DEEF] shadow-xs space-y-5">
+          <div className="flex items-center gap-2 border-b border-[#D5DEEF] pb-3">
+            <Lock className="w-5 h-5 text-[#395886]" />
+            <h2 className="text-sm font-black text-[#395886]">
+              Lock Trigger & Teacher Permissions
+            </h2>
+          </div>
+
+          <div className="space-y-4">
+            <div className="p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 space-y-2">
+              <label className="text-xs font-black text-[#395886] block">
+                System Warning Limit Threshold
+              </label>
+              <p className="text-[11px] font-medium text-slate-500">
+                Maximum allowed security warnings before an exam session automatically locks[cite: 1].
+              </p>
+              <select
+                value={policy.maxWarningThreshold}
+                onChange={(e) =>
+                  setPolicy({ ...policy, maxWarningThreshold: Number(e.target.value) })
+                }
+                className="w-full p-2.5 bg-white border border-[#D5DEEF] rounded-xl text-xs font-bold text-[#395886] focus:outline-none"
+              >
+                <option value={1}>1 Violation (Strict Lock)</option>
+                <option value={2}>2 Violations</option>
+                <option value={3}>3 Violations (Standard Default)[cite: 1]</option>
+                <option value={5}>5 Violations (Relaxed)</option>
+              </select>
+            </div>
+
+            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
+              <div className="space-y-0.5">
+                <span className="text-xs font-black text-[#395886]">
+                  Automated Session Lock
+                </span>
+                <p className="text-[11px] font-medium text-slate-500">
+                  Automatically lock the student exam screen when the warning threshold is met[cite: 1].
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={policy.autoLockOnThreshold}
+                onChange={(e) =>
+                  setPolicy({ ...policy, autoLockOnThreshold: e.target.checked })
+                }
+                className="accent-[#395886] w-4 h-4 mt-1"
+              />
+            </label>
+
+            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
+              <div className="space-y-0.5">
+                <span className="text-xs font-black text-[#395886]">
+                  Allow Teacher Customization
+                </span>
+                <p className="text-[11px] font-medium text-slate-500">
+                  Permit teachers to adjust security parameters when configuring individual exams[cite: 1].
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={policy.allowTeacherOverrides}
+                onChange={(e) =>
+                  setPolicy({ ...policy, allowTeacherOverrides: e.target.checked })
+                }
+                className="accent-[#395886] w-4 h-4 mt-1"
+              />
+            </label>
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

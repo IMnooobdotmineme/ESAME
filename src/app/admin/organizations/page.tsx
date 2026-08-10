@@ -3,206 +3,309 @@
 import React, { useState } from "react";
 import {
   Building2,
-  Plus,
   Search,
   CheckCircle2,
-  Clock,
-  Edit3,
+  XCircle,
+  AlertOctagon,
   Trash2,
+  UserCheck,
+  UserX,
+  Clock,
+  ShieldAlert,
+  Building,
+  MoreVertical,
 } from "lucide-react";
 
+// Types
+type OrgStatus = "pending" | "active" | "deactivated" | "suspended";
+
+interface OrganizationRequest {
+  id: string;
+  name: string;
+  code: string;
+  contactEmail: string;
+  requestedBy: string;
+  requestedAt: string;
+  status: OrgStatus;
+  totalTeachers: number;
+  totalExams: number;
+}
+
 export default function AdminOrganizationsPage() {
+  const [activeTab, setActiveTab] = useState<"all" | "pending">("pending");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const organizations = [
+  // Mock Organizations Data based on SRS 3.1.1 Requirements
+  const [organizations, setOrganizations] = useState<OrganizationRequest[]>([
     {
-      id: "ORG-101",
-      name: "Stanford University",
-      domain: "stanford.edu",
-      teachersCount: 340,
-      examsCount: 2150,
-      tier: "Enterprise",
-      status: "active",
-      createdDate: "Jan 10, 2024",
-    },
-    {
-      id: "ORG-102",
-      name: "MIT School of Science",
-      domain: "mit.edu",
-      teachersCount: 280,
-      examsCount: 1890,
-      tier: "Enterprise",
-      status: "active",
-      createdDate: "Feb 15, 2024",
-    },
-    {
-      id: "ORG-103",
-      name: "Oxford Academic Network",
-      domain: "oxford.ac.uk",
-      teachersCount: 195,
-      examsCount: 1120,
-      tier: "Pro Institution",
-      status: "active",
-      createdDate: "May 22, 2024",
-    },
-    {
-      id: "ORG-104",
-      name: "UC Berkeley Engineering",
-      domain: "berkeley.edu",
-      teachersCount: 150,
-      examsCount: 840,
-      tier: "Pro Institution",
+      id: "org-req-01",
+      name: "Institute of Technology & Science",
+      code: "ITS-MAIN",
+      contactEmail: "admin@its.edu",
+      requestedBy: "Dr. James Wilson",
+      requestedAt: "10 mins ago",
       status: "pending",
-      createdDate: "Jul 01, 2026",
+      totalTeachers: 0,
+      totalExams: 0,
     },
-  ];
+    {
+      id: "org-req-02",
+      name: "National School of Engineering",
+      code: "NSE-CAMPUS",
+      contactEmail: "contact@nse.edu",
+      requestedBy: "Prof. Maria Santos",
+      requestedAt: "2 hours ago",
+      status: "pending",
+      totalTeachers: 0,
+      totalExams: 0,
+    },
+    {
+      id: "org-01",
+      name: "Faculty of Computer Science & Engineering",
+      code: "FCSE-MAIN",
+      contactEmail: "deans.office@fcse.edu",
+      requestedBy: "Dr. Robert Chen",
+      requestedAt: "Jul 10, 2026",
+      status: "active",
+      totalTeachers: 14,
+      totalExams: 42,
+    },
+    {
+      id: "org-02",
+      name: "School of Software Development",
+      code: "SSD-CAMPUS",
+      contactEmail: "info@ssd.edu",
+      requestedBy: "Dr. Alan Turing",
+      requestedAt: "Jun 15, 2026",
+      status: "suspended",
+      totalTeachers: 8,
+      totalExams: 18,
+    },
+  ]);
 
-  const filteredOrgs = organizations.filter(
-    (o) =>
-      o.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // SRS 3.1.1 Action Handlers
+  const handleApprove = (id: string) => {
+    setOrganizations((prev) =>
+      prev.map((org) => (org.id === id ? { ...org, status: "active" } : org))
+    );
+  };
+
+  const handleReject = (id: string) => {
+    setOrganizations((prev) => prev.filter((org) => org.id !== id));
+  };
+
+  const handleUpdateStatus = (id: string, status: OrgStatus) => {
+    setOrganizations((prev) =>
+      prev.map((org) => (org.id === id ? { ...org, status } : org))
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to permanently delete this organization?")) {
+      setOrganizations((prev) => prev.filter((org) => org.id !== id));
+    }
+  };
+
+  const pendingCount = organizations.filter((o) => o.status === "pending").length;
+  const filteredOrgs = organizations.filter((org) => {
+    const matchesSearch =
+      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      org.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      org.contactEmail.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (activeTab === "pending") return matchesSearch && org.status === "pending";
+    return matchesSearch && org.status !== "pending";
+  });
 
   return (
-    <div className="space-y-6 font-sans animate-in fade-in duration-300">
-      
-      {/* HEADER CARD */}
-      <div className="bg-white border border-slate-100 rounded-2xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="w-full space-y-6 font-sans bg-[#F0F3FA]/30 p-6 rounded-3xl min-h-screen text-slate-800">
+      {/* FLAT PAGE HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#D5DEEF]/60">
         <div>
-          <span className="text-[11px] font-extrabold tracking-wider text-[#0B7A93] uppercase block mb-1">
-            INSTITUTIONAL NODES
+          <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
+            SYSTEM CONTROL
           </span>
-          <h1 className="text-[22px] font-extrabold text-[#0F172A] tracking-tight">
-            Organizations
+          <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+            Organization Management
           </h1>
-          <p className="text-[13px] font-medium text-slate-400 mt-1">
-            Manage institutional tenants, domain routing, tier limits, and onboarding pipelines.
+          <p className="text-xs font-medium text-slate-500 mt-0.5">
+            Approve onboarding requests, activate, deactivate, suspend, or delete educational institutions[cite: 1].
           </p>
         </div>
-
-        <button className="bg-[#0B7A93] hover:bg-[#086175] text-white px-5 py-3 rounded-2xl text-[13px] font-extrabold transition-all shadow-xs flex items-center gap-2 self-start md:self-center cursor-pointer">
-          <Plus className="w-4 h-4" />
-          <span>Add Organization</span>
-        </button>
       </div>
 
-      {/* METRIC CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Total Tenants</p>
-            <p className="text-2xl font-extrabold text-[#0F172A] mt-1">142</p>
-          </div>
-          <div className="p-3 bg-[#E6F7FA] rounded-xl text-[#0B7A93]">
-            <Building2 className="w-5 h-5" />
-          </div>
+      {/* NAVIGATION TABS & SEARCH */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 border-b border-[#D5DEEF] w-full sm:w-auto">
+          <button
+            onClick={() => setActiveTab("pending")}
+            className={`pb-3 px-4 text-xs font-bold transition-all cursor-pointer relative ${
+              activeTab === "pending"
+                ? "text-[#395886] border-b-2 border-[#395886]"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            Pending Approvals ({pendingCount})
+          </button>
+          <button
+            onClick={() => setActiveTab("all")}
+            className={`pb-3 px-4 text-xs font-bold transition-all cursor-pointer relative ${
+              activeTab === "all"
+                ? "text-[#395886] border-b-2 border-[#395886]"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            Managed Organizations ({organizations.length - pendingCount})
+          </button>
         </div>
 
-        <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Active Licenses</p>
-            <p className="text-2xl font-extrabold text-[#0F172A] mt-1">138</p>
-          </div>
-          <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Pending Setup</p>
-            <p className="text-2xl font-extrabold text-[#0F172A] mt-1">4</p>
-          </div>
-          <div className="p-3 bg-amber-50 rounded-xl text-amber-600">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* SEARCH BAR */}
-      <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-xs flex items-center justify-between">
-        <div className="relative w-full md:w-96">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <div className="relative w-full sm:w-72">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search organizations or domain..."
+            placeholder="Search organization..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#F8FAFC] border border-slate-200 rounded-full pl-10 pr-4 py-2.5 text-[14px] font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B7A93] focus:border-[#0B7A93] focus:bg-white transition-all"
+            className="w-full bg-white border border-[#D5DEEF] rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-[#395886] focus:outline-none focus:ring-2 focus:ring-[#395886] transition-all"
           />
         </div>
       </div>
 
-      {/* ORGANIZATIONS TABLE */}
-      <div className="bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden">
+      {/* ORGANIZATIONS ROSTER TABLE */}
+      <div className="bg-white rounded-2xl border border-[#D5DEEF] overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
-                <th className="py-4 px-6">Organization</th>
-                <th className="py-4 px-6">Plan Tier</th>
-                <th className="py-4 px-6">Teachers</th>
-                <th className="py-4 px-6">Total Exams</th>
-                <th className="py-4 px-6">Status</th>
-                <th className="py-4 px-6 text-right">Actions</th>
+              <tr className="border-b border-[#D5DEEF] bg-[#F0F3FA] text-[10px] font-black text-[#8AAEE0] uppercase tracking-wider">
+                <th className="p-4 pl-6">Institution Meta</th>
+                <th className="p-4">Applicant / Contact</th>
+                <th className="p-4">Metrics</th>
+                <th className="p-4">Status</th>
+                <th className="p-4 pr-6 text-right">Administrative Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-[14px] font-medium">
-              {filteredOrgs.map((org) => (
-                <tr key={org.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#0B7A93] text-white flex items-center justify-center font-extrabold text-[13px] shadow-xs shrink-0">
-                        {org.name[0]}
-                      </div>
-                      <div>
-                        <p className="font-extrabold text-[#0F172A]">{org.name}</p>
-                        <p className="text-[12px] text-slate-400 font-mono mt-0.5">
-                          {org.domain} ({org.id})
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="py-4 px-6">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold uppercase bg-[#E6F7FA] text-[#0B7A93] border border-[#0B7A93]/20">
-                      {org.tier}
-                    </span>
-                  </td>
-
-                  <td className="py-4 px-6 font-bold text-slate-700">
-                    {org.teachersCount}
-                  </td>
-
-                  <td className="py-4 px-6 font-bold text-slate-700">
-                    {org.examsCount.toLocaleString()}
-                  </td>
-
-                  <td className="py-4 px-6">
-                    {org.status === "active" ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Active
+            <tbody className="divide-y divide-[#D5DEEF]/60 text-xs font-medium text-slate-700">
+              {filteredOrgs.length > 0 ? (
+                filteredOrgs.map((org) => (
+                  <tr key={org.id} className="hover:bg-[#F0F3FA]/50 transition-colors">
+                    <td className="p-4 pl-6">
+                      <p className="font-extrabold text-[#395886]">{org.name}</p>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-[#F0F3FA] px-2 py-0.5 rounded border border-[#D5DEEF] inline-block mt-0.5">
+                        {org.code}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase bg-amber-50 text-amber-700 border border-amber-200">
-                        <Clock className="w-3.5 h-3.5" /> Pending
-                      </span>
-                    )}
-                  </td>
+                    </td>
 
-                  <td className="py-4 px-6 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button className="p-2 rounded-xl hover:bg-[#E6F7FA] text-slate-400 hover:text-[#0B7A93] transition-colors cursor-pointer">
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button className="p-2 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <td className="p-4">
+                      <p className="font-bold text-slate-700">{org.requestedBy}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">{org.contactEmail}</p>
+                    </td>
+
+                    <td className="p-4">
+                      {org.status === "pending" ? (
+                        <span className="text-slate-400 italic text-[11px] flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Requested {org.requestedAt}
+                        </span>
+                      ) : (
+                        <div className="text-[11px] space-x-3 font-bold text-[#395886]">
+                          <span>{org.totalTeachers} Teachers</span>
+                          <span>•</span>
+                          <span>{org.totalExams} Exams</span>
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="p-4">
+                      {org.status === "pending" && (
+                        <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase">
+                          Pending Approval
+                        </span>
+                      )}
+                      {org.status === "active" && (
+                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase">
+                          Active
+                        </span>
+                      )}
+                      {org.status === "deactivated" && (
+                        <span className="bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase">
+                          Deactivated
+                        </span>
+                      )}
+                      {org.status === "suspended" && (
+                        <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase">
+                          Suspended
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-4 pr-6 text-right">
+                      {org.status === "pending" ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleApprove(org.id)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Approve</span>
+                          </button>
+                          <button
+                            onClick={() => handleReject(org.id)}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {org.status !== "active" && (
+                            <button
+                              onClick={() => handleUpdateStatus(org.id, "active")}
+                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <UserCheck className="w-3 h-3" />
+                              <span>Activate</span>
+                            </button>
+                          )}
+
+                          {org.status !== "deactivated" && (
+                            <button
+                              onClick={() => handleUpdateStatus(org.id, "deactivated")}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <UserX className="w-3 h-3" />
+                              <span>Deactivate</span>
+                            </button>
+                          )}
+
+                          {org.status !== "suspended" && (
+                            <button
+                              onClick={() => handleUpdateStatus(org.id, "suspended")}
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <AlertOctagon className="w-3 h-3" />
+                              <span>Suspend</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleDelete(org.id)}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Organization"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-400 text-xs font-bold">
+                    No organizations found matching your criteria.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

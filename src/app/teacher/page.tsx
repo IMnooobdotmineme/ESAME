@@ -1,19 +1,16 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   Radio, 
   Users, 
   FileCheck, 
-  FolderKanban, 
+  Lock,
   Plus, 
   Play, 
-  ArrowRight,
   Key,
-  Clock,
-  ExternalLink
+  Clock
 } from "lucide-react";
 
 export default function TeacherDashboardPage() {
@@ -22,7 +19,7 @@ export default function TeacherDashboardPage() {
   return (
     <div className="space-y-8 p-6 md:p-8 bg-slate-50/60 min-h-screen">
       
-      {/* 1. HEADER SECTION (Clean, single unified header) */}
+      {/* 1. HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -35,7 +32,7 @@ export default function TeacherDashboardPage() {
 
         <button 
           onClick={() => router.push("/teacher/exams/new")}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold rounded-full shadow-xs hover:shadow-md transition-all active:scale-[0.98]"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#395886] hover:bg-[#2e476d] text-white text-xs font-semibold rounded-full shadow-xs hover:shadow-md transition-all active:scale-[0.98]"
         >
           <Plus className="w-4 h-4" />
           Create New Exam
@@ -98,66 +95,26 @@ export default function TeacherDashboardPage() {
           </div>
         </div>
 
-        {/* Question Bank Sheets */}
+        {/* Locked / Violations (Replaces Question Bank Sheets) */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">
-              Question Bank Sheets
+              Locked / Violations
             </p>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">148</span>
-              <span className="text-xs font-medium text-slate-400">indexed entries</span>
+              <span className="text-2xl font-black text-amber-600">3</span>
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                Resume Pending
+              </span>
             </div>
           </div>
-          <div className="p-3 rounded-xl bg-[#F0F3FA] text-[#395886] border border-[#B1C9EF]/40">
-            <FolderKanban className="w-5 h-5" />
+          <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
+            <Lock className="w-5 h-5" />
           </div>
         </div>
       </div>
 
-      {/* 3. QUICK NAVIGATION LINKS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Link 
-          href="/teacher/exams"
-          className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#395886]/50 transition-all flex items-center justify-between group"
-        >
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold text-slate-900 group-hover:text-[#395886] transition-colors">
-              Manage Full Repository
-            </h3>
-            <p className="text-[11px] text-slate-500">View all past and upcoming tests</p>
-          </div>
-          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-[#395886] transition-all" />
-        </Link>
-
-        <Link 
-          href="/teacher/exams"
-          className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#395886]/50 transition-all flex items-center justify-between group"
-        >
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold text-slate-900 group-hover:text-[#395886] transition-colors">
-              Open Question Bank
-            </h3>
-            <p className="text-[11px] text-slate-500">Configure reused section forms</p>
-          </div>
-          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-[#395886] transition-all" />
-        </Link>
-
-        <Link 
-          href="/teacher/grading"
-          className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-[#395886]/50 transition-all flex items-center justify-between group"
-        >
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold text-slate-900 group-hover:text-[#395886] transition-colors">
-              Review Student Submissions
-            </h3>
-            <p className="text-[11px] text-slate-500">12 items pending automated check</p>
-          </div>
-          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-[#395886] transition-all" />
-        </Link>
-      </div>
-
-      {/* 4. LIVE ACTIVE STREAM MONITORING */}
+      {/* 3. LIVE ACTIVE STREAM MONITORING (Directly follows metrics) */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 space-y-5">
         <div>
           <h2 className="text-xs font-bold tracking-wider text-slate-400 uppercase">

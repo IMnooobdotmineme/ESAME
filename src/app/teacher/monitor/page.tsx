@@ -13,6 +13,7 @@ import {
   Square,
   Clock,
   ShieldAlert,
+  Key,
 } from "lucide-react";
 
 export default function TeacherLiveMonitorPage() {
@@ -20,13 +21,14 @@ export default function TeacherLiveMonitorPage() {
   const exams = useExamStore((state) => state.exams);
   const endExam = useExamStore((state) => state.endExam);
 
-  // Copy state for room/access code
+  // Copy state & tab state
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "flagged" | "clean">("all");
 
   // Get active exam or default to the first exam
   const activeExam = exams.find((e) => e.isStarted && !e.isEnded) || exams[0];
 
-  // Track resolved violations locally for interactive demo
+  // Track resolved violations locally
   const [resolvedIds, setResolvedIds] = useState<string[]>([]);
 
   const handleCopyCode = (code: string) => {
@@ -37,29 +39,31 @@ export default function TeacherLiveMonitorPage() {
 
   if (!activeExam) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-sm p-8 text-center space-y-4">
-          <div className="w-12 h-12 bg-sky-50 text-navy-900 rounded-2xl flex items-center justify-center mx-auto">
+      <div className="min-h-[60vh] flex items-center justify-center p-6 bg-slate-50/60">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-8 text-center space-y-4">
+          <div className="w-12 h-12 bg-[#F0F3FA] text-[#395886] rounded-2xl flex items-center justify-center mx-auto border border-[#B1C9EF]/60">
             <Radio className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h2 className="text-lg font-black text-navy-900">No Active Examination</h2>
-            <p className="text-xs font-medium text-slate-400">
-              Start an exam from your repository or lobby to monitor students here in real-time.
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+              No Active Examination
+            </h2>
+            <p className="text-xs font-medium text-slate-500">
+              Start an exam from your repository to monitor students here in real-time.
             </p>
           </div>
           <button
             onClick={() => router.push("/teacher/exams")}
-            className="w-full bg-navy-900 hover:bg-navy-800 text-white text-xs font-bold py-3 rounded-full transition-all shadow-sm active:scale-[0.98] cursor-pointer"
+            className="w-full bg-[#395886] hover:bg-[#2e476d] text-white text-xs font-semibold py-2.5 rounded-xl transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
           >
-            Go to Exams List
+            Go to Exams Repository
           </button>
         </div>
       </div>
     );
   }
 
-  // Combined student list (uses live students or realistic mockup cards)
+  // Live student dataset
   const students = [
     {
       id: "STU-4019",
@@ -100,13 +104,26 @@ export default function TeacherLiveMonitorPage() {
     },
   ];
 
-  // Stat Calculations
-  const totalEnrolled = students.length;
-  const flaggedStudents = students.filter(
-    (s) => s.violation && !resolvedIds.includes(s.id)
-  );
-  const attentionCount = flaggedStudents.length;
-  const activeCleanCount = totalEnrolled - attentionCount;
+  // Dynamic status evaluation
+  const mappedStudents = students.map((s) => {
+    const isResolved = resolvedIds.includes(s.id);
+    const isFlagged = !isResolved && Boolean(s.violation);
+    return { ...s, isFlagged };
+  });
+
+  // Calculate live tab counts
+  const counts = {
+    all: mappedStudents.length,
+    flagged: mappedStudents.filter((s) => s.isFlagged).length,
+    clean: mappedStudents.filter((s) => !s.isFlagged).length,
+  };
+
+  // Filter students based on active tab
+  const filteredStudents = mappedStudents.filter((student) => {
+    if (activeTab === "flagged") return student.isFlagged;
+    if (activeTab === "clean") return !student.isFlagged;
+    return true;
+  });
 
   const handleResolve = (id: string) => {
     setResolvedIds((prev) => [...prev, id]);
@@ -118,105 +135,107 @@ export default function TeacherLiveMonitorPage() {
   };
 
   return (
-    <div className="space-y-6 font-sans">
-      {/* 1. TOP BANNER HEADER */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 text-sky-700 text-[10px] font-black uppercase tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-navy-900 animate-pulse" />
-            Live Monitoring Room
+    <div className="space-y-6 p-6 md:p-8 bg-slate-50/60 min-h-screen text-slate-800">
+      
+      {/* 1. HEADER SECTION (Matches Repository Style) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
+        <div>
+          <div className="flex items-center gap-2 text-[#395886] text-[10px] font-bold uppercase tracking-wider mb-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live Proctoring Room
           </div>
-          <h1 className="text-2xl font-black text-navy-900 tracking-tight">
-            Active Examination Feed
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            {activeExam.title || "Active Examination Feed"}
           </h1>
-          <p className="text-xs font-medium text-slate-400">
-            Real-time proctoring status for {activeExam.title || "Current Examination"}
+          <p className="text-xs font-medium text-slate-500 mt-0.5">
+            Real-time candidate monitoring and automated violation tracking.
           </p>
         </div>
 
-        {/* Access Code & Stop Exam Button */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-navy-900 text-white px-4 py-2.5 rounded-xl flex items-center gap-3 border border-slate-700">
-            <div className="text-right">
-              <p className="text-[9px] uppercase font-black text-sky-200 tracking-wider">Access Code</p>
-              <p className="text-sm font-mono font-black text-sky-100 tracking-widest">{activeExam.roomCode}</p>
-            </div>
+        {/* Action Controls */}
+        <div className="flex items-center gap-3">
+          <div className="bg-white border border-slate-200/80 px-3.5 py-2 rounded-xl flex items-center gap-2.5 shadow-2xs">
+            <Key className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-[11px] font-bold text-slate-500">JOIN CODE:</span>
+            <span className="px-2 py-0.5 bg-[#F0F3FA] text-[#395886] font-mono font-bold rounded text-xs border border-[#B1C9EF]/60">
+              {activeExam.roomCode}
+            </span>
             <button
               onClick={() => handleCopyCode(activeExam.roomCode)}
-              className="text-sky-200 hover:text-white transition-all p-1 cursor-pointer"
-              title="Copy Room Code"
+              className="text-slate-400 hover:text-[#395886] transition-colors p-0.5 cursor-pointer ml-1"
+              title="Copy Access Code"
             >
               {copied ? (
-                <Check className="w-4 h-4 text-sky-500" />
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
               ) : (
-                <Copy className="w-4 h-4" />
+                <Copy className="w-3.5 h-3.5" />
               )}
             </button>
           </div>
 
           <button
             onClick={handleStopExam}
-            className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-full shadow-sm transition-all active:scale-[0.98] inline-flex items-center gap-2 cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold rounded-xl shadow-2xs transition-all active:scale-[0.98] cursor-pointer"
           >
             <Square className="w-3.5 h-3.5 fill-current" />
-            <span>Stop Exam for All</span>
+            <span>End Session</span>
           </button>
         </div>
       </div>
 
-      {/* 2. SUMMARY STAT CARDS */}
+      {/* 2. SUMMARY METRIC CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total Enrolled */}
-        <div className="bg-white border border-[#D5DEEF] rounded-2xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Enrolled</p>
-            <p className="text-2xl font-black text-navy-900">{totalEnrolled}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Enrolled</p>
+            <p className="text-2xl font-bold text-slate-900">{counts.all}</p>
           </div>
-          <div className="p-3 rounded-xl bg-[#F0F3FA] text-[#395886]">
+          <div className="p-3 rounded-xl bg-[#F0F3FA] text-[#395886] border border-[#B1C9EF]/40">
             <Users className="w-5 h-5" />
           </div>
         </div>
 
         {/* Active & Clean */}
-        <div className="bg-white border border-[#D5DEEF] rounded-2xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-[10px] font-black uppercase tracking-wider text-[#395886]">Active & Clean</p>
-            <p className="text-2xl font-black text-navy-900">{activeCleanCount}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Active & Clean</p>
+            <p className="text-2xl font-bold text-slate-900">{counts.clean}</p>
           </div>
-          <div className="p-3 rounded-xl bg-[#F0F3FA] text-[#395886]">
+          <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
         {/* Attention Required */}
         <div
-          className={`border rounded-2xl p-5 shadow-xs flex items-center justify-between transition-all ${
-            attentionCount > 0
-              ? "bg-rose-50/60 border-rose-200"
-              : "bg-white border-slate-200"
+          className={`border rounded-2xl p-5 shadow-2xs flex items-center justify-between transition-all ${
+            counts.flagged > 0
+              ? "bg-rose-50/60 border-rose-200/80"
+              : "bg-white border-slate-200/80"
           }`}
         >
           <div className="space-y-1">
             <p
-              className={`text-[10px] font-black uppercase tracking-wider ${
-                attentionCount > 0 ? "text-rose-600" : "text-slate-400"
+              className={`text-[10px] font-bold uppercase tracking-wider ${
+                counts.flagged > 0 ? "text-rose-700" : "text-slate-400"
               }`}
             >
               Attention Required
             </p>
             <p
-              className={`text-2xl font-black ${
-                attentionCount > 0 ? "text-rose-600" : "text-navy-900"
+              className={`text-2xl font-bold ${
+                counts.flagged > 0 ? "text-rose-700" : "text-slate-900"
               }`}
             >
-              {attentionCount}
+              {counts.flagged}
             </p>
           </div>
           <div
             className={`p-3 rounded-xl ${
-              attentionCount > 0
-                ? "bg-rose-100 text-rose-600"
-                : "bg-sky-50 text-slate-400"
+              counts.flagged > 0
+                ? "bg-rose-100/80 text-rose-700 border border-rose-200/60"
+                : "bg-slate-50 text-slate-400 border border-slate-200/60"
             }`}
           >
             <AlertTriangle className="w-5 h-5" />
@@ -224,99 +243,122 @@ export default function TeacherLiveMonitorPage() {
         </div>
       </div>
 
-      {/* 3. LIVE STUDENT GRID */}
-      <div className="space-y-4">
-        <div>
-            <span className="text-[10px] font-black uppercase text-sky-700 tracking-wider block mb-1">
-            PARTICIPANTS
-          </span>
-          <h2 className="text-base font-black text-navy-900">Live Student Cards</h2>
-        </div>
+      {/* 3. NAVIGATION TABS (Identical to Repository Page) */}
+      <div className="border-b border-slate-200/80 flex gap-6">
+        {[
+          { key: "all", label: "All Participants" },
+          { key: "flagged", label: "Requires Attention" },
+          { key: "clean", label: "Clean Sessions" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key as any)}
+            className={`pb-3 text-xs font-bold transition-colors relative cursor-pointer ${
+              activeTab === tab.key
+                ? "text-[#395886]"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            {tab.label} ({counts[tab.key as keyof typeof counts]})
+            {activeTab === tab.key && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#395886] rounded-full" />
+            )}
+          </button>
+        ))}
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {students.map((student) => {
-            const isResolved = resolvedIds.includes(student.id);
-            const isFlagged = !isResolved && Boolean(student.violation);
-
-            return (
-              <div
-                key={student.id}
-                className={`bg-white rounded-2xl p-5 border transition-all flex flex-col justify-between space-y-4 shadow-xs ${
-                  isFlagged
-                    ? "border-rose-300 ring-2 ring-rose-500/10"
-                    : "border-slate-200"
-                }`}
-              >
-                <div className="space-y-3">
-                  {/* Card Top Row: ID & Badge */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black font-mono text-slate-400 uppercase tracking-wider">
-                      {student.id}
+      {/* 4. STUDENT CARDS GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredStudents.length === 0 ? (
+          <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200/80 shadow-2xs text-center space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+            <p className="text-xs font-bold text-slate-500">
+              No participants found in this filter category.
+            </p>
+          </div>
+        ) : (
+          filteredStudents.map((student) => (
+            <div
+              key={student.id}
+              className={`bg-white rounded-2xl p-5 border transition-all flex flex-col justify-between space-y-4 shadow-2xs ${
+                student.isFlagged
+                  ? "border-rose-200 bg-rose-50/20 ring-2 ring-rose-500/5"
+                  : "border-slate-200/80"
+              }`}
+            >
+              <div className="space-y-3">
+                {/* ID & Status Tag */}
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 bg-[#D5DEEF] text-[#395886] text-[10px] font-bold rounded tracking-wide font-mono uppercase">
+                    {student.id}
+                  </span>
+                  {student.isFlagged ? (
+                    <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[9px] uppercase tracking-wider rounded-full">
+                      Violation Flagged
                     </span>
-                    {isFlagged && (
-                      <span className="px-2.5 py-0.5 bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider rounded-full">
-                        Violation Detected
-                      </span>
-                    )}
-                  </div>
+                  ) : (
+                    <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-bold text-[9px] uppercase tracking-wider rounded-full">
+                      Clean Session
+                    </span>
+                  )}
+                </div>
 
-                  {/* Student Name & Time Active */}
-                  <div>
-                    <h3 className="text-sm font-black text-[#395886]">{student.name}</h3>
-                    <p className="text-[11px] font-medium text-slate-400 mt-0.5 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-slate-400" /> Time Active: {student.timeActive}
+                {/* Candidate Information */}
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">{student.name}</h3>
+                  <p className="text-[11px] font-medium text-slate-400 mt-0.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-400" /> Active: {student.timeActive}
+                  </p>
+                </div>
+
+                {/* Progress Tracking */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                    <span>Progress</span>
+                    <span>{student.progressPct}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-[#F0F3FA] rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        student.isFlagged ? "bg-rose-500" : "bg-[#395886]"
+                      }`}
+                      style={{ width: `${student.progressPct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Violation Details Box */}
+                {student.isFlagged && (
+                  <div className="bg-rose-50 border border-rose-200/80 rounded-xl p-3 text-rose-800 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5 text-[11px]">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                      <span>{student.violation}</span>
+                    </p>
+                    <p className="text-[10px] text-rose-600/80 font-medium pl-5">
+                      Flagged at {student.flaggedAt}
                     </p>
                   </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex justify-between text-[10px] font-black text-slate-500">
-                      <span>Progress</span>
-                      <span>{student.progressPct}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#F0F3FA] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-300 ${
-                          isFlagged ? "bg-rose-500" : "bg-[#395886]"
-                        }`}
-                        style={{ width: `${student.progressPct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Alert Box for Violations */}
-                  {isFlagged && (
-                    <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-rose-700 space-y-1">
-                      <p className="font-bold flex items-center gap-1.5 text-[11px]">
-                        <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-rose-600" />
-                        <span>{student.violation}</span>
-                      </p>
-                      <p className="text-[10px] text-rose-400 font-medium pl-5">
-                        Flagged at {student.flaggedAt}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Card Footer Button */}
-                <div className="pt-2">
-                  {isFlagged ? (
-                    <button
-                      onClick={() => handleResolve(student.id)}
-                      className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
-                    >
-                      Review & Resolve Violation
-                    </button>
-                  ) : (
-                    <div className="w-full py-2.5 bg-[#F0F3FA] border border-[#D5DEEF] text-[#638ECB] font-bold text-xs rounded-xl text-center">
-                      Session Active
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
-            );
-          })}
-        </div>
+
+              {/* Action Button */}
+              <div className="pt-2">
+                {student.isFlagged ? (
+                  <button
+                    onClick={() => handleResolve(student.id)}
+                    className="w-full py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-semibold text-xs rounded-xl shadow-2xs transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    Review & Resolve Violation
+                  </button>
+                ) : (
+                  <div className="w-full py-2 bg-[#F0F3FA] border border-[#B1C9EF]/50 text-[#395886] font-bold text-xs rounded-xl text-center">
+                    Session Active
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
