@@ -24,7 +24,6 @@ interface SystemLogEntry {
 }
 
 export default function AdminDashboardPage() {
-  // Live System Logs Preview
   const [recentLogs] = useState<SystemLogEntry[]>([
     {
       id: "log-01",
@@ -53,23 +52,23 @@ export default function AdminDashboardPage() {
   ]);
 
   return (
-    <div className="w-full space-y-6 font-sans bg-[#F0F3FA]/30 p-6 rounded-3xl min-h-screen text-slate-800">
+    <div className="w-full space-y-6 font-sans">
       {/* PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#D5DEEF]/60">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
-            GOVERNANCE OVERVIEW
+          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+            Governance Overview
           </span>
-          <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Admin Dashboard
           </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
             Platform-wide metrics, security controls, and real-time audit logs.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-xl">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-full">
             <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-600" />
             System Status: 99.9% Operational
           </span>
@@ -78,67 +77,67 @@ export default function AdminDashboardPage() {
 
       {/* SYSTEM ANALYTICS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Organizations Metric */}
-        <div className="bg-white p-5 rounded-2xl border border-[#D5DEEF] shadow-xs flex items-center justify-between">
+        {/* Total Organizations */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Total Organizations
             </p>
-            <p className="text-2xl font-black text-[#395886]">12</p>
-            <p className="text-[10px] font-bold text-emerald-600 font-mono">
+            <p className="text-2xl font-bold text-slate-900">12</p>
+            <p className="text-[11px] font-semibold text-emerald-600">
               All Systems Operational
             </p>
           </div>
-          <div className="p-3 bg-[#F0F3FA] text-[#395886] rounded-2xl border border-[#D5DEEF]/60">
-            <Building2 className="w-6 h-6" />
+          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl border border-slate-100">
+            <Building2 className="w-5 h-5" />
           </div>
         </div>
 
-        {/* User Accounts Metric */}
-        <div className="bg-white p-5 rounded-2xl border border-[#D5DEEF] shadow-xs flex items-center justify-between">
+        {/* Active Instructors */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Active Instructors
             </p>
-            <p className="text-2xl font-black text-[#395886]">148</p>
-            <p className="text-[10px] font-bold text-emerald-600 font-mono">
+            <p className="text-2xl font-bold text-slate-900">148</p>
+            <p className="text-[11px] font-semibold text-emerald-600">
               Across 8 Departments
             </p>
           </div>
-          <div className="p-3 bg-[#F0F3FA] text-[#395886] rounded-2xl border border-[#D5DEEF]/60">
-            <Users className="w-6 h-6" />
+          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl border border-slate-100">
+            <Users className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Exam Sessions Metric */}
-        <div className="bg-white p-5 rounded-2xl border border-[#D5DEEF] shadow-xs flex items-center justify-between">
+        {/* Total Examinations */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Total Examinations
             </p>
-            <p className="text-2xl font-black text-[#395886]">1,420</p>
-            <p className="text-[10px] font-bold text-[#638ECB] font-mono">
+            <p className="text-2xl font-bold text-slate-900">1,420</p>
+            <p className="text-[11px] font-medium text-slate-400">
               Platform-wide Total
             </p>
           </div>
-          <div className="p-3 bg-[#F0F3FA] text-[#395886] rounded-2xl border border-[#D5DEEF]/60">
-            <FileText className="w-6 h-6" />
+          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl border border-slate-100">
+            <FileText className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Security Violations Metric */}
-        <div className="bg-white p-5 rounded-2xl border border-[#D5DEEF] shadow-xs flex items-center justify-between">
+        {/* Security Flags */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Security Flags
             </p>
-            <p className="text-2xl font-black text-rose-600">34</p>
-            <p className="text-[10px] font-bold text-slate-400 font-mono">
+            <p className="text-2xl font-bold text-rose-600">34</p>
+            <p className="text-[11px] font-medium text-slate-400">
               Auto-prevented Locks
             </p>
           </div>
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100">
-            <ShieldAlert className="w-6 h-6" />
+          <div className="p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100">
+            <ShieldAlert className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -147,42 +146,42 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT COLUMN (2 COLS): REAL-TIME AUDIT STREAM */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white rounded-2xl border border-[#D5DEEF] p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#D5DEEF]">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-[#395886]" />
-                <h2 className="text-sm font-black text-[#395886] uppercase tracking-wider">
+                <Activity className="w-4 h-4 text-slate-700" />
+                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                   Real-Time Audit Stream
                 </h2>
               </div>
               <Link
                 href="/admin/logs"
-                className="text-xs font-bold text-[#395886] hover:text-[#638ECB] flex items-center gap-1 transition-colors"
+                className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 transition-colors"
               >
                 <span>View All Logs</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {recentLogs.map((log) => (
                 <div
                   key={log.id}
-                  className="p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/40 flex items-start justify-between gap-4"
+                  className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex items-start justify-between gap-4"
                 >
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-[#395886]">
+                      <span className="text-xs font-semibold text-slate-900">
                         {log.user}
                       </span>
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-[#D5DEEF] text-[#395886]">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-slate-200 text-slate-700">
                         {log.type}
                       </span>
                     </div>
-                    <p className="text-xs font-medium text-slate-700">{log.event}</p>
+                    <p className="text-xs text-slate-600 font-medium">{log.event}</p>
                   </div>
 
-                  <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                  <span className="text-[11px] font-mono text-slate-400 shrink-0">
                     {log.timestamp}
                   </span>
                 </div>
@@ -191,75 +190,77 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN (1 COL): QUICK NAVIGATION */}
+        {/* RIGHT COLUMN (1 COL): GOVERNANCE CONTROL HUB */}
         <div className="space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-[#D5DEEF]/60">
-            <Lock className="w-4 h-4 text-[#395886]" />
-            <h2 className="text-sm font-black text-[#395886] uppercase tracking-wider">
-              Governance Control Hub
-            </h2>
-          </div>
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+              <Lock className="w-4 h-4 text-slate-700" />
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Governance Control Hub
+              </h2>
+            </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-[#D5DEEF] shadow-xs space-y-3">
-            <Link
-              href="/admin/users"
-              className="w-full p-3 bg-[#F0F3FA]/60 hover:bg-[#F0F3FA] border border-[#D5DEEF] rounded-xl flex items-center justify-between group transition-colors block"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg text-[#395886] border border-[#D5DEEF]">
-                  <UserCheck className="w-4 h-4" />
+            <div className="space-y-2.5">
+              <Link
+                href="/admin/users"
+                className="w-full p-3 bg-slate-50/70 hover:bg-slate-100/80 border border-slate-200 rounded-xl flex items-center justify-between group transition-colors block"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg text-slate-700 border border-slate-200 shadow-2xs">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">
+                      Manage Organization
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-500">
+                      User roster & status controls
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-extrabold text-[#395886]">
-                    Manage Organization
-                  </p>
-                  <p className="text-[10px] font-medium text-slate-400">
-                    User roster & status controls
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-            </Link>
+                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+              </Link>
 
-            <Link
-              href="/admin/security"
-              className="w-full p-3 bg-[#F0F3FA]/60 hover:bg-[#F0F3FA] border border-[#D5DEEF] rounded-xl flex items-center justify-between group transition-colors block"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg text-[#395886] border border-[#D5DEEF]">
-                  <Lock className="w-4 h-4" />
+              <Link
+                href="/admin/security"
+                className="w-full p-3 bg-slate-50/70 hover:bg-slate-100/80 border border-slate-200 rounded-xl flex items-center justify-between group transition-colors block"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg text-slate-700 border border-slate-200 shadow-2xs">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">
+                      Security Settings
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-500">
+                      Fullscreen, warning limits & copy rules
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-extrabold text-[#395886]">
-                    Security Settings
-                  </p>
-                  <p className="text-[10px] font-medium text-slate-400">
-                    Fullscreen, warning limits & copy rules
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-            </Link>
+                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+              </Link>
 
-            <Link
-              href="/admin/logs"
-              className="w-full p-3 bg-[#F0F3FA]/60 hover:bg-[#F0F3FA] border border-[#D5DEEF] rounded-xl flex items-center justify-between group transition-colors block"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg text-[#395886] border border-[#D5DEEF]">
-                  <Activity className="w-4 h-4" />
+              <Link
+                href="/admin/logs"
+                className="w-full p-3 bg-slate-50/70 hover:bg-slate-100/80 border border-slate-200 rounded-xl flex items-center justify-between group transition-colors block"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg text-slate-700 border border-slate-200 shadow-2xs">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">
+                      System Logs
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-500">
+                      Platform audit trails & error logs
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-extrabold text-[#395886]">
-                    System Logs
-                  </p>
-                  <p className="text-[10px] font-medium text-slate-400">
-                    Platform audit trails & error logs
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-            </Link>
+                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>

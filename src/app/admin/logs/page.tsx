@@ -2,15 +2,12 @@
 
 import React, { useState } from "react";
 import {
-  Activity,
   Search,
-  Filter,
   LogIn,
   ShieldAlert,
   AlertTriangle,
   Server,
   Download,
-  RefreshCw,
   Clock,
   Globe,
 } from "lucide-react";
@@ -33,7 +30,6 @@ export default function AdminLogsPage() {
   const [selectedSeverity, setSelectedSeverity] = useState<Severity>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Mock Platform Audit Logs (SRS 3.1.1 System Monitoring)
   const [logs] = useState<LogEntry[]>([
     {
       id: "log-101",
@@ -108,25 +104,25 @@ export default function AdminLogsPage() {
     switch (category) {
       case "login":
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
             <LogIn className="w-3 h-3" /> Login Log
           </span>
         );
       case "system":
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
             <Server className="w-3 h-3" /> System Event
           </span>
         );
       case "security":
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
             <ShieldAlert className="w-3 h-3" /> Security Alert
           </span>
         );
       case "error":
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
             <AlertTriangle className="w-3 h-3" /> System Error
           </span>
         );
@@ -137,19 +133,19 @@ export default function AdminLogsPage() {
     switch (severity) {
       case "info":
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-100 text-slate-600">
+          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase bg-slate-100 text-slate-600 border border-slate-200">
             INFO
           </span>
         );
       case "warning":
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-amber-100 text-amber-800">
+          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase bg-amber-50 text-amber-700 border border-amber-200">
             WARNING
           </span>
         );
       case "critical":
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-rose-100 text-rose-800">
+          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase bg-rose-50 text-rose-700 border border-rose-200">
             CRITICAL
           </span>
         );
@@ -157,17 +153,17 @@ export default function AdminLogsPage() {
   };
 
   return (
-    <div className="w-full space-y-6 font-sans bg-[#F0F3FA]/30 p-6 rounded-3xl min-h-screen text-slate-800">
+    <div className="w-full space-y-6 font-sans">
       {/* PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#D5DEEF]/60">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
-            AUDIT & MONITORING
+          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+            Audit & Monitoring
           </span>
-          <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             System Audit Logs
           </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
             Monitor real-time system events, administrative logins, security alerts, and error traces.
           </p>
         </div>
@@ -175,9 +171,9 @@ export default function AdminLogsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => alert("Exporting system logs to CSV...")}
-            className="px-3.5 py-2 bg-white border border-[#D5DEEF] hover:bg-[#F0F3FA] text-[#395886] rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer shadow-xs"
+            className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-2 cursor-pointer shadow-2xs"
           >
-            <Download className="w-3.5 h-3.5 text-[#638ECB]" />
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export Log CSV</span>
           </button>
         </div>
@@ -186,12 +182,12 @@ export default function AdminLogsPage() {
       {/* FILTER & SEARCH CONTROLS */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Category Tabs */}
-        <div className="flex items-center gap-1.5 border-b border-[#D5DEEF] overflow-x-auto no-scrollbar pb-1">
+        <div className="flex items-center gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar w-full md:w-auto">
           <button
             onClick={() => setSelectedCategory("all")}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`pb-3 px-4 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === "all"
-                ? "text-[#395886] border-b-2 border-[#395886]"
+                ? "text-slate-900 border-b-2 border-sky-400"
                 : "text-slate-400 hover:text-slate-600"
             }`}
           >
@@ -199,63 +195,63 @@ export default function AdminLogsPage() {
           </button>
           <button
             onClick={() => setSelectedCategory("login")}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`pb-3 px-4 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === "login"
-                ? "text-[#395886] border-b-2 border-[#395886]"
+                ? "text-slate-900 border-b-2 border-sky-400"
                 : "text-slate-400 hover:text-slate-600"
             }`}
           >
-            Login Logs[cite: 1]
+            Login Logs
           </button>
           <button
             onClick={() => setSelectedCategory("system")}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`pb-3 px-4 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === "system"
-                ? "text-[#395886] border-b-2 border-[#395886]"
+                ? "text-slate-900 border-b-2 border-sky-400"
                 : "text-slate-400 hover:text-slate-600"
             }`}
           >
-            System Events[cite: 1]
+            System Events
           </button>
           <button
             onClick={() => setSelectedCategory("security")}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`pb-3 px-4 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === "security"
-                ? "text-[#395886] border-b-2 border-[#395886]"
+                ? "text-slate-900 border-b-2 border-sky-400"
                 : "text-slate-400 hover:text-slate-600"
             }`}
           >
-            Security Logs[cite: 1]
+            Security Logs
           </button>
           <button
             onClick={() => setSelectedCategory("error")}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`pb-3 px-4 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === "error"
-                ? "text-[#395886] border-b-2 border-[#395886]"
+                ? "text-slate-900 border-b-2 border-sky-400"
                 : "text-slate-400 hover:text-slate-600"
             }`}
           >
-            Error Logs[cite: 1]
+            Error Logs
           </button>
         </div>
 
         {/* Inputs */}
         <div className="flex items-center gap-2">
           <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search user, action, IP..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-[#D5DEEF] rounded-xl pl-9 pr-3 py-1.5 text-xs font-medium text-[#395886] focus:outline-none focus:ring-2 focus:ring-[#395886]"
+              className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400 shadow-2xs"
             />
           </div>
 
           <select
             value={selectedSeverity}
             onChange={(e) => setSelectedSeverity(e.target.value as Severity)}
-            className="bg-white border border-[#D5DEEF] rounded-xl px-3 py-1.5 text-xs font-bold text-[#395886] focus:outline-none"
+            className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-400 transition-all cursor-pointer shadow-2xs"
           >
             <option value="all">All Severities</option>
             <option value="info">Info</option>
@@ -266,55 +262,55 @@ export default function AdminLogsPage() {
       </div>
 
       {/* LOGS TABLE */}
-      <div className="bg-white rounded-2xl border border-[#D5DEEF] overflow-hidden shadow-xs">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#D5DEEF] bg-[#F0F3FA] text-[10px] font-black text-[#8AAEE0] uppercase tracking-wider">
-                <th className="p-4 pl-6">Category & Actor</th>
-                <th className="p-4">Event Details</th>
-                <th className="p-4">IP Address</th>
-                <th className="p-4">Timestamp</th>
-                <th className="p-4 pr-6 text-right">Severity</th>
+              <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="py-3.5 px-5">Category & Actor</th>
+                <th className="py-3.5 px-4">Event Details</th>
+                <th className="py-3.5 px-4">IP Address</th>
+                <th className="py-3.5 px-4">Timestamp</th>
+                <th className="py-3.5 px-5 text-right">Severity</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#D5DEEF]/60 text-xs font-medium text-slate-700">
+            <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {filteredLogs.length > 0 ? (
                 filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-[#F0F3FA]/50 transition-colors">
-                    <td className="p-4 pl-6">
+                  <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-4 px-5">
                       <div className="space-y-1">
                         <div>{getCategoryBadge(log.category)}</div>
-                        <p className="font-extrabold text-[#395886]">{log.actor}</p>
+                        <p className="font-bold text-slate-900">{log.actor}</p>
                       </div>
                     </td>
 
-                    <td className="p-4">
-                      <p className="font-bold text-slate-700 max-w-md">{log.description}</p>
+                    <td className="py-4 px-4">
+                      <p className="font-semibold text-slate-800 max-w-md">{log.description}</p>
                     </td>
 
-                    <td className="p-4 font-mono text-[11px] text-slate-500">
+                    <td className="py-4 px-4 font-mono text-[11px] text-slate-500">
                       <span className="inline-flex items-center gap-1">
                         <Globe className="w-3 h-3 text-slate-400" />
                         {log.ipAddress}
                       </span>
                     </td>
 
-                    <td className="p-4 text-slate-400 font-mono text-[11px]">
+                    <td className="py-4 px-4 text-slate-500 font-mono text-[11px]">
                       <span className="inline-flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-400" />
                         {log.timestamp}
                       </span>
                     </td>
 
-                    <td className="p-4 pr-6 text-right">
+                    <td className="py-4 px-5 text-right">
                       {getSeverityBadge(log.severity)}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-400 text-xs font-bold">
+                  <td colSpan={5} className="py-8 text-center text-slate-400 text-xs font-medium">
                     No system log entries matching your current filters.
                   </td>
                 </tr>

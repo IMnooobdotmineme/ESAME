@@ -7,7 +7,9 @@ import {
   CheckCircle2,
   Copy,
   Layers,
-  Lock
+  Lock,
+  ArrowLeft,
+  Plus
 } from "lucide-react";
 
 // --- TYPE DEFINITIONS ---
@@ -290,7 +292,6 @@ function ExamBuilderContent() {
       })
     );
 
-    // Reset Form Defaults
     setQText("");
     setQExplanation("");
     setQMediaType("none");
@@ -370,18 +371,18 @@ function ExamBuilderContent() {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 text-slate-900 pb-12 p-6 md:p-8">
+    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
       
       {/* HEADER SECTION */}
-      <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-100 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <span className="text-[10px] font-black uppercase text-[#395886] tracking-wider block mb-1">
-            EXAM ARCHITECTURE DESK
+          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+            Exam Architecture Desk
           </span>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             {step === 1 ? "Configure Exam Parameters" : "Sections & Question Setup"}
           </h1>
-          <p className="text-xs font-medium text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
             {step === 1
               ? "Set academic context, department, and time duration."
               : "Organize questionnaire sections and configure multi-format rules."}
@@ -389,12 +390,12 @@ function ExamBuilderContent() {
         </div>
 
         {/* STEP CONTROLS */}
-        <div className="flex items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/50">
+        <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
           <button
             type="button"
             onClick={() => setStep(1)}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-              step === 1 ? "bg-[#395886] text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              step === 1 ? "bg-navy-900 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             1. Parameters
@@ -403,8 +404,8 @@ function ExamBuilderContent() {
             type="button"
             disabled={!isSettingsFormComplete()}
             onClick={() => setStep(2)}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-              step === 2 ? "bg-[#395886] text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              step === 2 ? "bg-navy-900 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
             } ${!isSettingsFormComplete() ? "opacity-40 cursor-not-allowed" : ""}`}
           >
             2. Questions ({countTotalQuestions()})
@@ -414,15 +415,16 @@ function ExamBuilderContent() {
 
       {/* STEP 1: EXAM PARAMETERS */}
       {step === 1 && (
-        <div className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
-          <div className="border-b border-slate-100 pb-4">
-            <span className="text-[10px] font-black uppercase text-[#395886] tracking-wider">PRIMARY SETTINGS</span>
-            <h2 className="text-lg font-black text-slate-900">General Information</h2>
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
+          <div className="border-b border-slate-100 pb-3">
+            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              General Information
+            </span>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                 EXAM TITLE *
               </label>
               <input
@@ -430,13 +432,13 @@ function ExamBuilderContent() {
                 placeholder="e.g., CS101 Introduction to Computer Science (Midterm)"
                 value={examData.title}
                 onChange={(e) => setExamData({ ...examData, title: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 focus:border-[#638ECB] focus:ring-2 focus:ring-[#638ECB]/20 outline-none transition-all"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                 INSTRUCTIONS & DESCRIPTION
               </label>
               <textarea
@@ -444,27 +446,27 @@ function ExamBuilderContent() {
                 placeholder="Detail academic honor codes, workspace configuration parameters, etc..."
                 value={examData.description}
                 onChange={(e) => setExamData({ ...examData, description: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-800 focus:border-[#638ECB] focus:ring-2 focus:ring-[#638ECB]/20 outline-none transition-all resize-none"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400 resize-none"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
-                  ASSIGNED DEPARTMENT / SUBJECT *
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  ASSIGNED DEPARTMENT *
                 </label>
                 <input
                   type="text"
                   placeholder="Computer Science"
                   value={examData.department}
                   onChange={(e) => setExamData({ ...examData, department: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:border-[#638ECB] focus:ring-2 focus:ring-[#638ECB]/20 outline-none transition-all"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   ACADEMIC YEAR
                 </label>
                 <input
@@ -472,12 +474,12 @@ function ExamBuilderContent() {
                   placeholder="2026-2027"
                   value={examData.academicYear}
                   onChange={(e) => setExamData({ ...examData, academicYear: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 focus:border-[#638ECB] focus:ring-2 focus:ring-[#638ECB]/20 outline-none transition-all"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   DURATION (MINUTES) *
                 </label>
                 <input
@@ -485,31 +487,31 @@ function ExamBuilderContent() {
                   min="1"
                   value={examData.duration}
                   onChange={(e) => setExamData({ ...examData, duration: parseInt(e.target.value) || 0 })}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:border-[#638ECB] focus:ring-2 focus:ring-[#638ECB]/20 outline-none transition-all"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all"
                   required
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-3 pt-3 border-t border-slate-100">
+            <div className="flex items-center gap-2.5 pt-2 border-t border-slate-100">
               <input
                 type="checkbox"
                 id="templateToggle"
                 checked={examData.saveAsTemplate}
                 onChange={(e) => setExamData({ ...examData, saveAsTemplate: e.target.checked })}
-                className="w-4 h-4 rounded border-slate-300 accent-[#395886] focus:ring-[#638ECB] cursor-pointer"
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer"
               />
-              <label htmlFor="templateToggle" className="text-xs font-bold text-slate-700 cursor-pointer">
+              <label htmlFor="templateToggle" className="text-xs font-semibold text-slate-700 cursor-pointer">
                 Save this configuration as a reusable Template
               </label>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+          <div className="flex justify-end gap-2.5 pt-5 border-t border-slate-100">
             <button
               type="button"
               onClick={() => router.push("/teacher/exams")}
-              className="px-6 py-3 border border-slate-200 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-50 transition-all"
+              className="px-5 py-2 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -522,7 +524,7 @@ function ExamBuilderContent() {
                   alert("Please fill in all required fields marked with (*).");
                 }
               }}
-              className="px-8 py-3.5 bg-[#395886] hover:bg-[#2d466c] text-white text-xs font-bold rounded-xl transition-all shadow-xs"
+              className="px-5 py-2 bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-all shadow-xs cursor-pointer"
             >
               Continue to Question Setup →
             </button>
@@ -535,38 +537,37 @@ function ExamBuilderContent() {
         <div className="space-y-6">
           
           {/* SECTION CREATOR */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 shadow-xs">
-            <span className="text-[10px] font-black uppercase text-[#395886] tracking-wider block mb-1">
-              STRUCTURAL BLUEPRINT
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
+            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block mb-3">
+              Exam Sections Hierarchy
             </span>
-            <h2 className="text-lg font-black text-slate-900 mb-4">Exam Sections Hierarchy</h2>
 
             <form
               onSubmit={handleCreatePart}
-              className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/70 p-5 rounded-2xl border border-slate-100"
+              className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/70 p-4 rounded-xl border border-slate-200"
             >
               <div className="md:col-span-5">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Section Title *
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Section A: QCM Questions"
+                  placeholder="e.g., Section A: Multiple Choice"
                   value={newPartTitle}
                   onChange={(e) => setNewPartTitle(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold focus:outline-none focus:border-[#638ECB]"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400"
                   required
                 />
               </div>
 
               <div className="md:col-span-4">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Section Format Rule
                 </label>
                 <select
                   value={newPartType}
                   onChange={(e) => setNewPartType(e.target.value as QuestionType)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#638ECB]"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-400 transition-all cursor-pointer"
                 >
                   <option value="mcq">Multiple Choice (QCM)</option>
                   <option value="multi_select">Multiple Select</option>
@@ -584,18 +585,18 @@ function ExamBuilderContent() {
               <div className="md:col-span-3">
                 <button
                   type="submit"
-                  className="w-full bg-[#395886] hover:bg-[#2d466c] text-white font-bold text-xs py-3.5 px-4 rounded-xl transition-all shadow-xs"
+                  className="w-full bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs py-2 px-4 rounded-xl transition-colors cursor-pointer shadow-2xs inline-flex items-center justify-center gap-1"
                 >
-                  + Add Section
+                  <Plus className="w-4 h-4" /> Add Section
                 </button>
               </div>
             </form>
 
             {/* ACTIVE SECTION TABS */}
-            <div className="flex flex-wrap gap-2 mt-5 border-t border-slate-100 pt-5 items-center">
-              <span className="text-[10px] font-black uppercase text-slate-400 mr-2">Active Sections:</span>
+            <div className="flex flex-wrap gap-2 mt-4 border-t border-slate-100 pt-4 items-center">
+              <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Active Sections:</span>
               {parts.length === 0 ? (
-                <span className="text-xs font-bold text-slate-400 italic">
+                <span className="text-xs font-medium text-slate-400 italic">
                   No sections created yet. Create a section above to begin.
                 </span>
               ) : (
@@ -604,15 +605,15 @@ function ExamBuilderContent() {
                     key={p.id}
                     type="button"
                     onClick={() => setActivePartId(p.id)}
-                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all border flex items-center gap-2 ${
+                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all border flex items-center gap-2 cursor-pointer ${
                       activePartId === p.id
-                        ? "bg-[#395886] text-white border-[#395886] shadow-xs"
+                        ? "bg-navy-900 text-white border-navy-900 shadow-2xs"
                         : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
                     <span>{p.title}</span>
-                    <span className="opacity-75 font-mono text-[11px]">({QUESTION_TYPE_LABELS[p.allowedType]})</span>
-                    <span className="ml-1 bg-white/20 text-current text-[10px] px-1.5 py-0.5 rounded-md font-bold">
+                    <span className="opacity-75 font-mono text-[10px]">({QUESTION_TYPE_LABELS[p.allowedType]})</span>
+                    <span className="bg-white/20 text-current text-[10px] px-1.5 py-0.2 rounded-md font-bold">
                       {p.questions.length}
                     </span>
                   </button>
@@ -623,60 +624,50 @@ function ExamBuilderContent() {
 
           {/* QUESTION BUILDER AREA */}
           {parts.length === 0 ? (
-            /* LOCKED EMPTY STATE IF NO SECTION CREATED YET */
-            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center shadow-xs space-y-3">
-              <div className="w-12 h-12 bg-[#395886]/10 text-[#395886] rounded-2xl flex items-center justify-center mx-auto">
-                <Layers className="w-6 h-6" />
+            <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center shadow-xs space-y-3">
+              <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center mx-auto border border-slate-200">
+                <Layers className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-black text-slate-800">No Section Defined</h3>
-              <p className="text-xs font-semibold text-slate-400 max-w-sm mx-auto">
-                Please create your first section in the <span className="text-[#395886] font-bold">Structural Blueprint</span> above before adding questions.
+              <h3 className="text-sm font-bold text-slate-900">No Section Defined</h3>
+              <p className="text-xs font-medium text-slate-500 max-w-sm mx-auto">
+                Please create your first section above before adding questions.
               </p>
             </div>
           ) : (
-            /* ACTIVE QUESTION BUILDER FORM */
-            <div className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                <div>
-                  <span className="text-[10px] font-black uppercase text-[#395886] tracking-wider block mb-1">
-                    QUESTION BUILDER
-                  </span>
-                  <h2 className="text-lg font-black text-slate-900">
-                    Target Section: {activePart?.title || "Select a section"}
-                  </h2>
-                </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Target Section: {activePart?.title || "Select a section"}
+                </h2>
 
-                {/* LOCKED FORMAT BADGE FOR THE ENTIRE SECTION */}
-                <div className="flex items-center gap-2 bg-[#395886]/10 text-[#395886] px-3.5 py-2 rounded-xl border border-[#395886]/20">
-                  <Lock className="w-3.5 h-3.5" />
-                  <span className="text-xs font-bold">
-                    Locked Format: {QUESTION_TYPE_LABELS[currentFormat]}
-                  </span>
+                <div className="flex items-center gap-1.5 bg-sky-50 text-navy-900 px-3 py-1 rounded-lg border border-sky-200 text-xs font-semibold">
+                  <Lock className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Format: {QUESTION_TYPE_LABELS[currentFormat]}</span>
                 </div>
               </div>
 
               {/* MARKS, MANDATORY & MEDIA METADATA */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-100">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                     Points / Marks
                   </label>
                   <input
                     type="number"
                     value={qMarks}
                     onChange={(e) => setQMarks(parseInt(e.target.value) || 1)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#638ECB]"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                     Media Attachment
                   </label>
                   <select
                     value={qMediaType}
                     onChange={(e: any) => setQMediaType(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#638ECB]"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-400 transition-all cursor-pointer"
                   >
                     <option value="none">None</option>
                     <option value="image">Image URL</option>
@@ -685,13 +676,13 @@ function ExamBuilderContent() {
                   </select>
                 </div>
 
-                <div className="flex items-center pt-6">
-                  <label className="flex items-center gap-3 cursor-pointer text-xs font-bold text-slate-700">
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700">
                     <input
                       type="checkbox"
                       checked={qMandatory}
                       onChange={(e) => setQMandatory(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 accent-[#395886] focus:ring-[#638ECB]"
+                      className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer"
                     />
                     Mandatory Question
                   </label>
@@ -699,7 +690,7 @@ function ExamBuilderContent() {
 
                 {qMediaType !== "none" && (
                   <div className="md:col-span-3">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       {qMediaType.toUpperCase()} Media URL
                     </label>
                     <input
@@ -707,7 +698,7 @@ function ExamBuilderContent() {
                       placeholder={`https://example.com/media.${qMediaType === "image" ? "png" : "mp4"}`}
                       value={qMediaUrl}
                       onChange={(e) => setQMediaUrl(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:border-[#638ECB]"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-sky-400 transition-all"
                     />
                   </div>
                 )}
@@ -715,7 +706,7 @@ function ExamBuilderContent() {
 
               {/* QUESTION PROMPT */}
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Question Text Prompt *
                 </label>
                 <textarea
@@ -723,29 +714,29 @@ function ExamBuilderContent() {
                   placeholder="Enter the main question prompt or problem statement..."
                   value={qText}
                   onChange={(e) => setQText(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-800 focus:border-[#638ECB] focus:ring-2 focus:ring-[#638ECB]/20 outline-none resize-none"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400 resize-none"
                 />
               </div>
 
-              {/* --- DYNAMIC FORM EDITORS (STRICTLY RESTRICTED TO currentFormat) --- */}
+              {/* DYNAMIC FORM EDITORS */}
 
-              {/* 1. MCQ (QCM) */}
+              {/* 1. MCQ */}
               {currentFormat === "mcq" && (
-                <div className="space-y-4">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                <div className="space-y-3">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Multiple Choice Radio Options (Select correct answer)
                   </label>
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     {mcqOptions.map((opt, i) => (
-                      <div key={i} className="flex items-center gap-4">
+                      <div key={i} className="flex items-center gap-3">
                         <button
                           type="button"
                           onClick={() => setMcqCorrect(i)}
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                            mcqCorrect === i ? "border-[#395886] bg-slate-50 text-[#395886]" : "border-slate-300"
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
+                            mcqCorrect === i ? "border-sky-500 bg-sky-50 text-sky-600" : "border-slate-300"
                           }`}
                         >
-                          {mcqCorrect === i && <span className="w-2.5 h-2.5 rounded-full bg-[#395886]" />}
+                          {mcqCorrect === i && <span className="w-2 h-2 rounded-full bg-sky-500" />}
                         </button>
                         <input
                           type="text"
@@ -755,15 +746,15 @@ function ExamBuilderContent() {
                             c[i] = e.target.value;
                             setMcqOptions(c);
                           }}
-                          className={`flex-grow border rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none ${
-                            mcqCorrect === i ? "border-[#395886]" : "border-slate-200"
+                          className={`flex-grow border rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none ${
+                            mcqCorrect === i ? "border-sky-400 bg-sky-50/20" : "border-slate-200"
                           }`}
                         />
                         <button
                           type="button"
                           onClick={() => setMcqOptions(mcqOptions.filter((_, idx) => idx !== i))}
                           disabled={mcqOptions.length <= 2}
-                          className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
+                          className="text-xs text-rose-500 font-semibold hover:underline disabled:opacity-30 cursor-pointer"
                         >
                           Delete
                         </button>
@@ -773,7 +764,7 @@ function ExamBuilderContent() {
                   <button
                     type="button"
                     onClick={() => setMcqOptions([...mcqOptions, `Option ${String.fromCharCode(65 + mcqOptions.length)}`])}
-                    className="text-xs font-bold text-[#638ECB] hover:text-[#395886] hover:underline block mt-2"
+                    className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                   >
                     + Add Option
                   </button>
@@ -782,13 +773,13 @@ function ExamBuilderContent() {
 
               {/* 2. MULTI SELECT */}
               {currentFormat === "multi_select" && (
-                <div className="space-y-4">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                <div className="space-y-3">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Checkbox Options (Check all correct answers)
                   </label>
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     {multiOptions.map((opt, i) => (
-                      <div key={i} className="flex items-center gap-4">
+                      <div key={i} className="flex items-center gap-3">
                         <input
                           type="checkbox"
                           checked={multiCorrect[i] || false}
@@ -797,7 +788,7 @@ function ExamBuilderContent() {
                             c[i] = e.target.checked;
                             setMultiCorrect(c);
                           }}
-                          className="w-5 h-5 rounded border-slate-300 accent-[#395886] focus:ring-[#638ECB]"
+                          className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer"
                         />
                         <input
                           type="text"
@@ -807,7 +798,7 @@ function ExamBuilderContent() {
                             c[i] = e.target.value;
                             setMultiOptions(c);
                           }}
-                          className="flex-grow border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:border-[#638ECB]"
+                          className="flex-grow border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-sky-400"
                         />
                         <button
                           type="button"
@@ -816,7 +807,7 @@ function ExamBuilderContent() {
                             setMultiCorrect(multiCorrect.filter((_, idx) => idx !== i));
                           }}
                           disabled={multiOptions.length <= 2}
-                          className="text-xs text-rose-500 font-bold hover:underline disabled:opacity-30"
+                          className="text-xs text-rose-500 font-semibold hover:underline disabled:opacity-30 cursor-pointer"
                         >
                           Delete
                         </button>
@@ -829,7 +820,7 @@ function ExamBuilderContent() {
                       setMultiOptions([...multiOptions, `Option ${String.fromCharCode(65 + multiOptions.length)}`]);
                       setMultiCorrect([...multiCorrect, false]);
                     }}
-                    className="text-xs font-bold text-[#638ECB] hover:text-[#395886] hover:underline block mt-2"
+                    className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                   >
                     + Add Checkbox Option
                   </button>
@@ -838,16 +829,16 @@ function ExamBuilderContent() {
 
               {/* 3. TRUE / FALSE */}
               {currentFormat === "true_false" && (
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Correct Key Answer
                   </label>
-                  <div className="flex gap-4">
+                  <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={() => setTfCorrect(true)}
-                      className={`px-8 py-3 border rounded-xl text-xs font-bold transition-all ${
-                        tfCorrect ? "bg-slate-100 border-[#395886] text-[#395886]" : "border-slate-200 text-slate-600"
+                      className={`px-6 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        tfCorrect ? "bg-sky-50 border-sky-400 text-sky-700 font-bold" : "border-slate-200 text-slate-600"
                       }`}
                     >
                       True
@@ -855,8 +846,8 @@ function ExamBuilderContent() {
                     <button
                       type="button"
                       onClick={() => setTfCorrect(false)}
-                      className={`px-8 py-3 border rounded-xl text-xs font-bold transition-all ${
-                        !tfCorrect ? "bg-slate-100 border-[#395886] text-[#395886]" : "border-slate-200 text-slate-600"
+                      className={`px-6 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        !tfCorrect ? "bg-sky-50 border-sky-400 text-sky-700 font-bold" : "border-slate-200 text-slate-600"
                       }`}
                     >
                       False
@@ -867,8 +858,8 @@ function ExamBuilderContent() {
 
               {/* 4. SHORT ANSWER */}
               {currentFormat === "short_answer" && (
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Accepted Answer Variants (Auto-grading)
                   </label>
                   {shortAnswers.map((ans, i) => (
@@ -882,13 +873,13 @@ function ExamBuilderContent() {
                           c[i] = e.target.value;
                           setShortAnswers(c);
                         }}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:border-[#638ECB]"
+                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-sky-400"
                       />
                       {shortAnswers.length > 1 && (
                         <button
                           type="button"
                           onClick={() => setShortAnswers(shortAnswers.filter((_, idx) => idx !== i))}
-                          className="text-xs text-rose-500 font-bold hover:underline"
+                          className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
                         >
                           Delete
                         </button>
@@ -898,7 +889,7 @@ function ExamBuilderContent() {
                   <button
                     type="button"
                     onClick={() => setShortAnswers([...shortAnswers, ""])}
-                    className="text-xs font-bold text-[#638ECB] hover:text-[#395886] hover:underline block mt-1"
+                    className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                   >
                     + Add Accepted Answer Variant
                   </button>
@@ -909,25 +900,25 @@ function ExamBuilderContent() {
               {currentFormat === "essay" && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Minimum Word Count
                     </label>
                     <input
                       type="number"
                       value={essayMinMax.min}
                       onChange={(e) => setEssayMinMax({ ...essayMinMax, min: parseInt(e.target.value) || 0 })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-[#638ECB]"
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Maximum Word Count
                     </label>
                     <input
                       type="number"
                       value={essayMinMax.max}
                       onChange={(e) => setEssayMinMax({ ...essayMinMax, max: parseInt(e.target.value) || 0 })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-[#638ECB]"
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
                     />
                   </div>
                 </div>
@@ -937,13 +928,13 @@ function ExamBuilderContent() {
               {currentFormat === "coding" && (
                 <div className="space-y-3">
                   <div className="w-48">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Programming Language
                     </label>
                     <select
                       value={codingLang}
                       onChange={(e) => setCodingLang(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#638ECB]"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-400 transition-all cursor-pointer"
                     >
                       <option value="python">Python 3</option>
                       <option value="javascript">JavaScript (Node)</option>
@@ -952,14 +943,14 @@ function ExamBuilderContent() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Starter Code Template
                     </label>
                     <textarea
                       rows={4}
                       value={codingStarter}
                       onChange={(e) => setCodingStarter(e.target.value)}
-                      className="w-full font-mono text-xs bg-slate-900 text-sky-300 p-4 rounded-xl focus:outline-none"
+                      className="w-full font-mono text-xs bg-slate-900 text-sky-300 p-3.5 rounded-xl focus:outline-none"
                     />
                   </div>
                 </div>
@@ -967,8 +958,8 @@ function ExamBuilderContent() {
 
               {/* 7. FILL IN THE BLANK */}
               {currentFormat === "fill_blank" && (
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Template Text (Use brackets [blank] for missing words)
                   </label>
                   <input
@@ -976,15 +967,15 @@ function ExamBuilderContent() {
                     value={blanksText}
                     onChange={(e) => setBlanksText(e.target.value)}
                     placeholder="e.g. The capital of France is [Paris]."
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium focus:outline-none focus:border-[#638ECB]"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400"
                   />
                 </div>
               )}
 
               {/* 8. MATCHING PAIRS */}
               {currentFormat === "matching" && (
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Matching Pair Connections
                   </label>
                   {matchingPairs.map((pair, i) => (
@@ -998,7 +989,7 @@ function ExamBuilderContent() {
                           c[i].left = e.target.value;
                           setMatchingPairs(c);
                         }}
-                        className="w-1/2 border border-slate-200 rounded-xl px-4 py-2 text-xs font-medium focus:outline-none focus:border-[#638ECB]"
+                        className="w-1/2 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400"
                       />
                       <span className="text-xs font-bold text-slate-400">↔</span>
                       <input
@@ -1010,14 +1001,14 @@ function ExamBuilderContent() {
                           c[i].right = e.target.value;
                           setMatchingPairs(c);
                         }}
-                        className="w-1/2 border border-slate-200 rounded-xl px-4 py-2 text-xs font-medium focus:outline-none focus:border-[#638ECB]"
+                        className="w-1/2 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400"
                       />
                     </div>
                   ))}
                   <button
                     type="button"
                     onClick={() => setMatchingPairs([...matchingPairs, { left: "", right: "" }])}
-                    className="text-xs font-bold text-[#638ECB] hover:text-[#395886] hover:underline block mt-1"
+                    className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                   >
                     + Add Matching Pair
                   </button>
@@ -1026,13 +1017,13 @@ function ExamBuilderContent() {
 
               {/* 9. ORDERING */}
               {currentFormat === "ordering" && (
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Target Sequence Order (Top to Bottom)
                   </label>
                   {orderingItems.map((item, i) => (
                     <div key={i} className="flex items-center gap-3">
-                      <span className="text-xs font-black text-[#395886]">{i + 1}.</span>
+                      <span className="text-xs font-bold text-slate-900">{i + 1}.</span>
                       <input
                         type="text"
                         value={item}
@@ -1041,14 +1032,14 @@ function ExamBuilderContent() {
                           c[i] = e.target.value;
                           setOrderingItems(c);
                         }}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2 text-xs font-medium focus:outline-none focus:border-[#638ECB]"
+                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400"
                       />
                     </div>
                   ))}
                   <button
                     type="button"
                     onClick={() => setOrderingItems([...orderingItems, `Step ${orderingItems.length + 1}`])}
-                    className="text-xs font-bold text-[#638ECB] hover:text-[#395886] hover:underline block mt-1"
+                    className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                   >
                     + Add Sequence Item
                   </button>
@@ -1059,18 +1050,18 @@ function ExamBuilderContent() {
               {currentFormat === "numeric" && (
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Target Value
                     </label>
                     <input
                       type="number"
                       value={numericAnswer.val}
                       onChange={(e) => setNumericAnswer({ ...numericAnswer, val: parseFloat(e.target.value) || 0 })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-[#638ECB]"
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Tolerance (±)
                     </label>
                     <input
@@ -1079,26 +1070,26 @@ function ExamBuilderContent() {
                       onChange={(e) =>
                         setNumericAnswer({ ...numericAnswer, tolerance: parseFloat(e.target.value) || 0 })
                       }
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-[#638ECB]"
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Unit Label
                     </label>
                     <input
                       type="text"
                       value={numericAnswer.unit}
                       onChange={(e) => setNumericAnswer({ ...numericAnswer, unit: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-[#638ECB]"
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
                     />
                   </div>
                 </div>
               )}
 
               {/* EXPLANATION */}
-              <div className="pt-2">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+              <div className="pt-1">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Solution Rationale / Explanation
                 </label>
                 <textarea
@@ -1106,77 +1097,75 @@ function ExamBuilderContent() {
                   placeholder="Explain why the answer is correct for candidate feedback..."
                   value={qExplanation}
                   onChange={(e) => setQExplanation(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:border-[#638ECB] outline-none resize-none"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:border-sky-400 outline-none resize-none placeholder:text-slate-400 text-slate-900"
                 />
               </div>
 
               {/* ADD QUESTION BUTTON */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={handleAddQuestionToPart}
-                  className="px-6 py-3 bg-[#395886] hover:bg-[#2d466c] text-white font-bold text-xs rounded-xl transition-all shadow-xs"
+                  className="px-5 py-2 bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-all shadow-xs cursor-pointer inline-flex items-center gap-1"
                 >
-                  + Add Question to {activePart?.title}
+                  <Plus className="w-4 h-4" />
+                  <span>Add Question to {activePart?.title}</span>
                 </button>
               </div>
             </div>
           )}
 
           {/* ALL CONFIGURED QUESTIONS SUMMARY */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-              <div>
-                <span className="text-[10px] font-black uppercase text-[#395886] tracking-wider block mb-1">
-                  QUESTION REPOSITORY
-                </span>
-                <h2 className="text-lg font-black text-slate-900">Configured Questions ({countTotalQuestions()})</h2>
-              </div>
-              <span className="text-xs font-black bg-slate-100 text-slate-800 px-3 py-1.5 rounded-lg border border-slate-200">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Configured Questions ({countTotalQuestions()})
+              </h2>
+              <span className="text-xs font-bold bg-slate-100 text-slate-800 px-3 py-1 rounded-lg border border-slate-200">
                 Total Marks: {parts.reduce((acc, p) => acc + p.questions.reduce((qAcc, q) => qAcc + q.marks, 0), 0)} pts
               </span>
             </div>
 
             {countTotalQuestions() === 0 ? (
-              <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
-                <p className="text-xs text-slate-400 font-bold">
+              <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                <p className="text-xs text-slate-400 font-semibold">
                   No questions added yet.
                 </p>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {parts.map((part) => (
-                  <div key={part.id} className="border border-slate-200 rounded-2xl p-5 bg-slate-50/40 space-y-3">
-                    <div className="flex justify-between items-center border-b border-slate-200/60 pb-3">
+                  <div key={part.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                    <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-black bg-[#395886] text-white px-3 py-1 rounded-md">
+                        <span className="text-xs font-semibold bg-navy-900 text-white px-2.5 py-1 rounded-md">
                           {part.title}
                         </span>
-                        <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded uppercase">
+                        <span className="text-[10px] font-semibold bg-slate-200 text-slate-700 px-2 py-0.5 rounded uppercase">
                           {QUESTION_TYPE_LABELS[part.allowedType]}
                         </span>
                       </div>
-                      <span className="text-xs font-bold text-slate-500">{part.questions.length} items</span>
+                      <span className="text-xs font-medium text-slate-500">{part.questions.length} items</span>
                     </div>
 
-                    <div className="space-y-3 pt-1">
+                    <div className="space-y-2.5 pt-0.5">
                       {part.questions.map((q, idx) => (
                         <div
                           key={q.id}
-                          className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex justify-between items-center gap-4"
+                          className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex justify-between items-center gap-4"
                         >
                           <div className="space-y-1">
-                            <span className="text-xs font-black text-slate-800 mr-2">Q{idx + 1}.</span>
-                            <span className="text-xs font-bold text-slate-900">{q.text}</span>
+                            <span className="text-xs font-bold text-slate-900 mr-1.5">Q{idx + 1}.</span>
+                            <span className="text-xs font-medium text-slate-800">{q.text}</span>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs font-black text-[#395886] bg-[#638ECB]/10 px-2.5 py-1 rounded-md border border-[#638ECB]/20">
+                            <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-md border border-sky-200">
                               {q.marks} pts
                             </span>
                             <button
                               type="button"
                               onClick={() => handleDeleteQuestion(part.id, q.id)}
-                              className="text-xs text-rose-500 font-bold hover:underline"
+                              className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
                             >
                               Delete
                             </button>
@@ -1190,18 +1179,18 @@ function ExamBuilderContent() {
             )}
 
             {/* PUBLISH CONTROLS */}
-            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+            <div className="flex justify-end gap-2.5 pt-5 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="px-6 py-3 border border-slate-200 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-50 transition-all mr-auto"
+                className="px-5 py-2 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors mr-auto cursor-pointer inline-flex items-center gap-1"
               >
-                ← Back to Parameters
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Parameters
               </button>
               <button
                 type="button"
                 onClick={handlePublish}
-                className="px-8 py-3.5 bg-[#395886] hover:bg-[#2d466c] text-white text-xs font-bold rounded-xl transition-all shadow-xs"
+                className="px-5 py-2 bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-all shadow-xs cursor-pointer"
               >
                 Deploy Exam Architecture
               </button>
@@ -1212,28 +1201,28 @@ function ExamBuilderContent() {
 
       {/* LAUNCHED SUCCESS MODAL */}
       {isLaunched && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center space-y-6">
-            <div className="w-16 h-16 bg-[#638ECB]/10 text-[#395886] rounded-2xl flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8" />
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl border border-slate-200 text-center space-y-5">
+            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto border border-emerald-200">
+              <CheckCircle2 className="w-6 h-6" />
             </div>
 
             <div>
-              <h3 className="text-2xl font-black text-slate-900">Exam Live & Scheduled</h3>
+              <h3 className="text-lg font-bold text-slate-900">Exam Live & Scheduled</h3>
               <p className="text-xs text-slate-500 mt-1 font-medium">
                 Provide this access code to students to launch their test session.
               </p>
             </div>
 
-            <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-6 rounded-2xl flex flex-col items-center justify-center gap-3">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ACCESS CODE</span>
-              <span className="text-4xl font-black font-mono tracking-widest text-[#395886]">{accessCode}</span>
+            <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-5 rounded-xl flex flex-col items-center justify-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">ACCESS CODE</span>
+              <span className="text-3xl font-extrabold font-mono tracking-widest text-slate-900">{accessCode}</span>
               <button
                 type="button"
                 onClick={handleCopyCode}
-                className={`mt-1 text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+                className={`mt-1 text-xs font-semibold px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   isCopied
-                    ? "bg-[#395886] text-white"
+                    ? "bg-emerald-600 text-white"
                     : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
                 }`}
               >
@@ -1248,7 +1237,7 @@ function ExamBuilderContent() {
                 setIsLaunched(false);
                 router.push("/teacher/exams");
               }}
-              className="w-full bg-[#395886] hover:bg-[#2d466c] text-white font-bold text-xs py-3.5 rounded-xl transition-all"
+              className="w-full bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
             >
               Done & View All Exams
             </button>
@@ -1262,7 +1251,7 @@ function ExamBuilderContent() {
 
 export default function CreateExamPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-slate-500 font-bold text-center">Loading Exam Builder...</div>}>
+    <Suspense fallback={<div className="p-8 text-slate-500 font-semibold text-center text-xs">Loading Exam Builder...</div>}>
       <ExamBuilderContent />
     </Suspense>
   );

@@ -2,67 +2,61 @@
 
 import React, { useState } from "react";
 import {
-  ShieldCheck,
+  Shield,
   Lock,
   Maximize2,
-  Copy,
   Eye,
-  AlertTriangle,
+  Copy,
   Save,
   CheckCircle2,
-  Sliders,
 } from "lucide-react";
 
-interface GlobalSecurityPolicy {
-  enableFullscreenDefault: boolean;
-  enableTabDetectionDefault: boolean;
-  enableClipboardBlockDefault: boolean;
-  maxWarningThreshold: number;
-  autoLockOnThreshold: boolean;
-  allowTeacherOverrides: boolean;
-}
-
 export default function AdminSecurityPage() {
-  const [policy, setPolicy] = useState<GlobalSecurityPolicy>({
-    enableFullscreenDefault: true,
-    enableTabDetectionDefault: true,
-    enableClipboardBlockDefault: true,
-    maxWarningThreshold: 3,
-    autoLockOnThreshold: true,
-    allowTeacherOverrides: true,
+  const [policies, setPolicies] = useState({
+    fullscreenMode: true,
+    tabFocusDetection: true,
+    clipboardRestrictions: true,
+    warningThreshold: "3",
+    automatedSessionLock: true,
+    allowTeacherCustomization: true,
   });
 
-  const [isSaved, setIsSaved] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const handleSavePolicy = () => {
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+  const handleToggle = (key: keyof typeof policies) => {
+    setPolicies((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
   };
 
   return (
-    <div className="w-full space-y-6 font-sans bg-[#F0F3FA]/30 p-6 rounded-3xl min-h-screen text-slate-800">
-      {/* FLAT PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#D5DEEF]/60">
+    <div className="w-full space-y-6 font-sans">
+      {/* PAGE HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
-            PLATFORM GOVERNANCE
+          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+            Platform Governance
           </span>
-          <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Global Security Policies
           </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
-            Configure system-wide default proctoring policies and security guardrails enforced across all organizations[cite: 1].
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Configure system-wide default proctoring policies and security guardrails enforced across all organizations.
           </p>
         </div>
 
         <button
-          onClick={handleSavePolicy}
-          className="px-4 py-2.5 bg-[#395886] hover:bg-[#2e476d] text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-[0.98] inline-flex items-center gap-2 cursor-pointer self-start md:self-auto"
+          onClick={handleSave}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
         >
-          {isSaved ? (
+          {saved ? (
             <>
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Policies Updated!</span>
+              <span>Saved Defaults</span>
             </>
           ) : (
             <>
@@ -73,154 +67,171 @@ export default function AdminSecurityPage() {
         </button>
       </div>
 
-      {/* POLICY CONFIGURATION GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* DEFAULT ANTI-CHEATING TOGGLES */}
-        <div className="bg-white p-6 rounded-2xl border border-[#D5DEEF] shadow-xs space-y-5">
-          <div className="flex items-center gap-2 border-b border-[#D5DEEF] pb-3">
-            <ShieldCheck className="w-5 h-5 text-[#395886]" />
-            <h2 className="text-sm font-black text-[#395886]">
+      {/* TWO COLUMN GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* LEFT COLUMN: DEFAULT ASSESSMENT GUARDRAILS */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+            <Shield className="w-4 h-4 text-slate-700" />
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
               Default Assessment Guardrails
             </h2>
           </div>
 
-          <div className="space-y-4">
-            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Maximize2 className="w-3.5 h-3.5 text-[#395886]" />
-                  <span className="text-xs font-black text-[#395886]">
+          <div className="space-y-3">
+            {/* Fullscreen Mode */}
+            <div
+              onClick={() => handleToggle("fullscreenMode")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-white rounded-lg border border-slate-200 text-slate-700 shrink-0">
+                  <Maximize2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
                     Mandatory Fullscreen Mode
-                  </span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Enforce compulsory full-screen mode by default on new examinations.
+                  </p>
                 </div>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Enforce compulsory full-screen mode by default on new examinations[cite: 1].
-                </p>
               </div>
               <input
                 type="checkbox"
-                checked={policy.enableFullscreenDefault}
-                onChange={(e) =>
-                  setPolicy({ ...policy, enableFullscreenDefault: e.target.checked })
-                }
-                className="accent-[#395886] w-4 h-4 mt-1"
+                checked={policies.fullscreenMode}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
               />
-            </label>
+            </div>
 
-            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Eye className="w-3.5 h-3.5 text-[#395886]" />
-                  <span className="text-xs font-black text-[#395886]">
+            {/* Tab Focus Detection */}
+            <div
+              onClick={() => handleToggle("tabFocusDetection")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-white rounded-lg border border-slate-200 text-slate-700 shrink-0">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
                     Tab & Window Focus Detection
-                  </span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Track tab switching and window blurring events during active tests.
+                  </p>
                 </div>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Track tab switching and window blurring events during active tests[cite: 1].
-                </p>
               </div>
               <input
                 type="checkbox"
-                checked={policy.enableTabDetectionDefault}
-                onChange={(e) =>
-                  setPolicy({ ...policy, enableTabDetectionDefault: e.target.checked })
-                }
-                className="accent-[#395886] w-4 h-4 mt-1"
+                checked={policies.tabFocusDetection}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
               />
-            </label>
+            </div>
 
-            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Copy className="w-3.5 h-3.5 text-[#395886]" />
-                  <span className="text-xs font-black text-[#395886]">
-                    Clipboard Restrictions
-                  </span>
+            {/* Clipboard Restrictions */}
+            <div
+              onClick={() => handleToggle("clipboardRestrictions")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-white rounded-lg border border-slate-200 text-slate-700 shrink-0">
+                  <Copy className="w-4 h-4" />
                 </div>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Disable copy and paste functions inside exam text editors by default[cite: 1].
-                </p>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
+                    Clipboard Restrictions
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Disable copy and paste functions inside exam text editors by default.
+                  </p>
+                </div>
               </div>
               <input
                 type="checkbox"
-                checked={policy.enableClipboardBlockDefault}
-                onChange={(e) =>
-                  setPolicy({ ...policy, enableClipboardBlockDefault: e.target.checked })
-                }
-                className="accent-[#395886] w-4 h-4 mt-1"
+                checked={policies.clipboardRestrictions}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
               />
-            </label>
+            </div>
           </div>
         </div>
 
-        {/* THRESHOLD & OVERRIDE RULES */}
-        <div className="bg-white p-6 rounded-2xl border border-[#D5DEEF] shadow-xs space-y-5">
-          <div className="flex items-center gap-2 border-b border-[#D5DEEF] pb-3">
-            <Lock className="w-5 h-5 text-[#395886]" />
-            <h2 className="text-sm font-black text-[#395886]">
+        {/* RIGHT COLUMN: LOCK TRIGGER & TEACHER PERMISSIONS */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+            <Lock className="w-4 h-4 text-slate-700" />
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
               Lock Trigger & Teacher Permissions
             </h2>
           </div>
 
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 space-y-2">
-              <label className="text-xs font-black text-[#395886] block">
+          <div className="space-y-3">
+            {/* Warning Limit Threshold Dropdown */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+              <label className="block text-xs font-bold text-slate-900">
                 System Warning Limit Threshold
               </label>
-              <p className="text-[11px] font-medium text-slate-500">
-                Maximum allowed security warnings before an exam session automatically locks[cite: 1].
+              <p className="text-[11px] text-slate-500 font-medium">
+                Maximum allowed security warnings before an exam session automatically locks.
               </p>
               <select
-                value={policy.maxWarningThreshold}
+                value={policies.warningThreshold}
                 onChange={(e) =>
-                  setPolicy({ ...policy, maxWarningThreshold: Number(e.target.value) })
+                  setPolicies({ ...policies, warningThreshold: e.target.value })
                 }
-                className="w-full p-2.5 bg-white border border-[#D5DEEF] rounded-xl text-xs font-bold text-[#395886] focus:outline-none"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-400 transition-all cursor-pointer"
               >
-                <option value={1}>1 Violation (Strict Lock)</option>
-                <option value={2}>2 Violations</option>
-                <option value={3}>3 Violations (Standard Default)[cite: 1]</option>
-                <option value={5}>5 Violations (Relaxed)</option>
+                <option value="1">1 Violation (Strict Lock)</option>
+                <option value="2">2 Violations (Moderate)</option>
+                <option value="3">3 Violations (Standard Default)</option>
+                <option value="5">5 Violations (Lenient)</option>
               </select>
             </div>
 
-            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
-              <div className="space-y-0.5">
-                <span className="text-xs font-black text-[#395886]">
+            {/* Automated Session Lock */}
+            <div
+              onClick={() => handleToggle("automatedSessionLock")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div>
+                <p className="text-xs font-bold text-slate-900">
                   Automated Session Lock
-                </span>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Automatically lock the student exam screen when the warning threshold is met[cite: 1].
+                </p>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Automatically lock the student exam screen when the warning threshold is met.
                 </p>
               </div>
               <input
                 type="checkbox"
-                checked={policy.autoLockOnThreshold}
-                onChange={(e) =>
-                  setPolicy({ ...policy, autoLockOnThreshold: e.target.checked })
-                }
-                className="accent-[#395886] w-4 h-4 mt-1"
+                checked={policies.automatedSessionLock}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
               />
-            </label>
+            </div>
 
-            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-[#D5DEEF] bg-[#F0F3FA]/30 cursor-pointer hover:bg-[#F0F3FA] transition-colors">
-              <div className="space-y-0.5">
-                <span className="text-xs font-black text-[#395886]">
+            {/* Allow Teacher Customization */}
+            <div
+              onClick={() => handleToggle("allowTeacherCustomization")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div>
+                <p className="text-xs font-bold text-slate-900">
                   Allow Teacher Customization
-                </span>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Permit teachers to adjust security parameters when configuring individual exams[cite: 1].
+                </p>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Permit teachers to adjust security parameters when configuring individual exams.
                 </p>
               </div>
               <input
                 type="checkbox"
-                checked={policy.allowTeacherOverrides}
-                onChange={(e) =>
-                  setPolicy({ ...policy, allowTeacherOverrides: e.target.checked })
-                }
-                className="accent-[#395886] w-4 h-4 mt-1"
+                checked={policies.allowTeacherCustomization}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
               />
-            </label>
+            </div>
           </div>
         </div>
       </div>
