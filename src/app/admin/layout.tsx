@@ -12,26 +12,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [isProfileOpen, setProfileOpen] = useState(false);
 
-  // Grouped Navigation Items matching Teacher Portal structure
-  const primaryNavItems = [
+  // Updated navigation items list with "Manage Organization"
+  const navItems = [
     { 
       name: 'Dashboard', 
       href: '/admin', 
       icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' 
     },
     { 
-      name: 'Organizations', 
-      href: '/admin/organizations', 
-      icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' 
-    },
-    { 
-      name: 'Manage', 
+      name: 'Manage Organization', 
       href: '/admin/users', 
       icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' 
     },
-  ];
-
-  const systemNavItems = [
     { 
       name: 'Security Settings', 
       href: '/admin/security', 
@@ -44,14 +36,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     },
   ];
 
-  const allNavItems = [...primaryNavItems, ...systemNavItems];
-
   const handleSignOut = () => {
     console.log("Signing out...");
     router.push('/login');
   };
 
-  const currentTitle = allNavItems.find(item => item.href === pathname)?.name || 'Admin Portal';
+  const currentTitle = navItems.find(item => item.href === pathname)?.name || 'Admin Portal';
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans">
@@ -81,61 +71,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        {/* DARK NAVY NAVIGATION MENU MATCHING TEACHER PORTAL LAYOUT */}
-        <div className="flex-1 py-6 px-4 overflow-y-auto space-y-8 bg-[#132238]">
-          
-          {/* PRIMARY SECTION */}
-          <div>
-            <p className="text-[11px] font-bold text-slate-400/80 tracking-[0.2em] mb-4 px-3 uppercase">
-              ADMIN PORTAL
-            </p>
-            <nav className="space-y-2">
-              {primaryNavItems.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <Link key={item.name} href={item.href}>
-                    <div className={`flex items-center px-4 py-3.5 rounded-2xl cursor-pointer transition-all ${
-                      isActive 
-                        ? 'bg-[#3E72A0] text-white font-semibold shadow-xs' 
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                    }`}>
-                      <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                      </svg>
-                      <span className="ml-3.5 text-[14px] font-medium">{item.name}</span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* FEATURES / SYSTEM SECTION */}
-          <div>
-            <p className="text-[11px] font-bold text-slate-400/80 tracking-[0.2em] mb-4 px-3 uppercase">
-              FEATURES
-            </p>
-            <nav className="space-y-2">
-              {systemNavItems.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <Link key={item.name} href={item.href}>
-                    <div className={`flex items-center px-4 py-3.5 rounded-2xl cursor-pointer transition-all ${
-                      isActive 
-                        ? 'bg-[#3E72A0] text-white font-semibold shadow-xs' 
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                    }`}>
-                      <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                      </svg>
-                      <span className="ml-3.5 text-[14px] font-medium">{item.name}</span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
+        {/* DARK NAVY NAVIGATION MENU */}
+        <div className="flex-1 py-6 px-4 overflow-y-auto bg-[#132238]">
+          <nav className="space-y-2">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link key={item.name} href={item.href}>
+                  <div className={`flex items-center px-4 py-3.5 rounded-2xl cursor-pointer transition-all ${
+                    isActive 
+                      ? 'bg-[#3E72A0] text-white font-semibold shadow-xs' 
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                  }`}>
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                    </svg>
+                    <span className="ml-3.5 text-[14px] font-medium">{item.name}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </aside>
 
@@ -150,7 +106,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <h1 className="text-[22px] font-extrabold text-[#0F172A] tracking-tight leading-tight">
               {currentTitle}
             </h1>
-            <p className="text-[13px] text-slate-400 mt-0.5 font-medium">Manage platform organizations, users, and security</p>
+            <p className="text-[13px] text-slate-400 mt-0.5 font-medium">Manage platform organizations and security</p>
           </div>
           
           {/* Right Header Actions */}
