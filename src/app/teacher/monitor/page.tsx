@@ -19,15 +19,11 @@ export default function TeacherLiveMonitorPage() {
   const router = useRouter();
   const exams = useExamStore((state) => state.exams);
   const endExam = useExamStore((state) => state.endExam);
+  const grantContinue = useExamStore((state) => state.grantContinue);
 
-  // Copy state for room/access code
   const [copied, setCopied] = useState(false);
 
-  // Get active exam or default to the first exam
   const activeExam = exams.find((e) => e.isStarted && !e.isEnded) || exams[0];
-
-  // Track resolved violations locally for interactive demo
-  const [resolvedIds, setResolvedIds] = useState<string[]>([]);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -59,57 +55,17 @@ export default function TeacherLiveMonitorPage() {
     );
   }
 
-  // Combined student list (uses live students or realistic mockup cards)
-  const students = [
-    {
-      id: "STU-4019",
-      name: "Marcus Vance",
-      timeActive: "18 mins",
-      progressPct: 40,
-      violation: "Tab Switch Detected (3x)",
-      flaggedAt: "1:22 PM",
-    },
-    {
-      id: "STU-3321",
-      name: "David Miller",
-      timeActive: "12 mins",
-      progressPct: 25,
-      violation: "Multiple Faces in Camera Feed",
-      flaggedAt: "1:23 PM",
-    },
-    {
-      id: "STU-8821",
-      name: "Alex Johnson",
-      timeActive: "32 mins",
-      progressPct: 65,
-      violation: null,
-    },
-    {
-      id: "STU-9102",
-      name: "Sophia Chen",
-      timeActive: "41 mins",
-      progressPct: 85,
-      violation: null,
-    },
-    {
-      id: "STU-1044",
-      name: "Emma Watson",
-      timeActive: "45 mins",
-      progressPct: 90,
-      violation: null,
-    },
-  ];
+  // Real, live students — only those already approved to take the exam
+  // (pending requests are handled separately by TeacherApprovalList)
+  const students = activeExam.requests.filter((r) => r.status === "approved");
 
-  // Stat Calculations
   const totalEnrolled = students.length;
-  const flaggedStudents = students.filter(
-    (s) => s.violation && !resolvedIds.includes(s.id)
-  );
+  const flaggedStudents = students.filter((s) => s.isLocked);
   const attentionCount = flaggedStudents.length;
   const activeCleanCount = totalEnrolled - attentionCount;
 
-  const handleResolve = (id: string) => {
-    setResolvedIds((prev) => [...prev, id]);
+  const handleGrantPermission = (requestId: string) => {
+    grantContinue(activeExam.roomCode, requestId);
   };
 
   const handleStopExam = () => {
@@ -134,7 +90,6 @@ export default function TeacherLiveMonitorPage() {
           </p>
         </div>
 
-        {/* Access Code & Stop Exam Button */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="bg-navy-900 text-white px-4 py-2.5 rounded-xl flex items-center gap-3 border border-slate-700">
             <div className="text-right">
@@ -166,7 +121,6 @@ export default function TeacherLiveMonitorPage() {
 
       {/* 2. SUMMARY STAT CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Total Enrolled */}
         <div className="bg-white border border-[#D5DEEF] rounded-2xl p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Enrolled</p>
@@ -177,7 +131,6 @@ export default function TeacherLiveMonitorPage() {
           </div>
         </div>
 
-        {/* Active & Clean */}
         <div className="bg-white border border-[#D5DEEF] rounded-2xl p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-[10px] font-black uppercase tracking-wider text-[#395886]">Active & Clean</p>
@@ -188,7 +141,6 @@ export default function TeacherLiveMonitorPage() {
           </div>
         </div>
 
-        {/* Attention Required */}
         <div
           className={`border rounded-2xl p-5 shadow-xs flex items-center justify-between transition-all ${
             attentionCount > 0
@@ -227,96 +179,106 @@ export default function TeacherLiveMonitorPage() {
       {/* 3. LIVE STUDENT GRID */}
       <div className="space-y-4">
         <div>
-            <span className="text-[10px] font-black uppercase text-sky-700 tracking-wider block mb-1">
+          <span className="text-[10px] font-black uppercase text-sky-700 tracking-wider block mb-1">
             PARTICIPANTS
           </span>
           <h2 className="text-base font-black text-navy-900">Live Student Cards</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {students.map((student) => {
-            const isResolved = resolvedIds.includes(student.id);
-            const isFlagged = !isResolved && Boolean(student.violation);
+        {students.length === 0 ? (
+          <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 text-center">
+            <p className="text-xs font-bold text-slate-400">
+              No approved students yet. Once students are approved to join, they will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {students.map((student) => {
+              const isFlagged = Boolean(student.isLocked);
+              const progressPct = Math.min(
+                100,
+                Math.round(
+                  ((student.currentQuestion ?? 1) / Math.max(activeExam.questionCount, 1)) * 100
+                )
+              );
 
-            return (
-              <div
-                key={student.id}
-                className={`bg-white rounded-2xl p-5 border transition-all flex flex-col justify-between space-y-4 shadow-xs ${
-                  isFlagged
-                    ? "border-rose-300 ring-2 ring-rose-500/10"
-                    : "border-slate-200"
-                }`}
-              >
-                <div className="space-y-3">
-                  {/* Card Top Row: ID & Badge */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black font-mono text-slate-400 uppercase tracking-wider">
-                      {student.id}
-                    </span>
-                    {isFlagged && (
-                      <span className="px-2.5 py-0.5 bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider rounded-full">
-                        Violation Detected
+              return (
+                <div
+                  key={student.id}
+                  className={`bg-white rounded-2xl p-5 border transition-all flex flex-col justify-between space-y-4 shadow-xs ${
+                    isFlagged
+                      ? "border-rose-300 ring-2 ring-rose-500/10"
+                      : "border-slate-200"
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black font-mono text-slate-400 uppercase tracking-wider">
+                        {student.id}
                       </span>
+                      {isFlagged && (
+                        <span className="px-2.5 py-0.5 bg-rose-600 text-white font-black text-[9px] uppercase tracking-wider rounded-full">
+                          Locked — Tab Switch
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-black text-[#395886]">{student.name}</h3>
+                      <p className="text-[11px] font-medium text-slate-400 mt-0.5 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" /> Joined: {student.timestamp}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between text-[10px] font-black text-slate-500">
+                        <span>Progress</span>
+                        <span>{progressPct}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-[#F0F3FA] rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            isFlagged ? "bg-rose-500" : "bg-[#395886]"
+                          }`}
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {isFlagged && (
+                      <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-rose-700 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-[11px]">
+                          <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                          <span>Tab Switch Detected ({student.tabSwitches ?? 1}x)</span>
+                        </p>
+                        {student.lastLockedAt && (
+                          <p className="text-[10px] text-rose-400 font-medium pl-5">
+                            Flagged at {student.lastLockedAt}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  {/* Student Name & Time Active */}
-                  <div>
-                    <h3 className="text-sm font-black text-[#395886]">{student.name}</h3>
-                    <p className="text-[11px] font-medium text-slate-400 mt-0.5 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-slate-400" /> Time Active: {student.timeActive}
-                    </p>
+                  <div className="pt-2">
+                    {isFlagged ? (
+                      <button
+                        onClick={() => handleGrantPermission(student.id)}
+                        className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                      >
+                        Grant Permission to Continue
+                      </button>
+                    ) : (
+                      <div className="w-full py-2.5 bg-[#F0F3FA] border border-[#D5DEEF] text-[#638ECB] font-bold text-xs rounded-xl text-center">
+                        Session Active
+                      </div>
+                    )}
                   </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex justify-between text-[10px] font-black text-slate-500">
-                      <span>Progress</span>
-                      <span>{student.progressPct}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#F0F3FA] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-300 ${
-                          isFlagged ? "bg-rose-500" : "bg-[#395886]"
-                        }`}
-                        style={{ width: `${student.progressPct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Alert Box for Violations */}
-                  {isFlagged && (
-                    <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-rose-700 space-y-1">
-                      <p className="font-bold flex items-center gap-1.5 text-[11px]">
-                        <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-rose-600" />
-                        <span>{student.violation}</span>
-                      </p>
-                      <p className="text-[10px] text-rose-400 font-medium pl-5">
-                        Flagged at {student.flaggedAt}
-                      </p>
-                    </div>
-                  )}
                 </div>
-
-                {/* Card Footer Button */}
-                <div className="pt-2">
-                  {isFlagged ? (
-                    <button
-                      onClick={() => handleResolve(student.id)}
-                      className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all active:scale-[0.98] cursor-pointer"
-                    >
-                      Review & Resolve Violation
-                    </button>
-                  ) : (
-                    <div className="w-full py-2.5 bg-[#F0F3FA] border border-[#D5DEEF] text-[#638ECB] font-bold text-xs rounded-xl text-center">
-                      Session Active
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

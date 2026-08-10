@@ -4,33 +4,72 @@ import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useExamStore } from "@/store/useExamStore";
 
+interface StudentSession {
+  studentName: string;
+  studentId: string;
+  roomCode: string;
+  requestId: string;
+  submittedAt: string;
+}
+
 export default function StudentExamPage() {
   const params = useParams();
   const router = useRouter();
   const roomCode = (params.roomCode as string)?.toUpperCase();
 
   const exams = useExamStore((state) => state.exams);
+  const flagTabSwitch = useExamStore((state) => state.flagTabSwitch);
   const currentExam = exams.find((e) => e.roomCode.toUpperCase() === roomCode);
 
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [studentName, setStudentName] = useState<string>("");
+  const [requestId, setRequestId] = useState<string>("");
+
+  // Load the student's own session to know which request is theirs
+  useEffect(() => {
+    const raw = sessionStorage.getItem("esame_student_session");
+    if (!raw) {
+      setIsAuthorized(false);
+      return;
+    }
+    const session: StudentSession = JSON.parse(raw);
+    setRequestId(session.requestId);
+  }, []);
 
   useEffect(() => {
-    if (!currentExam) {
+    if (!currentExam || !requestId) {
+      if (currentExam && !requestId) return; // still loading session
       setIsAuthorized(false);
       return;
     }
 
-    // Check if there is an approved request for this session
-    const approvedRequest = currentExam.requests.find((r) => r.status === "approved");
+    const myRequest = currentExam.requests.find((r) => r.id === requestId);
 
-    if (approvedRequest) {
+    if (myRequest?.status === "approved") {
       setIsAuthorized(true);
-      setStudentName(approvedRequest.name);
+      setStudentName(myRequest.name);
     } else {
       setIsAuthorized(false);
     }
-  }, [currentExam]);
+  }, [currentExam, requestId]);
+
+  // Tab-switch / focus-loss detection — only active once authorized
+  useEffect(() => {
+    if (!isAuthorized || !currentExam || !requestId) return;
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        flagTabSwitch(roomCode, requestId);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [isAuthorized, currentExam, requestId, roomCode, flagTabSwitch]);
+
+  const myRequest = currentExam?.requests.find((r) => r.id === requestId);
+  const isLocked = Boolean(myRequest?.isLocked);
 
   if (isAuthorized === null) {
     return (
@@ -40,7 +79,6 @@ export default function StudentExamPage() {
     );
   }
 
-  // Guard for Unapproved Students
   if (!isAuthorized || !currentExam) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center p-4">
@@ -66,7 +104,35 @@ export default function StudentExamPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6 text-slate-900">
+    <div className="relative max-w-4xl mx-auto p-6 space-y-6 text-slate-900">
+      {/* Lock overlay — blocks the exam until the teacher grants permission */}
+      {isLocked && (
+        <div className="fixed inset-0 z-50 bg-navy-900/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center space-y-4 shadow-2xl">
+            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
+              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v2" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-slate-900">Exam Locked</h2>
+            <p className="text-sm text-slate-500">
+              We detected you switched away from this tab. Your exam has been
+              paused and flagged for your teacher.
+            </p>
+            <p className="text-xs text-slate-400">
+              Stay on this page — you will be able to continue once your teacher
+              grants permission.
+            </p>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-xs font-medium text-amber-700">
+                Waiting for teacher approval...
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
