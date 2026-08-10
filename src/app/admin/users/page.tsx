@@ -1,153 +1,171 @@
 "use client";
 
-import React, { useState } from 'react';
-import { Search, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState } from "react";
+import Link from "next/link";
+import { Search, ChevronRight, Radio } from "lucide-react";
 
-const initialUsers = [
-  { id: 1, name: 'Dr. Alan Grant', email: 'agrant@university.edu', role: 'Teacher', status: 'Active', lastLogin: '2026-07-15 08:30 AM' },
-  { id: 2, name: 'Sarah Harding', email: 'sharding@school.org', role: 'Teacher', status: 'Active', lastLogin: '2026-07-15 09:15 AM' },
-  { id: 3, name: 'Ian Malcolm', email: 'imalcolm@institute.edu', role: 'Organization Admin', status: 'Suspended', lastLogin: '2026-07-10 14:20 PM' },
-];
+interface OrganizationSummary {
+  id: string;
+  name: string;
+  code: string;
+  status: "active" | "inactive";
+  teachersCount: number;
+  studentsCount: number;
+  onlineCount: number;
+}
 
-export default function AdminUsers() {
-  const [users, setUsers] = useState(initialUsers);
-  const [search, setSearch] = useState('');
+export default function AdminManageOrganizationsPage() {
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const handleAction = (id: number, action: string) => {
-    if (action === 'Delete') {
-      setUsers(users.filter(user => user.id !== id));
-      return;
-    }
-    if (action === 'Force Logout') {
-      alert(`Forced logout for user ID: ${id}`);
-      return;
-    }
-    
-    setUsers(users.map(user => {
-      if (user.id === id) {
-        if (action === 'Activate') return { ...user, status: 'Active' };
-        if (action === 'Deactivate') return { ...user, status: 'Deactivated' };
-        if (action === 'Suspend') return { ...user, status: 'Suspended' };
-      }
-      return user;
-    }));
-  };
+  const [organizations] = useState<OrganizationSummary[]>([
+    {
+      id: "org-01",
+      name: "Faculty of Computer Science & Engineering",
+      code: "FCSE-MAIN",
+      status: "active",
+      teachersCount: 14,
+      studentsCount: 320,
+      onlineCount: 2,
+    },
+    {
+      id: "org-02",
+      name: "School of Software Development",
+      code: "SSD-CAMPUS",
+      status: "active",
+      teachersCount: 8,
+      studentsCount: 180,
+      onlineCount: 1,
+    },
+    {
+      id: "org-03",
+      name: "Institute of Technology & Science",
+      code: "ITS-MAIN",
+      status: "active",
+      teachersCount: 24,
+      studentsCount: 520,
+      onlineCount: 5,
+    },
+    {
+      id: "org-04",
+      name: "National School of Engineering",
+      code: "NSE-CAMPUS",
+      status: "active",
+      teachersCount: 18,
+      studentsCount: 340,
+      onlineCount: 3,
+    },
+  ]);
 
-  const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(search.toLowerCase()) || 
-    user.email.toLowerCase().includes(search.toLowerCase())
+  const filteredOrgs = organizations.filter(
+    (org) =>
+      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      org.code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <div className="space-y-6 font-sans animate-in fade-in duration-300">
-      
-      {/* HEADER CARD */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 sm:p-8 rounded-3xl shadow-xs border border-slate-200">
+    <div className="w-full space-y-6 font-sans">
+      {/* PAGE HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <span className="text-[10px] font-black tracking-wider text-sky-700 uppercase block mb-1">
-            IDENTITY & ACCESS MANAGEMENT
+          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+            System Governance
           </span>
-          <h2 className="text-2xl font-black text-navy-900 tracking-tight">Manage Users</h2>
-          <p className="text-xs font-medium text-slate-400 mt-0.5">Control access for teachers, instructors, and organization admins.</p>
-        </div>
-        
-        {/* SEARCH INPUT */}
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search users or email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-sky-50/60 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-navy-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 focus:bg-white transition-all"
-          />
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Manage Organizations & Users
+          </h1>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Select an educational organization below to manage its teacher and student directory.
+          </p>
         </div>
       </div>
 
-      {/* USERS TABLE */}
-      <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-sky-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                <th className="px-6 py-4">Name & Email</th>
-                <th className="px-6 py-4">Role</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Last Login</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-xs font-medium">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-sky-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-navy-900 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
-                        {user.name[0]}
-                      </div>
-                      <div>
-                        <div className="font-bold text-navy-900">{user.name}</div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">{user.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  
-                  <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-sky-50 text-navy-900 border border-slate-200">
-                      {user.role}
-                    </span>
-                  </td>
-                  
-                  <td className="px-6 py-4">
-                    {user.status === 'Active' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-sky-50 text-navy-900 border border-sky-200">
-                        <CheckCircle2 className="w-3 h-3 text-sky-700" /> Active
-                      </span>
-                    ) : user.status === 'Suspended' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200">
-                        <AlertCircle className="w-3 h-3" /> Suspended
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-100 text-slate-600 border border-slate-200">
-                        {user.status}
-                      </span>
-                    )}
-                  </td>
-                  
-                  <td className="px-6 py-4 text-slate-500 font-mono text-[11px]">{user.lastLogin}</td>
-                  
-                  <td className="px-6 py-4 text-right">
-                    <select 
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleAction(user.id, e.target.value);
-                          e.target.value = "";
-                        }
-                      }}
-                      className="text-xs font-bold text-navy-900 bg-sky-50 border border-slate-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all cursor-pointer shadow-xs hover:bg-white"
-                      defaultValue=""
-                    >
-                      <option value="" disabled className="text-slate-400 bg-white">Actions</option>
-                      {user.status !== 'Active' && <option value="Activate" className="bg-white text-navy-900">Activate</option>}
-                      {user.status === 'Active' && <option value="Deactivate" className="bg-white text-navy-900">Deactivate</option>}
-                      {user.status === 'Active' && <option value="Suspend" className="bg-white text-rose-600">Suspend</option>}
-                      {user.status === 'Active' && <option value="Force Logout" className="bg-white text-navy-900">Force Logout</option>}
-                      <option value="Delete" className="bg-white text-rose-600">Delete</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
+      {/* SEARCH BAR */}
+      <div className="relative w-full sm:w-96">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          placeholder="Search organization by name or code..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400 shadow-2xs"
+        />
+      </div>
 
-              {filteredUsers.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-12 text-center text-slate-400 text-xs font-medium">
-                    No users found matching your search.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* ORGANIZATION CARDS GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {filteredOrgs.length > 0 ? (
+          filteredOrgs.map((org) => (
+            <div
+              key={org.id}
+              className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4 hover:border-slate-300 transition-all flex flex-col justify-between"
+            >
+              <div className="space-y-3">
+                {/* CARD TOP META */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 uppercase">
+                    {org.code}
+                  </span>
+                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
+                    Active
+                  </span>
+                </div>
+
+                {/* CARD TITLE */}
+                <h2 className="text-base font-bold text-slate-900 tracking-tight leading-snug">
+                  {org.name}
+                </h2>
+
+                {/* METRICS SUB-BOXES */}
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Teachers
+                    </p>
+                    <p className="text-base font-bold text-slate-900 mt-0.5">
+                      {org.teachersCount}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Students
+                    </p>
+                    <p className="text-base font-bold text-slate-900 mt-0.5">
+                      {org.studentsCount}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Online Now
+                    </p>
+                    <p className="text-base font-bold text-emerald-600 mt-0.5 inline-flex items-center gap-1 justify-center">
+                      <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
+                      {org.onlineCount}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* ACTION FOOTER LINK */}
+              <div className="pt-2 flex justify-end">
+                <Link
+                  href={`/admin/users/${org.id}`}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600 hover:text-sky-700 transition-colors group cursor-pointer"
+                >
+                  <span>Manage Organization Roster</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="col-span-2 py-12 text-center bg-white rounded-xl border border-slate-200">
+            <p className="text-xs font-medium text-slate-400">
+              No organizations found matching "{searchQuery}".
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

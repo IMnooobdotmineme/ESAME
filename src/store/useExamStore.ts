@@ -8,6 +8,8 @@ export interface StudentRequest {
   currentQuestion?: number;
   tabSwitches?: number;
   isSubmitted?: boolean;
+  isLocked?: boolean;
+  lastLockedAt?: string;
 }
 
 export interface Exam {
@@ -37,6 +39,8 @@ interface ExamStore {
   deleteExam: (id: string) => void;
   startExam: (roomCode: string) => void;
   endExam: (roomCode: string) => void;
+  flagTabSwitch: (roomCode: string, requestId: string) => void;
+  grantContinue: (roomCode: string, requestId: string) => void;
 }
 
 export const useExamStore = create<ExamStore>((set, get) => ({
@@ -59,6 +63,7 @@ export const useExamStore = create<ExamStore>((set, get) => ({
           currentQuestion: 1,
           tabSwitches: 0,
           isSubmitted: false,
+          isLocked: false,
         },
       ],
     },
@@ -94,6 +99,7 @@ export const useExamStore = create<ExamStore>((set, get) => ({
       currentQuestion: 1,
       tabSwitches: 0,
       isSubmitted: false,
+      isLocked: false,
     };
 
     const updatedExams = [...state.exams];
@@ -161,6 +167,44 @@ export const useExamStore = create<ExamStore>((set, get) => ({
           ? { ...exam, isEnded: true }
           : exam
       ),
+    }));
+  },
+
+  flagTabSwitch: (roomCode, requestId) => {
+    set((state) => ({
+      exams: state.exams.map((exam) => {
+        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
+        return {
+          ...exam,
+          requests: exam.requests.map((req) =>
+            req.id === requestId
+              ? {
+                  ...req,
+                  tabSwitches: (req.tabSwitches ?? 0) + 1,
+                  isLocked: true,
+                  lastLockedAt: new Date().toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                }
+              : req
+          ),
+        };
+      }),
+    }));
+  },
+
+  grantContinue: (roomCode, requestId) => {
+    set((state) => ({
+      exams: state.exams.map((exam) => {
+        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
+        return {
+          ...exam,
+          requests: exam.requests.map((req) =>
+            req.id === requestId ? { ...req, isLocked: false } : req
+          ),
+        };
+      }),
     }));
   },
 }));

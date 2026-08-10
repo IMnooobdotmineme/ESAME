@@ -7,7 +7,12 @@ import {
   Download,
   X,
   Check,
-  Edit3
+  Edit3,
+  FileSpreadsheet,
+  FileText,
+  HelpCircle,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 
 // Types
@@ -90,12 +95,14 @@ export default function GradingPage() {
             {
               id: "q2",
               type: "essay",
-              questionText: "Explain the difference between Object-Oriented Programming (OOP) and Functional Programming.",
+              questionText:
+                "Explain the difference between Object-Oriented Programming (OOP) and Functional Programming.",
               maxPoints: 40,
               studentAnswer:
                 "Object-Oriented Programming (OOP) organizes code around objects containing data fields and methods. Functional Programming treats computation as the evaluation of mathematical functions and avoids mutable data.",
               manualScore: 38,
-              feedback: "Great summary! Clear distinction made regarding state mutability.",
+              feedback:
+                "Great summary! Clear distinction made regarding state mutability.",
             },
           ],
         },
@@ -121,7 +128,8 @@ export default function GradingPage() {
             {
               id: "q2",
               type: "essay",
-              questionText: "Explain the difference between Object-Oriented Programming (OOP) and Functional Programming.",
+              questionText:
+                "Explain the difference between Object-Oriented Programming (OOP) and Functional Programming.",
               maxPoints: 40,
               studentAnswer:
                 "OOP uses classes and objects to bundle data and functionality together. Functional programming focuses on pure functions and immutability.",
@@ -154,9 +162,11 @@ export default function GradingPage() {
             {
               id: "q101",
               type: "essay",
-              questionText: "Detail the time complexity of QuickSort in best, average, and worst cases.",
+              questionText:
+                "Detail the time complexity of QuickSort in best, average, and worst cases.",
               maxPoints: 30,
-              studentAnswer: "Best case is O(n log n), Average is O(n log n), and Worst case is O(n^2) when the pivot is poorly chosen.",
+              studentAnswer:
+                "Best case is O(n log n), Average is O(n log n), and Worst case is O(n^2) when the pivot is poorly chosen.",
               manualScore: 0,
               feedback: "",
             },
@@ -227,15 +237,22 @@ export default function GradingPage() {
           };
         });
 
-        const pendingCount = updatedSubmissions.filter((s) => s.status === "pending_review").length;
+        const pendingCount = updatedSubmissions.filter(
+          (s) => s.status === "pending_review"
+        ).length;
 
         // Recalculate Class Average
-        const evaluatedSubs = updatedSubmissions.filter((s) => s.status === "evaluated");
+        const evaluatedSubs = updatedSubmissions.filter(
+          (s) => s.status === "evaluated"
+        );
         const totalPct = evaluatedSubs.reduce((acc, curr) => {
           const score = (curr.autoPoints || 0) + (curr.manualPoints || 0);
           return acc + (score / curr.totalMaxPoints) * 100;
         }, 0);
-        const newAverage = evaluatedSubs.length > 0 ? Math.round(totalPct / evaluatedSubs.length) : exam.classAverage;
+        const newAverage =
+          evaluatedSubs.length > 0
+            ? Math.round(totalPct / evaluatedSubs.length)
+            : exam.classAverage;
 
         return {
           ...exam,
@@ -249,6 +266,54 @@ export default function GradingPage() {
     setGradingSubmission(null);
   };
 
+  // Export Excel / CSV Functionality
+  const handleExportExcel = (exam: ExamGroup) => {
+    const headers = [
+      "Student ID",
+      "Student Name",
+      "Submission Time",
+      "Auto Points (MCQ)",
+      "Manual Points (Essay)",
+      "Net Score Weight",
+      "Status",
+    ];
+
+    const rows = exam.submissions.map((sub) => {
+      const totalScore = (sub.autoPoints || 0) + (sub.manualPoints || 0);
+      const netScore =
+        sub.status === "evaluated"
+          ? `${totalScore} / ${sub.totalMaxPoints} (${Math.round(
+              (totalScore / sub.totalMaxPoints) * 100
+            )}%)`
+          : "Incomplete";
+
+      return [
+        sub.studentId,
+        `"${sub.studentName}"`,
+        `"${sub.submittedAt}"`,
+        `${sub.autoPoints} pts`,
+        sub.manualPoints !== null ? `${sub.manualPoints} pts` : "Ungraded",
+        `"${netScore}"`,
+        sub.status === "evaluated" ? "EVALUATED" : "REVIEW NEEDED",
+      ];
+    });
+
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute(
+      "download",
+      `${exam.code}_${exam.title.replace(/[^a-zA-Z0-9]/g, "_")}_Results.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Export PDF Script Functionality
   const handleDownloadPDF = async (submission: StudentSubmission) => {
     setIsExporting(true);
@@ -258,7 +323,8 @@ export default function GradingPage() {
       if (!pdfWindow.html2pdf) {
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+          script.src =
+            "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
           script.onload = () => resolve();
           script.onerror = () => reject(new Error("Failed to load PDF library"));
           document.head.appendChild(script);
@@ -268,95 +334,114 @@ export default function GradingPage() {
       const computedManualPoints = submission.answers.reduce((acc, q) => {
         if (q.type === "essay") {
           const currentVal = manualScores[q.id];
-          const score = typeof currentVal === "number" ? currentVal : (q.manualScore ?? 0);
+          const score =
+            typeof currentVal === "number" ? currentVal : q.manualScore ?? 0;
           return acc + score;
         }
         return acc;
       }, 0);
 
-      const totalCalculatedScore = (submission.autoPoints || 0) + computedManualPoints;
+      const totalCalculatedScore =
+        (submission.autoPoints || 0) + computedManualPoints;
 
       const container = document.createElement("div");
       container.style.padding = "30px";
       container.style.fontFamily = "Arial, sans-serif";
-      container.style.color = "#395886";
+      container.style.color = "#0f172a";
       container.style.backgroundColor = "#ffffff";
 
       container.innerHTML = `
-        <table style="width: 100%; border-bottom: 3px solid #395886; padding-bottom: 15px; margin-bottom: 20px;">
+        <table style="width: 100%; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 20px;">
           <tr>
             <td style="vertical-align: top;">
-              <h1 style="margin: 0; color: #395886; font-size: 24px; font-weight: 800;">Official Examination Script</h1>
-              <p style="margin: 4px 0 0 0; color: #475569; font-size: 13px;"><strong>Exam Title:</strong> ${currentExam?.title || "Examination"} (${currentExam?.code || ""})</p>
-              <p style="margin: 2px 0 0 0; color: #475569; font-size: 13px;"><strong>Student:</strong> ${submission.studentName} &nbsp;|&nbsp; <strong>ID:</strong> ${submission.studentId}</p>
-              <p style="margin: 2px 0 0 0; color: #64748b; font-size: 12px;"><strong>Submission Date:</strong> ${submission.submittedAt}</p>
+              <h1 style="margin: 0; color: #0f172a; font-size: 22px; font-weight: 800;">Official Examination Script</h1>
+              <p style="margin: 4px 0 0 0; color: #475569; font-size: 13px;"><strong>Exam Title:</strong> ${
+                currentExam?.title || "Examination"
+              } (${currentExam?.code || ""})</p>
+              <p style="margin: 2px 0 0 0; color: #475569; font-size: 13px;"><strong>Student:</strong> ${
+                submission.studentName
+              } &nbsp;|&nbsp; <strong>ID:</strong> ${submission.studentId}</p>
+              <p style="margin: 2px 0 0 0; color: #64748b; font-size: 12px;"><strong>Submission Date:</strong> ${
+                submission.submittedAt
+              }</p>
             </td>
             <td style="vertical-align: top; text-align: right;">
-              <span style="display: inline-block; padding: 6px 14px; background-color: #395886; color: white; font-size: 11px; font-weight: bold; border-radius: 6px; text-transform: uppercase;">
+              <span style="display: inline-block; padding: 6px 14px; background-color: #0f172a; color: white; font-size: 11px; font-weight: bold; border-radius: 6px; text-transform: uppercase;">
                 ${submission.status.replace("_", " ")}
               </span>
             </td>
           </tr>
         </table>
 
-        <table style="width: 100%; background: #F0F3FA; border: 1px solid #D5DEEF; border-radius: 10px; margin-bottom: 25px; text-align: center; border-collapse: collapse;">
+        <table style="width: 100%; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 25px; text-align: center; border-collapse: collapse;">
           <tr>
             <td style="padding: 15px; width: 33%;">
-              <div style="font-size: 10px; text-transform: uppercase; color: #8AAEE0; font-weight: bold;">Auto MCQ Score</div>
-              <div style="font-size: 18px; font-weight: 800; color: #395886; margin-top: 2px;">${submission.autoPoints} pts</div>
+              <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold;">Auto MCQ Score</div>
+              <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px;">${
+                submission.autoPoints
+              } pts</div>
             </td>
-            <td style="padding: 15px; width: 33%; border-left: 1px solid #D5DEEF; border-right: 1px solid #D5DEEF;">
-              <div style="font-size: 10px; text-transform: uppercase; color: #8AAEE0; font-weight: bold;">Manual Essay Score</div>
-              <div style="font-size: 18px; font-weight: 800; color: #395886; margin-top: 2px;">${computedManualPoints} pts</div>
+            <td style="padding: 15px; width: 33%; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+              <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold;">Manual Essay Score</div>
+              <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px;">${computedManualPoints} pts</div>
             </td>
             <td style="padding: 15px; width: 33%;">
-              <div style="font-size: 10px; text-transform: uppercase; color: #8AAEE0; font-weight: bold;">Total Final Mark</div>
-              <div style="font-size: 18px; font-weight: 800; color: #395886; margin-top: 2px;">${totalCalculatedScore} / ${submission.totalMaxPoints}</div>
+              <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold;">Total Final Mark</div>
+              <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px;">${totalCalculatedScore} / ${
+        submission.totalMaxPoints
+      }</div>
             </td>
           </tr>
         </table>
 
-        <h3 style="font-size: 15px; font-weight: 800; color: #395886; margin-bottom: 15px; border-bottom: 1px solid #F0F3FA; padding-bottom: 8px;">Detailed Evaluation</h3>
+        <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Detailed Evaluation</h3>
 
         ${submission.answers
           .map((q, idx) => {
             const assignedScore =
               q.type === "mcq"
                 ? q.autoScore
-                : (manualScores[q.id] !== undefined && manualScores[q.id] !== ""
-                    ? manualScores[q.id]
-                    : (q.manualScore ?? 0));
+                : manualScores[q.id] !== undefined &&
+                  manualScores[q.id] !== ""
+                ? manualScores[q.id]
+                : q.manualScore ?? 0;
 
             const remarkText = feedbacks[q.id] || q.feedback;
 
             return `
-              <div style="border: 1px solid #D5DEEF; border-radius: 10px; padding: 16px; margin-bottom: 16px; background-color: #ffffff;">
+              <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 16px; background-color: #ffffff;">
                 <table style="width: 100%; margin-bottom: 10px;">
                   <tr>
-                    <td style="font-size: 11px; font-weight: bold; color: #64748b;">QUESTION ${idx + 1} (${q.type.toUpperCase()})</td>
+                    <td style="font-size: 11px; font-weight: bold; color: #64748b;">QUESTION ${
+                      idx + 1
+                    } (${q.type.toUpperCase()})</td>
                     <td style="text-align: right;">
-                      <span style="color: #395886; background: #D5DEEF; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">
+                      <span style="color: #0f172a; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">
                         Assigned: ${assignedScore} / ${q.maxPoints} pts
                       </span>
                     </td>
                   </tr>
                 </table>
 
-                <div style="font-weight: 700; font-size: 14px; color: #395886; margin-bottom: 10px;">${q.questionText}</div>
+                <div style="font-weight: 700; font-size: 13px; color: #0f172a; margin-bottom: 10px;">${
+                  q.questionText
+                }</div>
                 
-                <div style="font-size: 10px; font-weight: bold; color: #8AAEE0; text-transform: uppercase; margin-bottom: 4px;">Student Answer:</div>
-                <div style="background: #F0F3FA; color: #395886; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap; border: 1px solid #D5DEEF;">${q.studentAnswer}</div>
+                <div style="font-size: 10px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Student Answer:</div>
+                <div style="background: #f8fafc; color: #0f172a; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; border: 1px solid #e2e8f0;">${
+                  q.studentAnswer
+                }</div>
 
                 ${
                   q.type === "mcq"
-                    ? `<p style="font-size:11px; color:#395886; font-weight: bold; margin-top: 6px;">Correct Answer: ${q.correctAnswer}</p>`
+                    ? `<p style="font-size:11px; color:#0f172a; font-weight: bold; margin-top: 6px;">Correct Answer: ${q.correctAnswer}</p>`
                     : ""
                 }
 
                 ${
                   remarkText
                     ? `
-                  <div style="background: #F0F3FA; border: 1px solid #B1C9EF; color: #395886; padding: 10px; border-radius: 8px; margin-top: 10px; font-size: 12px;">
+                  <div style="background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 12px;">
                     <strong>Teacher Remarks:</strong> ${remarkText}
                   </div>
                 `
@@ -368,7 +453,10 @@ export default function GradingPage() {
           .join("")}
       `;
 
-      const cleanFileName = `${submission.studentName.replace(/\s+/g, "_")}_${submission.studentId}_Result.pdf`;
+      const cleanFileName = `${submission.studentName.replace(
+        /\s+/g,
+        "_"
+      )}_${submission.studentId}_Result.pdf`;
       const options = {
         margin: 10,
         filename: cleanFileName,
@@ -387,75 +475,89 @@ export default function GradingPage() {
   };
 
   return (
-    <div className="space-y-6 font-sans bg-[#F0F3FA]/30 p-6 rounded-3xl">
+    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
       {/* LEVEL 1: EXAMS LIST VIEW */}
       {!selectedExamId && (
         <div className="space-y-6">
           {/* Header Card */}
-          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#D5DEEF] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
-                EVALUATION DESK
+              <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+                Evaluation Desk
               </span>
-              <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
                 Grading & Results
               </h1>
-              <p className="text-xs font-medium text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Select an exam session below to review student scripts and score manual essay questions.
               </p>
             </div>
           </div>
 
           {/* Exam Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {exams.map((exam) => (
               <div
                 key={exam.id}
                 onClick={() => setSelectedExamId(exam.id)}
-                className="bg-white p-6 rounded-2xl border border-[#D5DEEF] hover:border-[#8AAEE0] transition-all shadow-sm hover:shadow-md cursor-pointer group space-y-5"
+                className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all cursor-pointer group space-y-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <span className="text-[10px] font-bold font-mono text-[#395886] bg-[#D5DEEF] px-2.5 py-1 rounded-md tracking-wide uppercase inline-block">
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase inline-block">
                       {exam.code}
                     </span>
-                    <h3 className="text-base font-black text-slate-900 group-hover:text-[#395886] transition-colors pt-1">
+                    <h3 className="text-sm font-bold text-slate-900 group-hover:text-sky-600 transition-colors pt-0.5">
                       {exam.title}
                     </h3>
-                    <p className="text-xs font-medium text-slate-400">{exam.department}</p>
+                    <p className="text-xs font-medium text-slate-500">
+                      {exam.department}
+                    </p>
                   </div>
 
                   {exam.pendingReviews > 0 ? (
-                    <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide shrink-0">
-                      {exam.pendingReviews} NEEDS REVIEW
+                    <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                      {exam.pendingReviews} Needs Review
                     </span>
                   ) : (
-                    <span className="bg-[#D5DEEF] text-[#395886] text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide shrink-0">
-                      ALL GRADED
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                      All Graded
                     </span>
                   )}
                 </div>
 
                 {/* Exam Quick Stats Boxes */}
-                <div className="grid grid-cols-3 gap-3 pt-3">
-                  <div className="bg-[#F0F3FA] p-3 rounded-xl text-center">
-                    <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">SUBMISSIONS</p>
-                    <p className="text-base font-black text-[#395886] mt-0.5">{exam.totalSubmissions}</p>
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Submissions
+                    </p>
+                    <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+                      {exam.totalSubmissions}
+                    </p>
                   </div>
-                  <div className="bg-[#F0F3FA] p-3 rounded-xl text-center">
-                    <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">PENDING ESSAYS</p>
-                    <p className="text-base font-black text-amber-600 mt-0.5">{exam.pendingReviews}</p>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Pending Essays
+                    </p>
+                    <p className="text-sm font-extrabold text-amber-700 mt-0.5">
+                      {exam.pendingReviews}
+                    </p>
                   </div>
-                  <div className="bg-[#F0F3FA] p-3 rounded-xl text-center">
-                    <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">CLASS AVG.</p>
-                    <p className="text-base font-black text-[#395886] mt-0.5">{exam.classAverage}%</p>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Class Avg.
+                    </p>
+                    <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+                      {exam.classAverage}%
+                    </p>
                   </div>
                 </div>
 
                 {/* Action Link */}
-                <div className="flex items-center justify-end gap-1 text-xs font-bold text-[#395886] group-hover:translate-x-1 transition-transform pt-1">
+                <div className="flex items-center justify-end gap-1 text-xs font-semibold text-slate-600 group-hover:text-slate-900 group-hover:translate-x-0.5 transition-all pt-1">
                   <span>Open Student Submissions</span>
-                  <ChevronRight className="w-4 h-4 text-[#638ECB]" />
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
                 </div>
               </div>
             ))}
@@ -466,34 +568,49 @@ export default function GradingPage() {
       {/* LEVEL 2: STUDENT ROSTER VIEW */}
       {selectedExamId && currentExam && (
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-2xl border border-[#D5DEEF] shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-xs">
             <div className="space-y-1">
               <button
                 onClick={() => setSelectedExamId(null)}
-                className="text-xs font-bold text-[#395886] hover:text-[#638ECB] hover:underline flex items-center gap-1 mb-2 transition-colors"
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 mb-1 transition-colors cursor-pointer"
               >
-                <ArrowLeft className="w-4 h-4 text-[#395886]" />
+                <ArrowLeft className="w-4 h-4" />
                 <span>Back to All Exams</span>
               </button>
-              <h1 className="text-2xl font-black text-[#395886] tracking-tight">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
                 {currentExam.title}
               </h1>
-              <p className="text-xs font-medium text-slate-400 font-mono">Exam Code: {currentExam.code}</p>
+              <p className="text-xs font-medium text-slate-500 font-mono">
+                Exam Code: {currentExam.code}
+              </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="bg-[#F0F3FA] border border-[#D5DEEF] px-4 py-2.5 rounded-xl text-right">
-                <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider">Pending Essays</p>
-                <p className="text-sm font-black text-amber-600">{currentExam.pendingReviews} Students</p>
+              {/* Excel Export Button */}
+              <button
+                onClick={() => handleExportExcel(currentExam)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-2xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Export Excel</span>
+              </button>
+
+              <div className="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl text-right">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Pending Essays
+                </p>
+                <p className="text-xs font-extrabold text-amber-700">
+                  {currentExam.pendingReviews} Students
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-[#D5DEEF] overflow-hidden shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-[#D5DEEF] bg-[#F0F3FA] text-[10px] font-black text-[#8AAEE0] uppercase tracking-wider">
+                  <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     <th className="p-4 pl-6">Student Meta</th>
                     <th className="p-4">Submission Time</th>
                     <th className="p-4">Auto Points (MCQ)</th>
@@ -503,44 +620,63 @@ export default function GradingPage() {
                     <th className="p-4 pr-6 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#D5DEEF]/60 text-xs font-medium text-slate-700">
+                <tbody className="divide-y divide-slate-200 text-xs font-medium text-slate-700">
                   {currentExam.submissions.map((sub) => {
                     const isEvaluated = sub.status === "evaluated";
-                    const totalScore = (sub.autoPoints || 0) + (sub.manualPoints || 0);
+                    const totalScore =
+                      (sub.autoPoints || 0) + (sub.manualPoints || 0);
 
                     return (
-                      <tr key={sub.id} className="hover:bg-[#F0F3FA]/50 transition-colors">
+                      <tr
+                        key={sub.id}
+                        className="hover:bg-slate-50/50 transition-colors"
+                      >
                         <td className="p-4 pl-6">
-                          <p className="font-black text-[#395886]">{sub.studentName}</p>
-                          <p className="text-[10px] font-mono font-bold text-slate-400">{sub.studentId}</p>
+                          <p className="font-bold text-slate-900">
+                            {sub.studentName}
+                          </p>
+                          <p className="text-[10px] font-mono font-bold text-slate-400">
+                            {sub.studentId}
+                          </p>
                         </td>
-                        <td className="p-4 text-slate-500 font-medium">{sub.submittedAt}</td>
-                        <td className="p-4 font-bold text-slate-700">{sub.autoPoints} pts</td>
+                        <td className="p-4 text-slate-500 font-medium">
+                          {sub.submittedAt}
+                        </td>
+                        <td className="p-4 font-bold text-slate-800">
+                          {sub.autoPoints} pts
+                        </td>
                         <td className="p-4">
                           {sub.manualPoints !== null ? (
-                            <span className="font-bold text-slate-700">{sub.manualPoints} pts</span>
+                            <span className="font-bold text-slate-800">
+                              {sub.manualPoints} pts
+                            </span>
                           ) : (
-                            <span className="italic text-amber-600 font-bold">Ungraded</span>
+                            <span className="italic text-amber-700 font-bold">
+                              Ungraded
+                            </span>
                           )}
                         </td>
                         <td className="p-4">
                           {isEvaluated ? (
-                            <span className="font-black text-[#395886] text-xs">
+                            <span className="font-bold text-slate-900 text-xs">
                               {totalScore} / {sub.totalMaxPoints} (
-                              {Math.round((totalScore / sub.totalMaxPoints) * 100)}%)
+                              {Math.round((totalScore / sub.totalMaxPoints) * 100)}
+                              %)
                             </span>
                           ) : (
-                            <span className="text-slate-400 italic font-medium">Incomplete</span>
+                            <span className="text-slate-400 italic font-medium">
+                              Incomplete
+                            </span>
                           )}
                         </td>
                         <td className="p-4">
                           {isEvaluated ? (
-                            <span className="bg-[#D5DEEF] text-[#395886] text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider">
-                              EVALUATED
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                              Evaluated
                             </span>
                           ) : (
-                            <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider">
-                              REVIEW NEEDED
+                            <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                              Review Needed
                             </span>
                           )}
                         </td>
@@ -548,21 +684,23 @@ export default function GradingPage() {
                           <button
                             onClick={() => handleDownloadPDF(sub)}
                             disabled={isExporting}
-                            className="py-2 px-3 bg-[#F0F3FA] hover:bg-[#D5DEEF] text-[#395886] rounded-xl text-xs font-bold transition-all disabled:opacity-50 inline-flex items-center gap-1.5"
+                            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer"
                           >
-                            <Download className="w-3.5 h-3.5 text-[#638ECB]" />
+                            <Download className="w-3.5 h-3.5 text-slate-500" />
                             <span>{isExporting ? "Exporting..." : "PDF"}</span>
                           </button>
                           <button
                             onClick={() => handleOpenGrading(sub)}
-                            className={`py-2 px-4 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 ${
+                            className={`py-1.5 px-3.5 rounded-xl text-xs font-semibold transition-colors inline-flex items-center gap-1.5 cursor-pointer ${
                               isEvaluated
-                                ? "bg-[#F0F3FA] hover:bg-[#D5DEEF] text-[#395886]"
-                                : "bg-[#395886] hover:bg-[#2e476d] text-white shadow-sm active:scale-[0.98]"
+                                ? "bg-slate-100 hover:bg-slate-200 text-slate-800"
+                                : "bg-navy-900 hover:bg-slate-800 text-white shadow-2xs"
                             }`}
                           >
                             <Edit3 className="w-3.5 h-3.5" />
-                            <span>{isEvaluated ? "Review Score" : "Grade Script"}</span>
+                            <span>
+                              {isEvaluated ? "Review Score" : "Grade Script"}
+                            </span>
                           </button>
                         </td>
                       </tr>
@@ -577,94 +715,109 @@ export default function GradingPage() {
 
       {/* LEVEL 3: SCRIPT EVALUATION MODAL */}
       {gradingSubmission && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#395886]/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-3xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col overflow-hidden border border-[#D5DEEF]">
-            {/* Header */}
-            <div className="p-6 bg-[#395886] text-white flex items-center justify-between shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white w-full max-w-3xl max-h-[90vh] rounded-xl shadow-xl flex flex-col overflow-hidden border border-slate-200">
+            {/* Modal Header */}
+            <div className="p-5 bg-navy-900 text-white flex items-center justify-between shrink-0">
               <div>
-                <span className="text-[10px] font-black tracking-widest text-[#B1C9EF] uppercase font-mono block mb-0.5">
+                <span className="text-[10px] font-bold tracking-widest text-slate-300 uppercase font-mono block mb-0.5">
                   Script Review Desk
                 </span>
-                <h3 className="text-lg font-black">{gradingSubmission.studentName}</h3>
-                <p className="text-xs text-[#B1C9EF] font-mono">{gradingSubmission.studentId}</p>
+                <h3 className="text-base font-bold">
+                  {gradingSubmission.studentName}
+                </h3>
+                <p className="text-xs text-slate-300 font-mono">
+                  {gradingSubmission.studentId}
+                </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => handleDownloadPDF(gradingSubmission)}
                   disabled={isExporting}
-                  className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-xs font-bold text-white rounded-xl flex items-center gap-1.5 transition-colors border border-white/10 disabled:opacity-50"
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold text-white rounded-xl flex items-center gap-1.5 transition-colors border border-white/10 disabled:opacity-50 cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5 text-[#B1C9EF]" />
+                  <Download className="w-3.5 h-3.5 text-slate-300" />
                   <span>{isExporting ? "Saving PDF..." : "Download PDF"}</span>
                 </button>
 
                 <button
                   onClick={() => setGradingSubmission(null)}
-                  className="p-1.5 text-white/70 hover:text-white rounded-xl bg-white/10 transition-colors"
+                  className="p-1.5 text-slate-300 hover:text-white rounded-xl bg-white/10 transition-colors cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* Questions Answer Review Body */}
-            <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-[#F0F3FA]/50">
+            <div className="p-5 overflow-y-auto space-y-4 flex-1 bg-slate-50/50">
               {gradingSubmission.answers.map((question, index) => (
                 <div
                   key={question.id}
-                  className="bg-white p-5 rounded-2xl border border-[#D5DEEF] shadow-sm space-y-4"
+                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3"
                 >
-                  <div className="flex items-start justify-between gap-4 border-b border-[#D5DEEF] pb-3">
-                    <span className="text-[10px] font-black text-[#8AAEE0] uppercase tracking-wider">
+                  <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       Question {index + 1} ({question.type.toUpperCase()})
                     </span>
-                    <span className="text-xs font-bold text-[#395886] bg-[#D5DEEF] px-2.5 py-0.5 rounded-lg">
+                    <span className="text-xs font-semibold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
                       Max: {question.maxPoints} pts
                     </span>
                   </div>
 
-                  <p className="text-xs font-black text-[#395886]">{question.questionText}</p>
+                  <p className="text-xs font-bold text-slate-900">
+                    {question.questionText}
+                  </p>
 
                   {/* MCQ View */}
                   {question.type === "mcq" && (
-                    <div className="bg-[#F0F3FA] p-4 rounded-xl space-y-2 border border-[#D5DEEF]">
+                    <div className="bg-slate-50 p-3.5 rounded-xl space-y-2 border border-slate-200">
                       <div className="flex justify-between text-xs font-medium">
                         <span className="text-slate-500">Student Answer:</span>
                         <span
                           className={`font-bold ${
                             question.autoScore === question.maxPoints
-                              ? "text-[#395886]"
-                              : "text-rose-600"
+                              ? "text-emerald-700"
+                              : "text-rose-700"
                           }`}
                         >
                           {question.studentAnswer}
                         </span>
                       </div>
-                      <div className="flex justify-between text-xs font-medium border-t border-[#D5DEEF] pt-2">
-                        <span className="text-slate-500">Correct Answer:</span>
-                        <span className="font-bold text-[#395886]">{question.correctAnswer}</span>
+                      {question.correctAnswer && (
+                        <div className="flex justify-between text-xs font-medium border-t border-slate-200/60 pt-2">
+                          <span className="text-slate-500">Correct Answer:</span>
+                          <span className="font-bold text-slate-900">
+                            {question.correctAnswer}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xs font-bold pt-1 text-slate-900">
+                        <span>Auto Score:</span>
+                        <span>
+                          {question.autoScore} / {question.maxPoints} pts
+                        </span>
                       </div>
                     </div>
                   )}
 
                   {/* Essay View */}
                   {question.type === "essay" && (
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-[10px] font-bold text-[#8AAEE0] uppercase tracking-wider mb-1.5">
-                          Student Written Response:
-                        </p>
-                        <div className="p-4 bg-[#395886] text-white text-xs leading-relaxed rounded-xl font-mono whitespace-pre-wrap border border-[#395886]">
+                    <div className="space-y-3">
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Student Submission
+                        </span>
+                        <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-medium">
                           {question.studentAnswer}
-                        </div>
+                        </p>
                       </div>
 
-                      {/* Inputs */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-                        <div>
-                          <label className="block text-xs font-bold text-[#395886] mb-1">
-                            Assign Score (0 - {question.maxPoints} pts)
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="sm:col-span-1 space-y-1">
+                          <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                            Assign Score (Max {question.maxPoints})
                           </label>
                           <input
                             type="number"
@@ -672,36 +825,38 @@ export default function GradingPage() {
                             max={question.maxPoints}
                             value={manualScores[question.id] ?? ""}
                             onChange={(e) => {
-                              const rawVal = e.target.value;
-                              if (rawVal === "") {
-                                setManualScores({ ...manualScores, [question.id]: "" });
-                              } else {
-                                const val = Number(rawVal);
-                                setManualScores({
-                                  ...manualScores,
-                                  [question.id]: Math.min(question.maxPoints, Math.max(0, val)),
-                                });
-                              }
+                              const val =
+                                e.target.value === ""
+                                  ? ""
+                                  : Math.min(
+                                      question.maxPoints,
+                                      Math.max(0, Number(e.target.value))
+                                    );
+                              setManualScores({
+                                ...manualScores,
+                                [question.id]: val,
+                              });
                             }}
-                            className="w-full p-2.5 bg-white border border-[#D5DEEF] rounded-xl text-xs font-black text-[#395886] focus:outline-none focus:ring-2 focus:ring-[#638ECB]"
+                            className="w-full px-3 py-1.5 bg-white border border-slate-200 focus:border-sky-400 rounded-xl text-xs font-bold text-slate-900 outline-none transition-all"
+                            placeholder={`0 - ${question.maxPoints}`}
                           />
                         </div>
 
-                        <div className="md:col-span-2">
-                          <label className="block text-xs font-bold text-[#395886] mb-1">
-                            Teacher Remarks / Feedback
+                        <div className="sm:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                            Teacher Feedback / Remarks
                           </label>
-                          <input
-                            type="text"
-                            placeholder="Optional feedback for student..."
-                            value={feedbacks[question.id] ?? ""}
+                          <textarea
+                            rows={2}
+                            value={feedbacks[question.id] || ""}
                             onChange={(e) =>
                               setFeedbacks({
                                 ...feedbacks,
                                 [question.id]: e.target.value,
                               })
                             }
-                            className="w-full p-2.5 bg-white border border-[#D5DEEF] rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#638ECB]"
+                            className="w-full px-3 py-1.5 bg-white border border-slate-200 focus:border-sky-400 rounded-xl text-xs font-medium text-slate-900 outline-none transition-all resize-none placeholder:text-slate-400"
+                            placeholder="Add constructive feedback for the student..."
                           />
                         </div>
                       </div>
@@ -711,20 +866,20 @@ export default function GradingPage() {
               ))}
             </div>
 
-            {/* Modal Footer Controls */}
-            <div className="p-5 bg-white border-t border-[#D5DEEF] flex items-center justify-between shrink-0">
+            {/* Modal Footer */}
+            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
               <button
                 onClick={() => setGradingSubmission(null)}
-                className="px-5 py-2.5 bg-[#F0F3FA] hover:bg-[#D5DEEF] text-[#395886] font-bold text-xs rounded-xl transition-colors"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveGrades}
-                className="px-6 py-2.5 bg-[#395886] hover:bg-[#2e476d] text-white font-bold text-xs rounded-xl shadow-sm transition-all active:scale-[0.98] flex items-center gap-2"
+                className="px-4 py-2 bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                <span>Save Grades & Mark Evaluated</span>
+                <span>Save Evaluation</span>
               </button>
             </div>
           </div>

@@ -2,180 +2,239 @@
 
 import React, { useState } from "react";
 import {
-  ShieldCheck,
-  Maximize,
-  AppWindow,
+  Shield,
+  Lock,
+  Maximize2,
+  Eye,
   Copy,
-  Layers,
-  AlertTriangle,
   Save,
+  CheckCircle2,
 } from "lucide-react";
 
 export default function AdminSecurityPage() {
-  const [settings, setSettings] = useState({
-    fullscreenRequired: true,
-    tabDetection: true,
-    copyPasteDetection: true,
-    multipleTabDetection: true,
-    warningLimit: 2,
+  const [policies, setPolicies] = useState({
+    fullscreenMode: true,
+    tabFocusDetection: true,
+    clipboardRestrictions: true,
+    warningThreshold: "3",
+    automatedSessionLock: true,
+    allowTeacherCustomization: true,
   });
 
-  const handleToggle = (key: keyof typeof settings) => {
-    setSettings({ ...settings, [key]: !settings[key] });
+  const [saved, setSaved] = useState(false);
+
+  const handleToggle = (key: keyof typeof policies) => {
+    setPolicies((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Security configurations saved successfully!");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
   };
 
-  const securityFeatures = [
-    {
-      id: "fullscreenRequired",
-      label: "Enforce Fullscreen Mode",
-      desc: "Require students to remain in dedicated fullscreen mode during exams.",
-      icon: Maximize,
-    },
-    {
-      id: "tabDetection",
-      label: "Tab Switching Detection",
-      desc: "Flag and record instances when students navigate away from the active exam.",
-      icon: AppWindow,
-    },
-    {
-      id: "copyPasteDetection",
-      label: "Copy / Paste Interception",
-      desc: "Disable context menus, copying questions, or pasting external clipboard text.",
-      icon: Copy,
-    },
-    {
-      id: "multipleTabDetection",
-      label: "Multiple Device / Tab Prevention",
-      desc: "Prevent concurrent exam attempts on different browsers or devices.",
-      icon: Layers,
-    },
-  ];
-
   return (
-    /* Added mx-auto here to center the container within the page body */
-    <div className="space-y-6 font-sans animate-in fade-in duration-300 max-w-4xl mx-auto">
+    <div className="w-full space-y-6 font-sans">
       {/* PAGE HEADER */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xs border border-[#D5DEEF]">
-        <span className="text-[10px] font-black tracking-wider text-[#638ECB] uppercase block mb-1">
-          GLOBAL RULES
-        </span>
-        <h2 className="text-2xl font-black text-[#395886] tracking-tight">
-          Security Configuration
-        </h2>
-        <p className="text-xs font-medium text-slate-400 mt-0.5">
-          Configure anti-cheating protocols and automated session response
-          triggers.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div>
+          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+            Platform Governance
+          </span>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Global Security Policies
+          </h1>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Configure system-wide default proctoring policies and security guardrails enforced across all organizations.
+          </p>
+        </div>
+
+        <button
+          onClick={handleSave}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
+        >
+          {saved ? (
+            <>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Saved Defaults</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              <span>Save System Defaults</span>
+            </>
+          )}
+        </button>
       </div>
 
-      <form
-        onSubmit={handleSave}
-        className="bg-white p-6 sm:p-8 rounded-3xl shadow-xs border border-[#D5DEEF] space-y-8"
-      >
-        {/* DETECTION TOGGLES */}
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 border-b border-[#D5DEEF] pb-3">
-            <ShieldCheck className="w-5 h-5 text-[#395886]" />
-            <h3 className="text-base font-black text-[#395886]">
-              Proctoring & Detection Controls
-            </h3>
+      {/* TWO COLUMN GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* LEFT COLUMN: DEFAULT ASSESSMENT GUARDRAILS */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+            <Shield className="w-4 h-4 text-slate-700" />
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Default Assessment Guardrails
+            </h2>
           </div>
 
-          <div className="space-y-4">
-            {securityFeatures.map((feature) => {
-              const Icon = feature.icon;
-              const isEnabled = settings[feature.id as keyof typeof settings];
-
-              return (
-                <div
-                  key={feature.id}
-                  className="flex items-start justify-between gap-4 p-4 rounded-2xl hover:bg-[#F0F3FA]/50 transition-colors"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="p-2.5 bg-[#F0F3FA] rounded-xl text-[#395886] mt-0.5">
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-[#395886] text-sm">
-                        {feature.label}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5 font-medium leading-relaxed">
-                        {feature.desc}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Custom Palette Toggle */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleToggle(feature.id as keyof typeof settings)
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      isEnabled ? "bg-[#395886]" : "bg-[#D5DEEF]"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                        isEnabled ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
+          <div className="space-y-3">
+            {/* Fullscreen Mode */}
+            <div
+              onClick={() => handleToggle("fullscreenMode")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-white rounded-lg border border-slate-200 text-slate-700 shrink-0">
+                  <Maximize2 className="w-4 h-4" />
                 </div>
-              );
-            })}
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
+                    Mandatory Fullscreen Mode
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Enforce compulsory full-screen mode by default on new examinations.
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={policies.fullscreenMode}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
+              />
+            </div>
+
+            {/* Tab Focus Detection */}
+            <div
+              onClick={() => handleToggle("tabFocusDetection")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-white rounded-lg border border-slate-200 text-slate-700 shrink-0">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
+                    Tab & Window Focus Detection
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Track tab switching and window blurring events during active tests.
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={policies.tabFocusDetection}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
+              />
+            </div>
+
+            {/* Clipboard Restrictions */}
+            <div
+              onClick={() => handleToggle("clipboardRestrictions")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-white rounded-lg border border-slate-200 text-slate-700 shrink-0">
+                  <Copy className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
+                    Clipboard Restrictions
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Disable copy and paste functions inside exam text editors by default.
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={policies.clipboardRestrictions}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
+              />
+            </div>
           </div>
         </div>
 
-        {/* WARNING RULES */}
-        <div className="space-y-4 pt-6 border-t border-[#D5DEEF]">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h3 className="text-base font-black text-[#395886]">
-              Session Interception & Lock Thresholds
-            </h3>
+        {/* RIGHT COLUMN: LOCK TRIGGER & TEACHER PERMISSIONS */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+            <Lock className="w-4 h-4 text-slate-700" />
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Lock Trigger & Teacher Permissions
+            </h2>
           </div>
 
-          <div className="bg-[#F0F3FA]/60 p-6 rounded-2xl border border-[#D5DEEF] space-y-3">
-            <label className="block text-xs font-bold text-[#395886]">
-              Violation Warning Limit
-            </label>
-            <p className="text-xs text-slate-400 font-medium">
-              Maximum allowable infractions before the platform automatically
-              locks the exam and notifies the proctor.
-            </p>
-            <input
-              type="number"
-              min="1"
-              max="5"
-              value={settings.warningLimit}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  warningLimit: parseInt(e.target.value) || 1,
-                })
-              }
-              className="w-32 px-4 py-2.5 bg-white border border-[#D5DEEF] rounded-xl text-[#395886] font-bold text-xs focus:outline-none focus:border-[#395886] focus:ring-2 focus:ring-[#395886] transition-all"
-            />
+          <div className="space-y-3">
+            {/* Warning Limit Threshold Dropdown */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+              <label className="block text-xs font-bold text-slate-900">
+                System Warning Limit Threshold
+              </label>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Maximum allowed security warnings before an exam session automatically locks.
+              </p>
+              <select
+                value={policies.warningThreshold}
+                onChange={(e) =>
+                  setPolicies({ ...policies, warningThreshold: e.target.value })
+                }
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-400 transition-all cursor-pointer"
+              >
+                <option value="1">1 Violation (Strict Lock)</option>
+                <option value="2">2 Violations (Moderate)</option>
+                <option value="3">3 Violations (Standard Default)</option>
+                <option value="5">5 Violations (Lenient)</option>
+              </select>
+            </div>
+
+            {/* Automated Session Lock */}
+            <div
+              onClick={() => handleToggle("automatedSessionLock")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div>
+                <p className="text-xs font-bold text-slate-900">
+                  Automated Session Lock
+                </p>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Automatically lock the student exam screen when the warning threshold is met.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={policies.automatedSessionLock}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
+              />
+            </div>
+
+            {/* Allow Teacher Customization */}
+            <div
+              onClick={() => handleToggle("allowTeacherCustomization")}
+              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-start justify-between gap-4 cursor-pointer transition-colors"
+            >
+              <div>
+                <p className="text-xs font-bold text-slate-900">
+                  Allow Teacher Customization
+                </p>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Permit teachers to adjust security parameters when configuring individual exams.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={policies.allowTeacherCustomization}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 mt-1 cursor-pointer"
+              />
+            </div>
           </div>
         </div>
-
-        {/* SUBMIT */}
-        <div className="pt-4 border-t border-[#D5DEEF] flex justify-end">
-          <button
-            type="submit"
-            className="flex items-center gap-2 px-6 py-3 bg-[#395886] hover:bg-[#2e476d] text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            Save Configurations
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }
