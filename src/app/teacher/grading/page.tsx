@@ -14,6 +14,7 @@ import {
   Clock,
   CheckCircle2,
 } from "lucide-react";
+import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 // Types
 interface QuestionAnswer {
@@ -475,25 +476,20 @@ export default function GradingPage() {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
+    <>
+      <TeacherTopbar
+        title={selectedExamId && currentExam ? currentExam.title : "Grading & Results"}
+        description={
+          selectedExamId && currentExam
+            ? `Exam Code: ${currentExam.code}`
+            : "Select an exam session below to review student scripts and score manual essay questions."
+        }
+      />
+
+      <main className="w-full max-w-6xl mx-auto p-6 space-y-6 font-sans">
       {/* LEVEL 1: EXAMS LIST VIEW */}
       {!selectedExamId && (
         <div className="space-y-6">
-          {/* Header Card */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-                Evaluation Desk
-              </span>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                Grading & Results
-              </h1>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Select an exam session below to review student scripts and score manual essay questions.
-              </p>
-            </div>
-          </div>
-
           {/* Exam Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {exams.map((exam) => (
@@ -569,21 +565,13 @@ export default function GradingPage() {
       {selectedExamId && currentExam && (
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-xs">
-            <div className="space-y-1">
-              <button
-                onClick={() => setSelectedExamId(null)}
-                className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 mb-1 transition-colors cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to All Exams</span>
-              </button>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                {currentExam.title}
-              </h1>
-              <p className="text-xs font-medium text-slate-500 font-mono">
-                Exam Code: {currentExam.code}
-              </p>
-            </div>
+            <button
+              onClick={() => setSelectedExamId(null)}
+              className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to All Exams</span>
+            </button>
 
             <div className="flex items-center gap-3">
               {/* Excel Export Button */}
@@ -885,6 +873,7 @@ export default function GradingPage() {
           </div>
         </div>
       )}
-    </div>
+      </main>
+    </>
   );
 }

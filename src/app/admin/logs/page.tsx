@@ -11,6 +11,7 @@ import {
   Clock,
   Globe,
 } from "lucide-react";
+import { AdminTopbar } from "@/components/admin/AdminTopbar";
 
 type LogCategory = "all" | "login" | "system" | "security" | "error";
 type Severity = "all" | "info" | "warning" | "critical";
@@ -153,30 +154,23 @@ export default function AdminLogsPage() {
   };
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      {/* PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            Audit & Monitoring
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            System Audit Logs
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Monitor real-time system events, administrative logins, security alerts, and error traces.
-          </p>
-        </div>
+    <>
+      <AdminTopbar
+        title="System Audit Logs"
+        description="Monitor real-time system events, administrative logins, security alerts, and error traces."
+      />
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => alert("Exporting system logs to CSV...")}
-            className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-2 cursor-pointer shadow-2xs"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Export Log CSV</span>
-          </button>
-        </div>
+      <main className="p-6 space-y-6 font-sans">
+
+      {/* PAGE ACTION ROW */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => alert("Exporting system logs to CSV...")}
+          className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-2 cursor-pointer shadow-2xs"
+        >
+          <Download className="w-3.5 h-3.5 text-slate-500" />
+          <span>Export Log CSV</span>
+        </button>
       </div>
 
       {/* FILTER & SEARCH CONTROLS */}
@@ -319,6 +313,7 @@ export default function AdminLogsPage() {
           </table>
         </div>
       </div>
-    </div>
+      </main>
+    </>
   );
 }

@@ -16,6 +16,7 @@ import {
   MoreVertical,
   ArrowLeft,
 } from "lucide-react";
+import { AdminTopbar } from "@/components/admin/AdminTopbar";
 
 interface UserRecord {
   id: string;
@@ -101,26 +102,23 @@ export default function AdminUsersPage() {
   const studentCount = users.filter((u) => u.role === "student").length;
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
-      {/* HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          {/* BACK BUTTON REDIRECTING TO /admin/users */}
-          <Link
-            href="/admin/users"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors mb-2 cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Users Directory</span>
-          </Link>
+    <>
+      <AdminTopbar
+        title="User Management Directory"
+        description="View, filter, and manage faculty teachers and enrolled students across organizations."
+      />
 
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            User Management Directory
-          </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
-            View, filter, and manage faculty teachers and enrolled students across organizations.
-          </p>
-        </div>
+      <main className="w-full max-w-6xl mx-auto p-6 space-y-6 font-sans">
+      {/* ACTION ROW */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        {/* BACK BUTTON REDIRECTING TO /admin/users */}
+        <Link
+          href="/admin/users"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Users Directory</span>
+        </Link>
 
         <button
           type="button"
@@ -293,6 +291,7 @@ export default function AdminUsersPage() {
           </table>
         </div>
       </div>
-    </div>
+      </main>
+    </>
   );
 }

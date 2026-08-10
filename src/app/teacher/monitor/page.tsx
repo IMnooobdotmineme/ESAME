@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   Key,
 } from "lucide-react";
+import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 export default function TeacherLiveMonitorPage() {
   const router = useRouter();
@@ -39,27 +40,33 @@ export default function TeacherLiveMonitorPage() {
 
   if (!activeExam) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6 font-sans">
-        <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-xs p-8 text-center space-y-4">
-          <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center mx-auto border border-slate-200">
-            <Radio className="w-6 h-6" />
+      <>
+        <TeacherTopbar
+          title="Live Monitoring"
+          description="Real-time candidate monitoring and automated violation tracking."
+        />
+        <main className="min-h-[60vh] flex items-center justify-center p-6 font-sans">
+          <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-xs p-8 text-center space-y-4">
+            <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center mx-auto border border-slate-200">
+              <Radio className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+                No Active Examination
+              </h2>
+              <p className="text-xs font-medium text-slate-500">
+                Start an exam from your repository to monitor students here in real-time.
+              </p>
+            </div>
+            <button
+              onClick={() => router.push("/teacher/exams")}
+              className="w-full bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
+            >
+              Go to Exams Repository
+            </button>
           </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              No Active Examination
-            </h2>
-            <p className="text-xs font-medium text-slate-500">
-              Start an exam from your repository to monitor students here in real-time.
-            </p>
-          </div>
-          <button
-            onClick={() => router.push("/teacher/exams")}
-            className="w-full bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
-          >
-            Go to Exams Repository
-          </button>
-        </div>
-      </div>
+        </main>
+      </>
     );
   }
 
@@ -135,21 +142,19 @@ export default function TeacherLiveMonitorPage() {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
-      
-      {/* 1. HEADER SECTION */}
+    <>
+      <TeacherTopbar
+        title={activeExam.title || "Live Monitoring"}
+        description="Real-time candidate monitoring and automated violation tracking."
+      />
+
+      <main className="w-full max-w-6xl mx-auto p-6 space-y-6 font-sans">
+
+      {/* 1. ACTION ROW */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider mb-0.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Live Proctoring Room
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            {activeExam.title || "Active Examination Feed"}
-          </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
-            Real-time candidate monitoring and automated violation tracking.
-          </p>
+        <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          Live Proctoring Room
         </div>
 
         {/* Action Controls */}
@@ -357,6 +362,8 @@ export default function TeacherLiveMonitorPage() {
           ))
         )}
       </div>
-    </div>
+
+      </main>
+    </>
   );
 }

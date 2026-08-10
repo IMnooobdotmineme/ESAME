@@ -10,6 +10,7 @@ import {
   Save,
   CheckCircle2,
 } from "lucide-react";
+import { AdminTopbar } from "@/components/admin/AdminTopbar";
 
 export default function AdminSecurityPage() {
   const [policies, setPolicies] = useState({
@@ -34,21 +35,16 @@ export default function AdminSecurityPage() {
   };
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      {/* PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            Platform Governance
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Global Security Policies
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Configure system-wide default proctoring policies and security guardrails enforced across all organizations.
-          </p>
-        </div>
+    <>
+      <AdminTopbar
+        title="Global Security Policies"
+        description="Configure system-wide default proctoring policies and security guardrails enforced across all organizations."
+      />
 
+      <main className="p-6 space-y-6 font-sans">
+
+      {/* PAGE ACTION ROW */}
+      <div className="flex justify-end">
         <button
           onClick={handleSave}
           className="inline-flex items-center gap-2 px-4 py-2 bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
@@ -235,6 +231,7 @@ export default function AdminSecurityPage() {
           </div>
         </div>
       </div>
-    </div>
+      </main>
+    </>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { Search, ChevronRight, Radio } from "lucide-react";
+import { AdminTopbar } from "@/components/admin/AdminTopbar";
 
 interface OrganizationSummary {
   id: string;
@@ -63,22 +64,13 @@ export default function AdminManageOrganizationsPage() {
   );
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      {/* PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            System Governance
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Manage Organizations & Users
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Select an educational organization below to manage its teacher and student directory.
-          </p>
-        </div>
-      </div>
+    <>
+      <AdminTopbar
+        title="Manage Organizations & Users"
+        description="Select an educational organization below to manage its teacher and student directory."
+      />
 
+      <main className="p-6 space-y-6 font-sans">
       {/* SEARCH BAR */}
       <div className="relative w-full sm:w-96">
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -167,6 +159,7 @@ export default function AdminManageOrganizationsPage() {
           </div>
         )}
       </div>
-    </div>
+      </main>
+    </>
   );
 }

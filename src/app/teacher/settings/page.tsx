@@ -16,6 +16,7 @@ import {
   KeyRound,
   Check,
 } from "lucide-react";
+import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<
@@ -95,38 +96,31 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
-      {/* PAGE HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            Institutional Governance
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Settings & Governance
-          </h1>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">
-            Manage your institutional parameters, educator profile, runtime defaults, and notification relays.
-          </p>
-        </div>
+    <>
+      <TeacherTopbar
+        title="Settings & Governance"
+        description="Manage your institutional parameters, educator profile, runtime defaults, and notification relays."
+      />
 
-        <div className="flex items-center gap-3">
-          {savedSuccess && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 animate-in fade-in duration-200">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Configuration Saved!</span>
-            </div>
-          )}
+      <main className="w-full max-w-6xl mx-auto p-6 space-y-6 font-sans">
 
-          <button
-            type="button"
-            onClick={handleSaveSettings}
-            className="bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0"
-          >
-            <Save className="w-4 h-4" />
-            <span>Save Configuration</span>
-          </button>
-        </div>
+      {/* PAGE ACTION ROW */}
+      <div className="flex items-center justify-end gap-3 pb-4 border-b border-slate-200">
+        {savedSuccess && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 animate-in fade-in duration-200">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>Configuration Saved!</span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleSaveSettings}
+          className="bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <Save className="w-4 h-4" />
+          <span>Save Configuration</span>
+        </button>
       </div>
 
       {/* UNDERLINE TAB NAVIGATION */}
@@ -577,6 +571,7 @@ export default function SettingsPage() {
           </div>
         </div>
       </form>
-    </div>
+      </main>
+    </>
   );
 }

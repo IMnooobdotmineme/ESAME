@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useExamStore } from "@/store/useExamStore";
 import TeacherApprovalList from "@/components/TeacherApprovalList";
 import { ArrowLeft, Play } from "lucide-react";
+import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 export default function TeacherExamLobbyPage() {
   const params = useParams();
@@ -19,20 +20,23 @@ export default function TeacherExamLobbyPage() {
 
   if (!exam) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center p-6 font-sans">
-        <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-xs p-8 text-center space-y-4">
-          <h2 className="text-lg font-bold text-slate-900">Exam Session Not Found</h2>
-          <p className="text-xs text-slate-500 font-medium">
-            The exam room code you specified could not be located in the system.
-          </p>
-          <button
-            onClick={() => router.push("/teacher/exams")}
-            className="w-full bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
-          >
-            Back to Exams List
-          </button>
-        </div>
-      </div>
+      <>
+        <TeacherTopbar title="Exam Not Found" />
+        <main className="min-h-[70vh] flex items-center justify-center p-6 font-sans">
+          <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-xs p-8 text-center space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">Exam Session Not Found</h2>
+            <p className="text-xs text-slate-500 font-medium">
+              The exam room code you specified could not be located in the system.
+            </p>
+            <button
+              onClick={() => router.push("/teacher/exams")}
+              className="w-full bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
+            >
+              Back to Exams List
+            </button>
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -44,8 +48,11 @@ export default function TeacherExamLobbyPage() {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
-      {/* TOP HEADER BAR */}
+    <>
+      <TeacherTopbar title={exam.title} description={`Room Code: ${exam.roomCode}`} />
+
+      <main className="w-full max-w-6xl mx-auto p-6 space-y-6 font-sans">
+      {/* ACTION BAR */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <button
           onClick={() => router.push("/teacher/exams")}
@@ -111,6 +118,7 @@ export default function TeacherExamLobbyPage() {
 
       {/* LOBBY APPROVAL LIST */}
       <TeacherApprovalList roomCode={exam.roomCode} />
-    </div>
+      </main>
+    </>
   );
 }

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { UserCheck, KeyRound, Shield, Check } from "lucide-react";
+import { AdminTopbar } from "@/components/admin/AdminTopbar";
 
 export default function AdminProfilePage() {
   const [profile, setProfile] = useState({
@@ -44,22 +45,13 @@ export default function AdminProfilePage() {
   };
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      {/* PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            Identity & Security
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Account Details
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Manage your executive administrator credentials and security keys.
-          </p>
-        </div>
-      </div>
+    <>
+      <AdminTopbar
+        title="Account Details"
+        description="Manage your executive administrator credentials and security keys."
+      />
 
+      <main className="p-6 space-y-6 font-sans">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT COLUMN: FORMS */}
         <div className="lg:col-span-2 space-y-6">
@@ -238,6 +230,7 @@ export default function AdminProfilePage() {
           </div>
         </div>
       </div>
-    </div>
+      </main>
+    </>
   );
 }

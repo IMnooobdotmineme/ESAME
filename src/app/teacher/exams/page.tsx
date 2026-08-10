@@ -17,6 +17,7 @@ import {
   FileText,
   Key
 } from "lucide-react";
+import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 type ExamCard = Exam & {
   accessCode: string;
@@ -155,22 +156,16 @@ export default function MyExamsPage() {
   };
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      
-      {/* PAGE HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            Assessment Management
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Exams Repository
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Manage your created examinations, launch live proctoring, or create new assessments.
-          </p>
-        </div>
+    <>
+      <TeacherTopbar
+        title="Exams Repository"
+        description="Manage your created examinations, launch live proctoring, or create new assessments."
+      />
 
+      <main className="p-6 space-y-6 font-sans">
+
+      {/* PAGE ACTION ROW */}
+      <div className="flex justify-end">
         <button
           onClick={() => router.push("/teacher/exams/new")}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
@@ -354,6 +349,8 @@ export default function MyExamsPage() {
           </div>
         </div>
       )}
-    </div>
+
+      </main>
+    </>
   );
 }

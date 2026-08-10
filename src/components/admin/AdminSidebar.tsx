@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
+  Users,
   FileText,
-  Eye,
-  CheckSquare,
-  Settings,
+  ShieldAlert,
+  Lock,
+  ArrowRight,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,20 +17,19 @@ import { EsameLogo } from "@/components/organization/EsameLogo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", href: "/teacher", icon: LayoutDashboard },
-  { label: "My Exams", href: "/teacher/exams", icon: FileText },
-  { label: "Live Monitoring", href: "/teacher/monitor", icon: Eye },
-  { label: "Grading & Results", href: "/teacher/grading", icon: CheckSquare },
-  { label: "Settings", href: "/teacher/settings", icon: Settings },
+  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Logs", href: "/admin/logs", icon: FileText },
+  { label: "Security", href: "/admin/security", icon: ShieldAlert },
+  { label: "Profile", href: "/admin/profile", icon: Lock },
 ];
 
-export function TeacherSidebar() {
+export function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [logoutOpen, setLogoutOpen] = useState(false);
 
   function handleLogout() {
-    // TODO: clear real auth session/token here once backend auth is wired up
     router.push("/login");
   }
 
@@ -40,15 +40,16 @@ export function TeacherSidebar() {
       </div>
 
       <div className="px-6 pt-5 pb-2">
-        <p className="text-xs uppercase tracking-wide text-white/40">Instructor</p>
-        <p className="text-sm font-medium truncate">Dr. Alan Grant</p>
+        <p className="text-xs uppercase tracking-wide text-white/40">Administrator</p>
+        <p className="text-sm font-medium truncate">Admin Control</p>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
         {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
           const active =
             pathname === href ||
-            (href !== "/teacher" && pathname?.startsWith(href + "/"));
+            (href !== "/admin" && pathname?.startsWith(href + "/"));
+
           return (
             <Link
               key={href}
@@ -82,7 +83,7 @@ export function TeacherSidebar() {
         onClose={() => setLogoutOpen(false)}
         onConfirm={handleLogout}
         title="Log out?"
-        description="You'll need to sign in again to access the teacher portal."
+        description="You'll need to sign in again to access the admin portal."
         confirmLabel="Log out"
       />
     </aside>

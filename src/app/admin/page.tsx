@@ -13,6 +13,7 @@ import {
   UserCheck,
   Radio,
 } from "lucide-react";
+import { AdminTopbar } from "@/components/admin/AdminTopbar";
 
 interface SystemLogEntry {
   id: string;
@@ -52,27 +53,20 @@ export default function AdminDashboardPage() {
   ]);
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      {/* PAGE HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            Governance Overview
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Admin Dashboard
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Platform-wide metrics, security controls, and real-time audit logs.
-          </p>
-        </div>
+    <>
+      <AdminTopbar
+        title="Admin Dashboard"
+        description="Platform-wide metrics, security controls, and real-time audit logs."
+      />
 
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-full">
-            <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-600" />
-            System Status: 99.9% Operational
-          </span>
-        </div>
+      <main className="p-6 space-y-6 font-sans">
+
+      {/* PAGE ACTION ROW */}
+      <div className="flex justify-end">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-full">
+          <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-600" />
+          System Status: 99.9% Operational
+        </span>
       </div>
 
       {/* SYSTEM ANALYTICS CARDS */}
@@ -264,6 +258,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
-    </div>
+      </main>
+    </>
   );
 }

@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   Plus
 } from "lucide-react";
+import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 // --- TYPE DEFINITIONS ---
 type QuestionType =
@@ -371,25 +372,20 @@ function ExamBuilderContent() {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 font-sans">
-      
-      {/* HEADER SECTION */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
-            Exam Architecture Desk
-          </span>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            {step === 1 ? "Configure Exam Parameters" : "Sections & Question Setup"}
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            {step === 1
-              ? "Set academic context, department, and time duration."
-              : "Organize questionnaire sections and configure multi-format rules."}
-          </p>
-        </div>
+    <>
+      <TeacherTopbar
+        title={step === 1 ? "Configure Exam Parameters" : "Sections & Question Setup"}
+        description={
+          step === 1
+            ? "Set academic context, department, and time duration."
+            : "Organize questionnaire sections and configure multi-format rules."
+        }
+      />
 
-        {/* STEP CONTROLS */}
+      <main className="w-full max-w-6xl mx-auto p-6 space-y-6 font-sans">
+
+      {/* STEP CONTROLS */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex justify-end">
         <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
           <button
             type="button"
@@ -1245,7 +1241,8 @@ function ExamBuilderContent() {
         </div>
       )}
 
-    </div>
+      </main>
+    </>
   );
 }
 
