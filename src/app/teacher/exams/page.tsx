@@ -234,7 +234,7 @@ export default function MyExamsPage() {
                   <span className="text-slate-300">•</span>
                   <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
                     <HelpCircle className="w-3.5 h-3.5" />
-                    {exam.questions?.length ?? exam.questionCount ?? 0} Questions
+                    {exam.questionCount ?? 0} Questions
                   </span>
                 </div>
 
