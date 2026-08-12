@@ -3,262 +3,234 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  Building2,
-  Users,
-  FileText,
-  ShieldAlert,
-  ArrowRight,
-  Activity,
-  Lock,
-  UserCheck,
-  Radio,
+  Search,
+  School,
+  GraduationCap,
+  MoreVertical,
+  CheckCircle2,
+  XCircle,
+  Ban,
+  Trash2,
+  LogOut,
 } from "lucide-react";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
-interface SystemLogEntry {
+type UserStatus = "Active" | "Suspended" | "Deactivated";
+
+interface UserRecord {
   id: string;
-  type: "login" | "security" | "system" | "error";
-  user: string;
-  event: string;
-  timestamp: string;
-  severity: "info" | "warning" | "error";
+  name: string;
+  email: string;
+  role: "teacher" | "examiner";
+  organization: string;
+  orgId: string;
+  status: UserStatus;
+  joinedDate: string;
 }
 
-export default function AdminDashboardPage() {
-  const [recentLogs] = useState<SystemLogEntry[]>([
-    {
-      id: "log-01",
-      type: "security",
-      user: "System Security Engine",
-      event: "Global anti-cheating rule policy updated across all nodes",
-      timestamp: "12 mins ago",
-      severity: "info",
-    },
-    {
-      id: "log-02",
-      type: "login",
-      user: "r.chen@university.edu",
-      event: "Successful administrator authentication from 192.168.1.45",
-      timestamp: "28 mins ago",
-      severity: "info",
-    },
-    {
-      id: "log-03",
-      type: "error",
-      user: "System Gateway",
-      event: "High frequency API request threshold warning detected",
-      timestamp: "1 hour ago",
-      severity: "warning",
-    },
-  ]);
+const STATUS_VARIANT: Record<UserStatus, "success" | "warning" | "danger" | "neutral"> = {
+  Active: "success",
+  Suspended: "danger",
+  Deactivated: "neutral",
+};
+
+const INITIAL_USERS: UserRecord[] = [
+  { id: "USR-101", name: "Professor Julian Vance", email: "j.vance@university.edu", role: "teacher", organization: "Faculty of Computer Science & Engineering", orgId: "org-01", status: "Active", joinedDate: "Sep 2024" },
+  { id: "USR-102", name: "Dr. Aris Thorne", email: "a.thorne@university.edu", role: "teacher", organization: "Faculty of Computer Science & Engineering", orgId: "org-01", status: "Active", joinedDate: "Jan 2025" },
+  { id: "USR-103", name: "Chan Sopheak", email: "chan.sopheak@ssd.edu", role: "teacher", organization: "School of Software Development", orgId: "org-02", status: "Active", joinedDate: "Feb 2025" },
+  { id: "USR-104", name: "Ly Vannak", email: "ly.vannak@its.edu", role: "teacher", organization: "Institute of Technology & Science", orgId: "org-03", status: "Active", joinedDate: "Jul 2025" },
+  { id: "USR-201", name: "Marcus Vance", email: "m.vance@student.edu", role: "examiner", organization: "Faculty of Computer Science & Engineering", orgId: "org-01", status: "Active", joinedDate: "Aug 2025" },
+  { id: "USR-202", name: "Sarah Jenkins", email: "s.jenkins@student.edu", role: "examiner", organization: "Faculty of Computer Science & Engineering", orgId: "org-01", status: "Active", joinedDate: "Aug 2025" },
+  { id: "USR-203", name: "David Miller", email: "d.miller@student.edu", role: "examiner", organization: "School of Software Development", orgId: "org-02", status: "Suspended", joinedDate: "Oct 2025" },
+  { id: "USR-204", name: "Ros Chenda", email: "r.chenda@student.edu", role: "examiner", organization: "National School of Engineering", orgId: "org-04", status: "Active", joinedDate: "Nov 2025" },
+];
+
+export default function AdminUsersPage() {
+  const [users, setUsers] = useState<UserRecord[]>(INITIAL_USERS);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "teacher" | "examiner">("all");
+  const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
+  const [logoutTarget, setLogoutTarget] = useState<UserRecord | null>(null);
+
+  const filteredUsers = users.filter((u) => {
+    const matchesRole = roleFilter === "all" || u.role === roleFilter;
+    const matchesSearch =
+      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.organization.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesRole && matchesSearch;
+  });
+
+  const teacherCount = users.filter((u) => u.role === "teacher").length;
+  const examinerCount = users.filter((u) => u.role === "examiner").length;
+
+  function updateStatus(id: string, status: UserStatus) {
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
+  }
+
+  function confirmDelete() {
+    if (!deleteTarget) return;
+    setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+    setDeleteTarget(null);
+  }
+
+  function confirmLogout() {
+    // TODO: wire to real session-invalidation endpoint once backend auth is available
+    setLogoutTarget(null);
+  }
 
   return (
     <>
       <AdminTopbar
-        title="Admin Dashboard"
-        description="Platform-wide metrics, security controls, and real-time audit logs."
+        title="Users"
+        description="View teachers and examiners across all organizations."
       />
 
-      <main className="p-6 space-y-6 font-sans">
-
-      {/* PAGE ACTION ROW */}
-      <div className="flex justify-end">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-full">
-          <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-600" />
-          System Status: 99.9% Operational
-        </span>
-      </div>
-
-      {/* SYSTEM ANALYTICS CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Organizations */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Total Organizations
-            </p>
-            <p className="text-2xl font-bold text-slate-900">12</p>
-            <p className="text-[11px] font-semibold text-emerald-600">
-              All Systems Operational
-            </p>
-          </div>
-          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl border border-slate-100">
-            <Building2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Active Instructors */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Active Instructors
-            </p>
-            <p className="text-2xl font-bold text-slate-900">148</p>
-            <p className="text-[11px] font-semibold text-emerald-600">
-              Across 8 Departments
-            </p>
-          </div>
-          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl border border-slate-100">
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Total Examinations */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Total Examinations
-            </p>
-            <p className="text-2xl font-bold text-slate-900">1,420</p>
-            <p className="text-[11px] font-medium text-slate-400">
-              Platform-wide Total
-            </p>
-          </div>
-          <div className="p-3 bg-slate-50 text-slate-600 rounded-xl border border-slate-100">
-            <FileText className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Security Flags */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Security Flags
-            </p>
-            <p className="text-2xl font-bold text-rose-600">34</p>
-            <p className="text-[11px] font-medium text-slate-400">
-              Auto-prevented Locks
-            </p>
-          </div>
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100">
-            <ShieldAlert className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* TWO COLUMN WORKSPACE GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT COLUMN (2 COLS): REAL-TIME AUDIT STREAM */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-slate-700" />
-                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Real-Time Audit Stream
-                </h2>
-              </div>
-              <Link
-                href="/admin/logs"
-                className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 transition-colors"
+      <main className="p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {(["all", "teacher", "examiner"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setRoleFilter(f)}
+                className={
+                  roleFilter === f
+                    ? "rounded-full px-4 py-1.5 text-sm font-medium bg-navy-900 text-white"
+                    : "rounded-full px-4 py-1.5 text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                }
               >
-                <span>View All Logs</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
+                {f === "all" ? `All (${users.length})` : f === "teacher" ? `Teachers (${teacherCount})` : `Examiners (${examinerCount})`}
+              </button>
+            ))}
+          </div>
 
-            <div className="space-y-2.5">
-              {recentLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex items-start justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-900">
-                        {log.user}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-slate-200 text-slate-700">
-                        {log.type}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 font-medium">{log.event}</p>
-                  </div>
-
-                  <span className="text-[11px] font-mono text-slate-400 shrink-0">
-                    {log.timestamp}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 w-full sm:w-80">
+            <Search size={16} className="text-slate-400" />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by name, email, or organization..."
+              className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
+            />
           </div>
         </div>
 
-        {/* RIGHT COLUMN (1 COL): GOVERNANCE CONTROL HUB */}
-        <div className="space-y-4">
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-              <Lock className="w-4 h-4 text-slate-700" />
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Governance Control Hub
-              </h2>
-            </div>
-
-            <div className="space-y-2.5">
-              <Link
-                href="/admin/users"
-                className="w-full p-3 bg-slate-50/70 hover:bg-slate-100/80 border border-slate-200 rounded-xl flex items-center justify-between group transition-colors block"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg text-slate-700 border border-slate-200 shadow-2xs">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900">
-                      Manage Organization
-                    </p>
-                    <p className="text-[10px] font-medium text-slate-500">
-                      User roster & status controls
-                    </p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-              </Link>
-
-              <Link
-                href="/admin/security"
-                className="w-full p-3 bg-slate-50/70 hover:bg-slate-100/80 border border-slate-200 rounded-xl flex items-center justify-between group transition-colors block"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg text-slate-700 border border-slate-200 shadow-2xs">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900">
-                      Security Settings
-                    </p>
-                    <p className="text-[10px] font-medium text-slate-500">
-                      Fullscreen, warning limits & copy rules
-                    </p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-              </Link>
-
-              <Link
-                href="/admin/logs"
-                className="w-full p-3 bg-slate-50/70 hover:bg-slate-100/80 border border-slate-200 rounded-xl flex items-center justify-between group transition-colors block"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg text-slate-700 border border-slate-200 shadow-2xs">
-                    <Activity className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900">
-                      System Logs
-                    </p>
-                    <p className="text-[10px] font-medium text-slate-500">
-                      Platform audit trails & error logs
-                    </p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-400 border-b border-slate-100 bg-slate-50/50">
+                <th className="px-5 py-3 font-medium">User</th>
+                <th className="px-5 py-3 font-medium">Role</th>
+                <th className="px-5 py-3 font-medium">Organization</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Joined</th>
+                <th className="px-5 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-slate-400 text-sm">
+                    No matching user accounts found.
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr key={user.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
+                          {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-navy-900">{user.name}</p>
+                          <p className="text-xs text-slate-400">{user.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {user.role === "teacher" ? (
+                        <Badge variant="info">
+                          <School size={12} /> Teacher
+                        </Badge>
+                      ) : (
+                        <Badge variant="success">
+                          <GraduationCap size={12} /> Examiner
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Link
+                        href={`/admin/organizations/${user.orgId}`}
+                        className="text-slate-600 hover:text-sky-600 transition-colors"
+                      >
+                        {user.organization}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Badge variant={STATUS_VARIANT[user.status]}>{user.status}</Badge>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-500">{user.joinedDate}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <DropdownMenu
+                        trigger={
+                          <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 ml-auto">
+                            <MoreVertical size={16} />
+                          </button>
+                        }
+                      >
+                        {user.status !== "Active" && (
+                          <DropdownItem onClick={() => updateStatus(user.id, "Active")}>
+                            <CheckCircle2 size={15} /> Activate
+                          </DropdownItem>
+                        )}
+                        {user.status === "Active" && (
+                          <DropdownItem onClick={() => updateStatus(user.id, "Deactivated")}>
+                            <XCircle size={15} /> Deactivate
+                          </DropdownItem>
+                        )}
+                        {user.status !== "Suspended" && (
+                          <DropdownItem onClick={() => updateStatus(user.id, "Suspended")}>
+                            <Ban size={15} /> Suspend
+                          </DropdownItem>
+                        )}
+                        <DropdownItem onClick={() => setLogoutTarget(user)}>
+                          <LogOut size={15} /> Force Logout
+                        </DropdownItem>
+                        <DropdownItem danger onClick={() => setDeleteTarget(user)}>
+                          <Trash2 size={15} /> Delete User
+                        </DropdownItem>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </Card>
       </main>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete user account?"
+        description={`This will permanently remove ${deleteTarget?.name} (${deleteTarget?.email}) from the platform. This action cannot be undone.`}
+        confirmLabel="Delete User"
+      />
+
+      <ConfirmDialog
+        open={!!logoutTarget}
+        onClose={() => setLogoutTarget(null)}
+        onConfirm={confirmLogout}
+        title="Force logout this user?"
+        description={`${logoutTarget?.name} will be immediately signed out of all active sessions and must log in again.`}
+        confirmLabel="Force Logout"
+      />
     </>
   );
 }

@@ -7,7 +7,6 @@ import {
   Sliders,
   Bell,
   ShieldCheck,
-  Save,
   RotateCcw,
   CheckCircle2,
   Info,
@@ -16,6 +15,7 @@ import {
   KeyRound,
   Check,
 } from "lucide-react";
+
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 export default function SettingsPage() {
@@ -104,27 +104,18 @@ export default function SettingsPage() {
 
       <main className="w-full max-w-6xl mx-auto p-6 space-y-6 font-sans">
 
-      {/* PAGE ACTION ROW */}
-      <div className="flex items-center justify-end gap-3 pb-4 border-b border-slate-200">
-        {savedSuccess && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 animate-in fade-in duration-200">
+      {/* SAVE CONFIRMATION TOAST */}
+      {savedSuccess && (
+        <div className="flex justify-end">
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 animate-in fade-in duration-200">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>Configuration Saved!</span>
           </div>
-        )}
+        </div>
+      )}
 
-        <button
-          type="button"
-          onClick={handleSaveSettings}
-          className="bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0"
-        >
-          <Save className="w-4 h-4" />
-          <span>Save Configuration</span>
-        </button>
-      </div>
-
-      {/* UNDERLINE TAB NAVIGATION */}
-      <div className="border-b border-slate-200 flex gap-2 overflow-x-auto no-scrollbar">
+      {/* PILL TAB NAVIGATION — matches design system convention */}
+      <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -132,11 +123,11 @@ export default function SettingsPage() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`pb-3 px-4 text-xs font-semibold whitespace-nowrap transition-all cursor-pointer relative ${
+              className={
                 isActive
-                  ? "text-slate-900 border-b-2 border-sky-400"
-                  : "text-slate-400 hover:text-slate-600"
-              }`}
+                  ? "rounded-full px-4 py-1.5 text-sm font-medium bg-navy-900 text-white whitespace-nowrap"
+                  : "rounded-full px-4 py-1.5 text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+              }
             >
               {tab.label}
             </button>
@@ -148,7 +139,7 @@ export default function SettingsPage() {
       <form onSubmit={handleSaveSettings} className="space-y-6">
         {/* TAB 1: EDUCATOR PROFILE */}
         {activeTab === "profile" && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <User className="w-4 h-4 text-sky-600" />
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -210,7 +201,7 @@ export default function SettingsPage() {
 
         {/* TAB 2: ORGANIZATION & CAMPUS */}
         {activeTab === "organization" && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <Building2 className="w-4 h-4 text-sky-600" />
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -301,7 +292,7 @@ export default function SettingsPage() {
 
         {/* TAB 3: ASSESSMENT BLUEPRINTS */}
         {activeTab === "assessment" && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <Sliders className="w-4 h-4 text-sky-600" />
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -412,7 +403,7 @@ export default function SettingsPage() {
 
         {/* TAB 4: ALERTS & WEBHOOKS */}
         {activeTab === "alerts" && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <Bell className="w-4 h-4 text-sky-600" />
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -492,7 +483,7 @@ export default function SettingsPage() {
 
         {/* TAB 5: SECURITY & AUTHENTICATION */}
         {activeTab === "security" && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <ShieldCheck className="w-4 h-4 text-sky-600" />
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -543,7 +534,7 @@ export default function SettingsPage() {
         )}
 
         {/* BOTTOM ACTION BAR */}
-        <div className="bg-white border border-slate-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+        <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
             <Info className="w-4 h-4 text-sky-600 shrink-0" />
             <span>
@@ -555,7 +546,7 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={handleResetDefaults}
-              className="flex-1 sm:flex-initial bg-white text-slate-700 border border-slate-200 font-semibold text-xs py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              className="flex-1 sm:flex-initial bg-white text-slate-700 border border-slate-200 font-semibold text-xs py-2 px-4 rounded-full hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
               <span>Reset Defaults</span>
@@ -563,7 +554,7 @@ export default function SettingsPage() {
 
             <button
               type="submit"
-              className="flex-1 sm:flex-initial bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs py-2 px-4 rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              className="flex-1 sm:flex-initial bg-navy-900 hover:bg-navy-800 text-white font-semibold text-xs py-2 px-4 rounded-full transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>Save Configuration</span>

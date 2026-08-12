@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useExamStore } from "@/store/useExamStore";
 import {
   Check,
   CheckCircle2,
@@ -86,8 +87,10 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 };
 
 function ExamBuilderContent() {
+  
   const router = useRouter();
   const searchParams = useSearchParams();
+  const createExam = useExamStore((state) => state.createExam);
 
   const editId = searchParams.get("edit");
   const tabParam = searchParams.get("tab");
@@ -96,13 +99,13 @@ function ExamBuilderContent() {
 
   // --- EXAM PARAMETERS STATE ---
   const [examData, setExamData] = useState({
-    title: "",
-    description: "",
-    department: "Computer Science",
-    academicYear: "2026-2027",
-    duration: 60,
-    saveAsTemplate: false
-  });
+  title: "",
+  description: "",
+  department: "Computer Science",
+  scheduledStartAt: "",
+  duration: 60,
+  saveAsTemplate: false
+});
 
   const [isLaunched, setIsLaunched] = useState(false);
   const [accessCode, setAccessCode] = useState("");
@@ -146,68 +149,10 @@ function ExamBuilderContent() {
   const currentFormat = activePart?.allowedType || "mcq";
 
   useEffect(() => {
-    if (editId) {
-      const rawData = localStorage.getItem("localExamsData");
-      if (rawData) {
-        try {
-          const currentExams = JSON.parse(rawData) as {
-            active?: PersistedExamRecord[];
-            scheduled?: PersistedExamRecord[];
-            completed?: PersistedExamRecord[];
-          };
-          const allExams = [
-            ...(currentExams.active || []),
-            ...(currentExams.scheduled || []),
-            ...(currentExams.completed || [])
-          ];
-          const found = allExams.find((e) => e.id === editId);
-          if (found) {
-            const restoredDuration =
-              typeof found.duration === "number"
-                ? found.duration
-                : typeof found.duration === "string"
-                ? Number.parseInt(found.duration, 10)
-                : Number.NaN;
-
-            setExamData((prev) => ({
-              ...prev,
-              title: typeof found.title === "string" ? found.title : prev.title,
-              department:
-                typeof found.department === "string"
-                  ? found.department
-                  : typeof found.course === "string"
-                  ? found.course
-                  : prev.department,
-              academicYear: typeof found.academicYear === "string" ? found.academicYear : prev.academicYear,
-              duration: Number.isFinite(restoredDuration) ? restoredDuration : prev.duration
-            }));
-
-            if (found.parts && Array.isArray(found.parts) && found.parts.length > 0) {
-              setParts(found.parts);
-              setActivePartId(found.parts[0].id);
-            } else if (found.questions && Array.isArray(found.questions) && found.questions.length > 0) {
-              const convertedPart: ExamPart = {
-                id: "restored-section-1",
-                title: "Section 1: Restored Questions",
-                marks: 100,
-                description: "Section automatically generated from saved exam questions.",
-                allowedType: found.questions[0]?.type || "mcq",
-                questions: found.questions
-              };
-              setParts([convertedPart]);
-              setActivePartId(convertedPart.id);
-            }
-          }
-        } catch (err) {
-          console.error("Failed to parse local exams data:", err);
-        }
-      }
-    }
-
-    if (editId || tabParam === "questions") {
+    if (tabParam === "questions") {
       setStep(2);
     }
-  }, [editId, tabParam]);
+  }, [tabParam]);
 
   const generateAccessCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -329,45 +274,16 @@ function ExamBuilderContent() {
       return;
     }
 
-    const generatedCode = generateAccessCode();
-    setAccessCode(generatedCode);
+    const { roomCode } = createExam({
+  title: examData.title || "Untitled Examination",
+  courseCode: examData.department,
+  durationMinutes: examData.duration,
+  parts,
+  questionCount: totalQCount,
+  scheduledStartAt: examData.scheduledStartAt || undefined,
+});
 
-    const finalExam = {
-      id: editId || Date.now().toString(),
-      title: examData.title || "Untitled Examination",
-      course: examData.department,
-      department: examData.department,
-      academicYear: examData.academicYear,
-      duration: `${examData.duration} mins`,
-      questions: totalQCount,
-      code: generatedCode,
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
-      students: "0 Registered",
-      isTemplate: examData.saveAsTemplate,
-      parts: parts
-    };
-
-    const rawData = localStorage.getItem("localExamsData");
-    const defaultData = { active: [], scheduled: [], completed: [] };
-    const currentExams = rawData ? JSON.parse(rawData) : defaultData;
-
-    if (editId) {
-      ["active", "scheduled", "completed"].forEach((key) => {
-        const list = currentExams[key];
-        if (Array.isArray(list)) {
-          currentExams[key] = list.map((item: any) =>
-            item.id === editId ? { ...finalExam, questions: parts.flatMap((part) => part.questions) } : item
-          );
-        }
-      });
-    } else {
-      currentExams.scheduled = [
-        { ...finalExam, questions: parts.flatMap((part) => part.questions) },
-        ...(currentExams.scheduled || [])
-      ];
-    }
-
-    localStorage.setItem("localExamsData", JSON.stringify(currentExams));
+    setAccessCode(roomCode);
     setIsLaunched(true);
   };
 
@@ -463,15 +379,17 @@ function ExamBuilderContent() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  ACADEMIC YEAR
+                  SCHEDULED START TIME
                 </label>
                 <input
-                  type="text"
-                  placeholder="2026-2027"
-                  value={examData.academicYear}
-                  onChange={(e) => setExamData({ ...examData, academicYear: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400"
+                  type="datetime-local"
+                  value={examData.scheduledStartAt}
+                  onChange={(e) => setExamData({ ...examData, scheduledStartAt: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Leave blank to start manually only
+                </p>
               </div>
 
               <div>

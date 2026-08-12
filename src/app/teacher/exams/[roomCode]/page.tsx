@@ -18,19 +18,37 @@ export default function TeacherExamLobbyPage() {
 
   const startExam = useExamStore((state) => state.startExam);
 
+  // Auto-start check — must run unconditionally, before any early return,
+  // to satisfy React's Rules of Hooks. Guards against a missing exam internally.
+  React.useEffect(() => {
+    if (!exam || exam.isStarted || exam.isEnded || !exam.scheduledStartAt) return;
+
+    function checkAndAutoStart() {
+      const now = new Date();
+      const scheduled = new Date(exam!.scheduledStartAt!);
+      if (now >= scheduled) {
+        startExam(exam!.roomCode);
+      }
+    }
+
+    checkAndAutoStart();
+    const interval = setInterval(checkAndAutoStart, 5000);
+    return () => clearInterval(interval);
+  }, [exam, startExam]);
+
   if (!exam) {
     return (
       <>
         <TeacherTopbar title="Exam Not Found" />
         <main className="min-h-[70vh] flex items-center justify-center p-6 font-sans">
-          <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-xs p-8 text-center space-y-4">
+          <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-4">
             <h2 className="text-lg font-bold text-slate-900">Exam Session Not Found</h2>
             <p className="text-xs text-slate-500 font-medium">
               The exam room code you specified could not be located in the system.
             </p>
             <button
               onClick={() => router.push("/teacher/exams")}
-              className="w-full bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
+              className="w-full bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold py-2.5 rounded-full transition-colors cursor-pointer"
             >
               Back to Exams List
             </button>
@@ -70,6 +88,20 @@ export default function TeacherExamLobbyPage() {
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             Live Session Active — Go to Monitor
           </button>
+        ) : exam.isEnded ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold uppercase">
+            Exam Completed
+          </span>
+        ) : exam.scheduledStartAt ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-xs font-bold">
+            Scheduled for{" "}
+            {new Date(exam.scheduledStartAt).toLocaleString([], {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold uppercase">
             Lobby Phase (Waiting to Start)
@@ -78,7 +110,7 @@ export default function TeacherExamLobbyPage() {
       </div>
 
       {/* MAIN EXAM INFO HEADER */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="space-y-2">
           <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 inline-block">
             {exam.courseCode}
@@ -93,7 +125,7 @@ export default function TeacherExamLobbyPage() {
             <div className="pt-2">
               <button
                 onClick={handleStartExam}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-navy-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-navy-900 hover:bg-navy-800 text-white font-semibold text-xs rounded-full shadow-sm transition-all cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-current" />
                 <span>Start Exam Now ({approvedStudents.length} Approved)</span>
@@ -103,7 +135,7 @@ export default function TeacherExamLobbyPage() {
         </div>
 
         {/* ROOM ACCESS CODE BOX */}
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center min-w-[220px]">
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-center min-w-[220px]">
           <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
             Student Access Code
           </p>
