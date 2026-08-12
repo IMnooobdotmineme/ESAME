@@ -85,6 +85,7 @@ export function AdminSidebar() {
         title="Log out?"
         description="You'll need to sign in again to access the admin portal."
         confirmLabel="Log out"
+        variant="logout"
       />
     </aside>
   );

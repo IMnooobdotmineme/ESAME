@@ -7,8 +7,6 @@ export interface DeptSubject {
 export interface DepartmentCard {
   id: string;
   name: string;
-  category: string;
-  categoryColor: "sky" | "navy" | "emerald" | "amber";
   courses: number;
   students: number;
   faculty: number;
@@ -21,8 +19,6 @@ export const DEPARTMENTS: DepartmentCard[] = [
   {
     id: "d1",
     name: "Computer Science",
-    category: "STEM",
-    categoryColor: "sky",
     courses: 54,
     students: 1200,
     faculty: 3,
@@ -37,8 +33,6 @@ export const DEPARTMENTS: DepartmentCard[] = [
   {
     id: "d2",
     name: "Internet of Things",
-    category: "ENGINEERING",
-    categoryColor: "navy",
     courses: 42,
     students: 940,
     faculty: 2,
@@ -52,8 +46,6 @@ export const DEPARTMENTS: DepartmentCard[] = [
   {
     id: "d3",
     name: "Information Technology",
-    category: "BUSINESS",
-    categoryColor: "emerald",
     courses: 61,
     students: 2100,
     faculty: 4,
@@ -67,8 +59,6 @@ export const DEPARTMENTS: DepartmentCard[] = [
   {
     id: "d4",
     name: "Software Engineering",
-    category: "HUMANITIES",
-    categoryColor: "amber",
     courses: 28,
     students: 620,
     faculty: 1,

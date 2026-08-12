@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,6 @@ import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DEPARTMENTS as INITIAL_DEPARTMENTS, DepartmentCard, DeptSubject } from "@/lib/academic-structure-data";
-import { EXAMS } from "@/lib/exam-data";
 import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import {
   Building2,
@@ -19,76 +18,31 @@ import {
   Plus,
   ArrowRight,
   ChevronLeft,
-  FileText,
   Search,
   MoreVertical,
   Pencil,
   Trash2,
 } from "lucide-react";
 
-const DEFAULT_CATEGORIES: { label: string; color: DepartmentCard["categoryColor"] }[] = [
-  { label: "STEM", color: "sky" },
-  { label: "ENGINEERING", color: "navy" },
-  { label: "BUSINESS", color: "emerald" },
-  { label: "HUMANITIES", color: "amber" },
-];
-
-const CATEGORY_COLOR_CYCLE: DepartmentCard["categoryColor"][] = ["sky", "navy", "emerald", "amber"];
-
-interface CategoryOption {
-  label: string;
-  color: DepartmentCard["categoryColor"];
-}
-
 function DepartmentModal({
   open,
   onClose,
   onSave,
-  categories,
-  onAddCategory,
   initial,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (dept: DepartmentCard) => void;
-  categories: CategoryOption[];
-  onAddCategory: (cat: CategoryOption) => void;
   initial?: DepartmentCard;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [category, setCategory] = useState(initial?.category ?? categories[0]?.label ?? "");
-  const [showNewCategory, setShowNewCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-
-  useState(() => {
-    // reset fields whenever a different department is opened for editing
-  });
-
-  function handleAddCategory() {
-    const trimmed = newCategoryName.trim().toUpperCase();
-    if (!trimmed) return;
-    if (categories.some((c) => c.label === trimmed)) {
-      setCategory(trimmed);
-      setNewCategoryName("");
-      setShowNewCategory(false);
-      return;
-    }
-    const color = CATEGORY_COLOR_CYCLE[categories.length % CATEGORY_COLOR_CYCLE.length];
-    onAddCategory({ label: trimmed, color });
-    setCategory(trimmed);
-    setNewCategoryName("");
-    setShowNewCategory(false);
-  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !category) return;
-    const cat = categories.find((c) => c.label === category) ?? categories[0];
+    if (!name) return;
     onSave({
       id: initial?.id ?? crypto.randomUUID(),
       name,
-      category: cat.label,
-      categoryColor: cat.color,
       courses: initial?.courses ?? 0,
       students: initial?.students ?? 0,
       faculty: initial?.faculty ?? 0,
@@ -120,49 +74,6 @@ function DepartmentModal({
               autoFocus
             />
           </div>
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-navy-900">Category</label>
-              <button
-                type="button"
-                onClick={() => setShowNewCategory((v) => !v)}
-                className="text-xs font-medium text-sky-600 hover:underline"
-              >
-                {showNewCategory ? "Cancel" : "+ Add new category"}
-              </button>
-            </div>
-
-            {!showNewCategory ? (
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-              >
-                {categories.map((c) => (
-                  <option key={c.label} value={c.label}>{c.label}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="e.g. Medicine"
-                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddCategory();
-                    }
-                  }}
-                  autoFocus
-                />
-                <Button type="button" size="sm" onClick={handleAddCategory}>
-                  Add
-                </Button>
-              </div>
-            )}
-          </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -173,17 +84,9 @@ function DepartmentModal({
   );
 }
 
-const CATEGORY_BADGE: Record<DepartmentCard["categoryColor"], "info" | "default" | "success" | "warning"> = {
-  sky: "info",
-  navy: "default",
-  emerald: "success",
-  amber: "warning",
-};
-
 type View =
   | { level: "departments" }
-  | { level: "subjects"; departmentId: string }
-  | { level: "teacher"; departmentId: string; subjectId: string; teacherName: string };
+  | { level: "subjects"; departmentId: string };
 
 function SubjectModal({
   open,
@@ -239,12 +142,60 @@ function SubjectModal({
   );
 }
 
+function SubjectTeachersModal({
+  open,
+  onClose,
+  subject,
+}: {
+  open: boolean;
+  onClose: () => void;
+  subject?: DeptSubject;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogHeader
+        title={subject?.name ?? "Teachers"}
+        description={
+          subject
+            ? `${subject.teacherNames.length} teacher${subject.teacherNames.length !== 1 ? "s" : ""} assigned to this subject`
+            : undefined
+        }
+        onClose={onClose}
+      />
+      <div className="px-6 py-5 space-y-2 max-h-96 overflow-y-auto">
+        {subject?.teacherNames.map((t) => (
+          <Link
+            key={t}
+            href={`/organization/teachers/${encodeURIComponent(t)}`}
+            onClick={onClose}
+            className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:border-sky-200 hover:bg-sky-50/60 transition-colors group"
+          >
+            <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
+              {t.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-navy-900 truncate">{t}</p>
+              <p className="text-xs text-slate-400 group-hover:text-sky-600">View exam history</p>
+            </div>
+            <ArrowRight size={14} className="text-slate-300 group-hover:text-sky-500 shrink-0" />
+          </Link>
+        ))}
+        {subject && subject.teacherNames.length === 0 && (
+          <p className="text-sm text-slate-400 text-center py-6">
+            No teachers assigned to this subject yet.
+          </p>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
 export default function AcademicStructurePage() {
   const [departments, setDepartments] = useState<DepartmentCard[]>(INITIAL_DEPARTMENTS);
-  const [categories, setCategories] = useState<CategoryOption[]>(DEFAULT_CATEGORIES);
   const [view, setView] = useState<View>({ level: "departments" });
   const [search, setSearch] = useState("");
   const [subjectSearch, setSubjectSearch] = useState("");
+  const [subjectTeachersModal, setSubjectTeachersModal] = useState<{ open: boolean; subject?: DeptSubject }>({ open: false });
   const [deptModal, setDeptModal] = useState<{ open: boolean; edit?: DepartmentCard }>({ open: false });
   const [subjectModal, setSubjectModal] = useState<{ open: boolean; edit?: DeptSubject }>({ open: false });
   const [deleteDeptTarget, setDeleteDeptTarget] = useState<DepartmentCard | null>(null);
@@ -256,13 +207,6 @@ export default function AcademicStructurePage() {
   const totalFaculty = departments.reduce((sum, d) => sum + d.faculty, 0);
 
   const activeDepartment = view.level !== "departments" ? departments.find((d) => d.id === view.departmentId) : undefined;
-  const activeSubject =
-    view.level === "teacher" ? activeDepartment?.subjects.find((s) => s.id === view.subjectId) : undefined;
-
-  const teacherExams = useMemo(() => {
-    if (view.level !== "teacher") return [];
-    return EXAMS.filter((e) => e.teacher === view.teacherName);
-  }, [view]);
 
   function saveDepartment(dept: DepartmentCard) {
     setDepartments((prev) => {
@@ -306,9 +250,6 @@ export default function AcademicStructurePage() {
       )
     );
     setDeleteSubjectTarget(null);
-    if (view.level === "teacher" && view.subjectId === deleteSubjectTarget.id) {
-      setView({ level: "subjects", departmentId: activeDepartment.id });
-    }
   }
 
   return (
@@ -353,9 +294,7 @@ export default function AcademicStructurePage() {
                 <Card key={d.id} className="overflow-hidden">
                   <div className="bg-navy-900 p-5 text-white relative">
                     <div className="flex items-start justify-between">
-                      <Badge variant={CATEGORY_BADGE[d.categoryColor]} className="bg-white/10 text-white border-white/20">
-                        {d.category}
-                      </Badge>
+                      <h3 className="text-lg font-semibold">{d.name}</h3>
                       <DropdownMenu
                         trigger={
                           <button className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-white/10 text-white/70 hover:text-white">
@@ -371,7 +310,6 @@ export default function AcademicStructurePage() {
                         </DropdownItem>
                       </DropdownMenu>
                     </div>
-                    <h3 className="mt-3 text-lg font-semibold">{d.name}</h3>
                   </div>
                   <div className="p-5">
                     <div className="grid grid-cols-3 text-center gap-2 mb-4">
@@ -452,49 +390,40 @@ export default function AcademicStructurePage() {
               {activeDepartment.subjects
                 .filter((s) => s.name.toLowerCase().includes(subjectSearch.trim().toLowerCase()))
                 .map((s) => (
-                <Card key={s.id} className="p-5">
+                <Card
+                  key={s.id}
+                  className="p-5 cursor-pointer hover:border-sky-200 hover:shadow-md transition-all"
+                  onClick={() => setSubjectTeachersModal({ open: true, subject: s })}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 text-sky-600">
                       <BookOpen size={16} />
                       <span className="text-xs font-medium uppercase tracking-wide">Subject</span>
                     </div>
-                    <DropdownMenu
-                      trigger={
-                        <button className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                          <MoreVertical size={15} />
-                        </button>
-                      }
-                    >
-                      <DropdownItem onClick={() => setSubjectModal({ open: true, edit: s })}>
-                        <Pencil size={15} /> Edit Subject
-                      </DropdownItem>
-                      <DropdownItem danger onClick={() => setDeleteSubjectTarget(s)}>
-                        <Trash2 size={15} /> Delete Subject
-                      </DropdownItem>
-                    </DropdownMenu>
-                  </div>
-                  <h3 className="text-base font-semibold text-navy-900 mb-3">{s.name}</h3>
-                  <p className="text-xs text-slate-500 mb-3">
-                    {s.teacherNames.length} teacher{s.teacherNames.length !== 1 ? "s" : ""} assigned
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mb-4">
-                    {s.teacherNames.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() =>
-                          setView({
-                            level: "teacher",
-                            departmentId: activeDepartment.id,
-                            subjectId: s.id,
-                            teacherName: t,
-                          })
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu
+                        trigger={
+                          <button className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                            <MoreVertical size={15} />
+                          </button>
                         }
                       >
-                        <Badge variant="info" className="cursor-pointer hover:bg-sky-100">
-                          {t}
-                        </Badge>
-                      </button>
-                    ))}
+                        <DropdownItem onClick={() => setSubjectModal({ open: true, edit: s })}>
+                          <Pencil size={15} /> Edit Subject
+                        </DropdownItem>
+                        <DropdownItem danger onClick={() => setDeleteSubjectTarget(s)}>
+                          <Trash2 size={15} /> Delete Subject
+                        </DropdownItem>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  <h3 className="text-base font-semibold text-navy-900 mb-4">{s.name}</h3>
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                    <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                      <Users2 size={14} />
+                      {s.teacherNames.length} teacher{s.teacherNames.length !== 1 ? "s" : ""} assigned
+                    </div>
+                    <ArrowRight size={14} className="text-slate-300" />
                   </div>
                 </Card>
               ))}
@@ -512,100 +441,18 @@ export default function AcademicStructurePage() {
             </div>
           </>
         )}
-
-        {view.level === "teacher" && activeDepartment && activeSubject && (
-          <>
-            <Breadcrumb
-              items={[
-                { label: "Department Inventory", onClick: () => setView({ level: "departments" }) },
-                { label: activeDepartment.name, onClick: () => setView({ level: "subjects", departmentId: activeDepartment.id }) },
-                { label: activeSubject.name },
-              ]}
-            />
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-navy-900">{view.teacherName}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Teaching {activeSubject.name} · {activeDepartment.name}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => setView({ level: "subjects", departmentId: activeDepartment.id })}
-              >
-                <ChevronLeft size={15} /> Back
-              </Button>
-            </div>
-
-            <Card className="overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100">
-                <h3 className="text-sm font-semibold text-navy-900">Exam History</h3>
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-slate-400 border-b border-slate-100 bg-slate-50/50">
-                    <th className="px-5 py-3 font-medium">Exam</th>
-                    <th className="px-5 py-3 font-medium">Date</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium text-right">Students</th>
-                    <th className="px-5 py-3 font-medium text-right">&nbsp;</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teacherExams.map((exam) => (
-                    <tr key={exam.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                      <td className="px-5 py-3.5">
-                        <p className="font-medium text-navy-900">{exam.title}</p>
-                        <p className="text-xs text-slate-400">{exam.examCode}</p>
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-600">{exam.date}</td>
-                      <td className="px-5 py-3.5">
-                        <Badge
-                          variant={
-                            exam.status === "Completed"
-                              ? "success"
-                              : exam.status === "In Progress"
-                              ? "info"
-                              : exam.status === "Scheduled"
-                              ? "warning"
-                              : "danger"
-                          }
-                        >
-                          {exam.status}
-                        </Badge>
-                      </td>
-                      <td className="px-5 py-3.5 text-right text-slate-600">{exam.totalStudents}</td>
-                      <td className="px-5 py-3.5 text-right">
-                        <Link
-                          href={`/organization/exams/${exam.id}`}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline"
-                        >
-                          <FileText size={13} /> View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                  {teacherExams.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-5 py-10 text-center text-slate-400 text-sm">
-                        No exam history for this teacher yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </Card>
-          </>
-        )}
       </main>
 
+      <SubjectTeachersModal
+        open={subjectTeachersModal.open}
+        subject={subjectTeachersModal.subject}
+        onClose={() => setSubjectTeachersModal({ open: false })}
+      />
       <DepartmentModal
         open={deptModal.open}
         initial={deptModal.edit}
         onClose={() => setDeptModal({ open: false })}
         onSave={saveDepartment}
-        categories={categories}
-        onAddCategory={(cat) => setCategories((prev) => [...prev, cat])}
       />
       <SubjectModal
         open={subjectModal.open}

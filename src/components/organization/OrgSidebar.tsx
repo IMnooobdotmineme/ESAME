@@ -88,6 +88,7 @@ export function OrgSidebar() {
         title="Log out?"
         description="You'll need to sign in again to access the organization dashboard."
         confirmLabel="Log out"
+        variant="logout"
       />
     </aside>
   );

@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { InviteTeacherModal, InviteFormData } from "@/components/organization/InviteTeacherModal";
-import { InvitationLinkModal } from "@/components/organization/InvitationLinkModal";
+import { InvitationSentDialog } from "@/components/organization/InvitationSentDialog";
 import { DEPARTMENTS } from "@/lib/academic-structure-data";
+import { INITIAL_TEACHERS, Teacher, TeacherStatus as Status } from "@/lib/teachers-data";
 import {
   UserPlus,
   Search,
@@ -20,26 +23,6 @@ import {
   Eye,
 } from "lucide-react";
 
-type Status = "Active" | "Pending" | "Suspended" | "Deactivated";
-
-interface Teacher {
-  id: string;
-  name: string;
-  email: string;
-  department: string;
-  subject: string;
-  status: Status;
-  joined: string;
-}
-
-const INITIAL_TEACHERS: Teacher[] = [
-  { id: "1", name: "Sok Dara", email: "sok.dara@kit.edu.kh", department: "Computer Science", subject: "Data Structures", status: "Active", joined: "Jan 12, 2026" },
-  { id: "2", name: "Chan Sopheak", email: "chan.sopheak@kit.edu.kh", department: "Internet of Things", subject: "Sensor Technology", status: "Active", joined: "Feb 3, 2026" },
-  { id: "3", name: "Ly Vannak", email: "ly.vannak@kit.edu.kh", department: "Computer Science", subject: "Database Systems", status: "Pending", joined: "Jul 10, 2026" },
-  { id: "4", name: "Ros Chenda", email: "ros.chenda@kit.edu.kh", department: "Information Technology", subject: "Networking Basics", status: "Active", joined: "Mar 22, 2026" },
-  { id: "5", name: "Heng Sreymom", email: "heng.sreymom@kit.edu.kh", department: "Information Technology", subject: "Cloud Computing", status: "Suspended", joined: "Nov 5, 2025" },
-];
-
 const STATUS_VARIANT: Record<Status, "success" | "warning" | "danger" | "neutral"> = {
   Active: "success",
   Pending: "warning",
@@ -50,15 +33,15 @@ const STATUS_VARIANT: Record<Status, "success" | "warning" | "danger" | "neutral
 const FILTERS: ("All" | Status)[] = ["All", "Active", "Pending", "Suspended", "Deactivated"];
 
 export default function TeacherManagementPage() {
+  const router = useRouter();
   const [teachers, setTeachers] = useState<Teacher[]>(INITIAL_TEACHERS);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"All" | Status>("All");
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [linkModal, setLinkModal] = useState<{ open: boolean; name: string; email: string; link: string }>({
+  const [sentDialog, setSentDialog] = useState<{ open: boolean; name: string; email: string }>({
     open: false,
     name: "",
     email: "",
-    link: "",
   });
 
   const filtered = teachers.filter((t) => {
@@ -95,11 +78,10 @@ export default function TeacherManagementPage() {
     ]);
 
     setInviteOpen(false);
-    setLinkModal({
+    setSentDialog({
       open: true,
       name: data.name,
       email: data.email,
-      link: `https://esame.app/invite/${crypto.randomUUID().slice(0, 8)}`,
     });
   }
 
@@ -164,15 +146,18 @@ export default function TeacherManagementPage() {
               {filtered.map((teacher) => (
                 <tr key={teacher.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                   <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
+                    <Link
+                      href={`/organization/teachers/${encodeURIComponent(teacher.name)}`}
+                      className="flex items-center gap-3 group"
+                    >
                       <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
                         {teacher.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                       </div>
                       <div>
-                        <p className="font-medium text-navy-900">{teacher.name}</p>
+                        <p className="font-medium text-navy-900 group-hover:underline">{teacher.name}</p>
                         <p className="text-xs text-slate-400">{teacher.email}</p>
                       </div>
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge variant="info">{teacher.department}</Badge>
@@ -190,27 +175,39 @@ export default function TeacherManagementPage() {
                         </button>
                       }
                     >
-                      <DropdownItem onClick={() => {}}>
-                        <Eye size={15} /> View Profile
-                      </DropdownItem>
-                      {teacher.status !== "Active" && (
-                        <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
-                          <CheckCircle2 size={15} /> Activate
+                      {teacher.status === "Pending" ? (
+                        <DropdownItem danger onClick={() => removeTeacher(teacher.id)}>
+                          <Trash2 size={15} /> Remove
                         </DropdownItem>
+                      ) : (
+                        <>
+                          <DropdownItem
+                            onClick={() =>
+                              router.push(`/organization/teachers/${encodeURIComponent(teacher.name)}`)
+                            }
+                          >
+                            <Eye size={15} /> View Profile
+                          </DropdownItem>
+                          {teacher.status !== "Active" && (
+                            <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
+                              <CheckCircle2 size={15} /> Activate
+                            </DropdownItem>
+                          )}
+                          {teacher.status === "Active" && (
+                            <DropdownItem onClick={() => updateStatus(teacher.id, "Deactivated")}>
+                              <XCircle size={15} /> Deactivate
+                            </DropdownItem>
+                          )}
+                          {teacher.status !== "Suspended" && (
+                            <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
+                              <Ban size={15} /> Suspend
+                            </DropdownItem>
+                          )}
+                          <DropdownItem danger onClick={() => removeTeacher(teacher.id)}>
+                            <Trash2 size={15} /> Remove
+                          </DropdownItem>
+                        </>
                       )}
-                      {teacher.status === "Active" && (
-                        <DropdownItem onClick={() => updateStatus(teacher.id, "Deactivated")}>
-                          <XCircle size={15} /> Deactivate
-                        </DropdownItem>
-                      )}
-                      {teacher.status !== "Suspended" && (
-                        <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
-                          <Ban size={15} /> Suspend
-                        </DropdownItem>
-                      )}
-                      <DropdownItem danger onClick={() => removeTeacher(teacher.id)}>
-                        <Trash2 size={15} /> Remove
-                      </DropdownItem>
                     </DropdownMenu>
                   </td>
                 </tr>
@@ -232,12 +229,11 @@ export default function TeacherManagementPage() {
         onClose={() => setInviteOpen(false)}
         onInvite={handleInvite}
       />
-      <InvitationLinkModal
-        open={linkModal.open}
-        onClose={() => setLinkModal((prev) => ({ ...prev, open: false }))}
-        teacherName={linkModal.name}
-        teacherEmail={linkModal.email}
-        link={linkModal.link}
+      <InvitationSentDialog
+        open={sentDialog.open}
+        onClose={() => setSentDialog((prev) => ({ ...prev, open: false }))}
+        teacherName={sentDialog.name}
+        teacherEmail={sentDialog.email}
       />
     </>
   );

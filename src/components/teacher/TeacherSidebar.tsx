@@ -84,6 +84,7 @@ export function TeacherSidebar() {
         title="Log out?"
         description="You'll need to sign in again to access the teacher portal."
         confirmLabel="Log out"
+        variant="logout"
       />
     </aside>
   );
