@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import AdminNotificationDropdown from "@/components/AdminNotificationDropdown";
 
 interface AdminTopbarProps {
   title: string;
@@ -19,11 +18,9 @@ export function AdminTopbar({ title, description }: AdminTopbarProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        <AdminNotificationDropdown />
-
         <Link
           href="/admin/profile"
-          className="flex items-center gap-2 pl-2 border-l border-slate-200 rounded-full hover:bg-slate-50 transition-colors pr-2 -mr-2 py-1"
+          className="flex items-center gap-2 pl-2 rounded-full hover:bg-slate-50 transition-colors pr-2 -mr-2 py-1"
         >
           <div className="h-9 w-9 rounded-full bg-navy-900 text-white flex items-center justify-center text-sm font-medium shrink-0">
             AD
@@ -37,3 +34,4 @@ export function AdminTopbar({ title, description }: AdminTopbarProps) {
     </header>
   );
 }
+

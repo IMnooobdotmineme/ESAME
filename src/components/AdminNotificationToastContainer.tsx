@@ -88,7 +88,7 @@ export default function AdminNotificationToastContainer() {
 
           <div className="flex items-center gap-4 pt-1">
             <Link
-              href={toast.type === 'security' ? '/admin/security' : '/admin/organizations'}
+              href={toast.type === 'security' ? '/admin/logs' : '/admin/organizations'}
               className="text-xs font-bold text-sky-400 hover:underline"
             >
               View Details &rarr;

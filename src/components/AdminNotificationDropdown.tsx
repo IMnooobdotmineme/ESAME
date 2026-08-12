@@ -25,8 +25,8 @@ export default function AdminNotificationDropdown() {
     },
     {
       id: '2',
-      title: 'New Organization Request',
-      message: 'Stanford University submitted an enterprise sign-up application.',
+      title: 'Organization Activated',
+      message: 'Stanford University was activated and is now live on the platform.',
       time: '12m ago',
       type: 'organization',
       unread: true,

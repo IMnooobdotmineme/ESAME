@@ -5,11 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  Users,
-  FileText,
-  ShieldAlert,
-  Lock,
-  ArrowRight,
+  Building2,
+  ScrollText,
+  UserCircle,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,10 +16,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Users", href: "/admin/users", icon: Users },
-  { label: "Logs", href: "/admin/logs", icon: FileText },
-  { label: "Security", href: "/admin/security", icon: ShieldAlert },
-  { label: "Profile", href: "/admin/profile", icon: Lock },
+  { label: "Organizations", href: "/admin/organizations", icon: Building2 },
+  { label: "Logs", href: "/admin/logs", icon: ScrollText },
+  { label: "Profile", href: "/admin/profile", icon: UserCircle },
 ];
 
 export function AdminSidebar() {
