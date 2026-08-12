@@ -85,7 +85,7 @@ export default function OrganizationDashboardPage() {
                 waiting for activation.
               </p>
             </div>
-            <Link href="/organization/teachers">
+            <Link href="/teachers">
               <Button size="sm" variant="secondary">
                 Review <ArrowRight size={14} />
               </Button>
@@ -123,38 +123,25 @@ export default function OrganizationDashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 pt-3">
-              <Link href="/organization/teachers">
+              <Link href="/teachers">
                 <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
                   <UserPlus size={18} className="text-sky-600" />
                   Invite Teacher
                 </button>
               </Link>
-              <Link href="/organization/academic-structure">
-                <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
-                  <CalendarPlus size={18} className="text-sky-600" />
-                  Add Academic Year
-                </button>
-              </Link>
-              <Link href="/organization/academic-structure">
-                <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
-                  <BookOpen size={18} className="text-sky-600" />
-                  Add Subject
-                </button>
-              </Link>
-              <Link href="/organization/exams">
+             <Link href="/academic-structure">
+  <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
+    <Building2 size={18} className="text-sky-600" />
+    Add Department
+  </button>
+</Link>
+             
+              <Link href="/exams">
                 <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
                   <ListChecks size={18} className="text-sky-600" />
                   View All Exams
                 </button>
               </Link>
-              <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
-                <FileBarChart2 size={18} className="text-sky-600" />
-                Generate Report
-              </button>
-              <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
-                <ScrollText size={18} className="text-sky-600" />
-                View Activity Logs
-              </button>
             </CardContent>
           </Card>
         </div>
@@ -166,7 +153,7 @@ export default function OrganizationDashboardPage() {
               <CardTitle className="text-base font-semibold text-navy-900">
                 Recent Exams
               </CardTitle>
-              <Link href="/organization/exams" className="text-xs font-medium text-sky-600 hover:underline">
+              <Link href="/exams" className="text-xs font-medium text-sky-600 hover:underline">
                 View all
               </Link>
             </CardHeader>

@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EXAMS, ExamStatus } from "@/lib/exam-data";
-import { Search, ListFilter, Calendar, ChevronLeft, ChevronRight, ChevronRight as Arrow } from "lucide-react";
+import { Search, ListFilter, Calendar, ChevronLeft, ChevronRight, ChevronRight as Arrow, X, Check, ArrowUpDown } from "lucide-react";
 
 const STATUS_VARIANT: Record<ExamStatus, "info" | "success" | "warning" | "danger"> = {
   "In Progress": "info",
@@ -17,6 +17,15 @@ const STATUS_VARIANT: Record<ExamStatus, "info" | "success" | "warning" | "dange
 
 const FILTERS: ("All" | ExamStatus)[] = ["All", "Scheduled", "In Progress", "Completed", "Locked"];
 
+type SortOrder = "default" | "newest" | "oldest" | "title-asc" | "title-desc";
+
+const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "title-asc", label: "Title A–Z" },
+  { value: "title-desc", label: "Title Z–A" },
+];
+
 const PAGE_SIZE = 5;
 
 export default function ExamManagementPage() {
@@ -24,25 +33,66 @@ export default function ExamManagementPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
+  const [sortOrder, setSortOrder] = useState<SortOrder>("default");
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+        setFiltersOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const activeCount = EXAMS.filter((e) => e.status === "In Progress").length;
   const scheduledCount = EXAMS.filter((e) => e.status === "Scheduled").length;
   const totalSubmissions = EXAMS.reduce((sum, e) => sum + e.results.length, 0);
 
   const filtered = useMemo(() => {
-    return EXAMS.filter((e) => {
+    const result = EXAMS.filter((e) => {
       const matchesStatus = filter === "All" || e.status === filter;
       const q = search.toLowerCase();
       const matchesSearch =
         !q || e.title.toLowerCase().includes(q) || e.examCode.toLowerCase().includes(q);
       return matchesStatus && matchesSearch;
     });
-  }, [filter, search]);
+
+    if (sortOrder === "newest" || sortOrder === "oldest") {
+      result.sort((a, b) => {
+        const da = new Date(a.date).getTime();
+        const db = new Date(b.date).getTime();
+        return sortOrder === "newest" ? db - da : da - db;
+      });
+    } else if (sortOrder === "title-asc" || sortOrder === "title-desc") {
+      result.sort((a, b) =>
+        sortOrder === "title-asc" ? a.title.localeCompare(b.title) : b.title.localeCompare(a.title)
+      );
+    }
+
+    return result;
+  }, [filter, search, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const activeFilterCount = sortOrder !== "default" ? 1 : 0;
+
   function changeFilter(f: "All" | ExamStatus) {
     setFilter(f);
+    setPage(1);
+  }
+
+  function toggleSort(order: SortOrder) {
+    setSortOrder((prev) => (prev === order ? "default" : order));
+    setPage(1);
+  }
+
+  function clearSort() {
+    setSortOrder("default");
     setPage(1);
   }
 
@@ -106,14 +156,51 @@ export default function ExamManagementPage() {
                 className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
               />
             </div>
-            <button className="hidden sm:flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 text-sm font-medium text-slate-600 hover:bg-slate-50">
-              <ListFilter size={15} />
-              Filters
-            </button>
-            <button className="hidden sm:flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 text-sm font-medium text-slate-600 hover:bg-slate-50">
-              <Calendar size={15} />
-              Date Range
-            </button>
+
+            {/* Sort dropdown */}
+            <div className="relative hidden sm:block" ref={filtersRef}>
+              <button
+                onClick={() => setFiltersOpen((v) => !v)}
+                className={
+                  activeFilterCount > 0
+                    ? "flex items-center gap-2 rounded-full border border-navy-900 bg-navy-900 px-4 h-10 text-sm font-medium text-white"
+                    : "flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                }
+              >
+                <ArrowUpDown size={15} />
+                Sort{activeFilterCount > 0 ? " (1)" : ""}
+              </button>
+
+              {filtersOpen && (
+                <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white py-2 shadow-lg">
+                  <div className="flex items-center justify-between px-3 pb-2">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sort By</p>
+                    {activeFilterCount > 0 && (
+                      <button
+                        onClick={clearSort}
+                        className="flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline"
+                      >
+                        <X size={12} />
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {SORT_OPTIONS.map((opt) => {
+                    const active = sortOrder === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleSort(opt.value)}
+                        className="flex w-full items-center justify-between px-3 py-2 text-sm text-navy-900 hover:bg-slate-50"
+                      >
+                        {opt.label}
+                        {active && <Check size={14} className="text-sky-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

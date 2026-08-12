@@ -20,7 +20,7 @@ export function OrgTopbar({ title, description }: OrgTopbarProps) {
 
       <div className="flex items-center gap-3">
         <Link
-          href="/organization/notifications"
+          href="/notifications"
           className="relative h-9 w-9 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
         >
           <Bell size={18} className="text-slate-600" />
@@ -28,7 +28,7 @@ export function OrgTopbar({ title, description }: OrgTopbarProps) {
         </Link>
 
         <Link
-          href="/organization/settings"
+          href="/settings"
           className="flex items-center gap-2 pl-2 border-l border-slate-200 rounded-full hover:bg-slate-50 transition-colors pr-2 -mr-2 py-1"
         >
           <div className="h-9 w-9 rounded-full bg-navy-900 text-white flex items-center justify-center text-sm font-medium shrink-0">

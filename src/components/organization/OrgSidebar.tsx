@@ -17,12 +17,12 @@ import { EsameLogo } from "@/components/organization/EsameLogo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", href: "/organization/dashboard", icon: LayoutDashboard },
-  { label: "Teachers", href: "/organization/teachers", icon: Users },
-  { label: "Academic Structure", href: "/organization/academic-structure", icon: Layers },
-  { label: "Exams", href: "/organization/exams", icon: FileText },
-  { label: "Analytics", href: "/organization/analytics", icon: BarChart3 },
-  { label: "Settings", href: "/organization/settings", icon: Settings },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Teachers", href: "/teachers", icon: Users },
+  { label: "Academic Structure", href: "/academic-structure", icon: Layers },
+  { label: "Exams", href: "/exams", icon: FileText },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
+  { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function OrgSidebar() {
