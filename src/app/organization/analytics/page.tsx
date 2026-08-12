@@ -23,25 +23,21 @@ const LIVE_ACTIVITY = [
   { studentId: "#STU-5520", module: "Sensor Technology", progress: 63 },
 ];
 
-// Automated reports removed
-
 export default function AnalyticsPage() {
-  
-
   return (
     <>
-      <OrgTopbar title="Analytics" description="Invite, manage, and monitor teacher accounts" />
+      <OrgTopbar
+        title="Analytics"
+        description="Comprehensive performance overview across all active examination cycles"
+      />
 
       <main className="p-6 space-y-6">
         {/* Header row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-navy-900">System Analytics</h2>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Comprehensive performance overview across all active examination cycles.
-            </p>
           </div>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <button className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 h-9 text-sm font-medium text-slate-600 hover:bg-slate-50">
               Last 30 Days
               <ChevronDown size={14} />
@@ -87,9 +83,9 @@ export default function AnalyticsPage() {
           </Card>
         </div>
 
-        {/* Live activity */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <Card className="overflow-hidden xl:col-start-2 xl:col-span-2">
+        {/* Live activity — full width, no leftover multi-column grid */}
+        <div>
+          <Card className="overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-navy-900">Live Exam Activity</h3>
               <span className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -126,8 +122,6 @@ export default function AnalyticsPage() {
               </tbody>
             </table>
           </Card>
-
-          {/* Automated reports removed */}
         </div>
       </main>
     </>

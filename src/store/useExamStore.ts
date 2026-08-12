@@ -8,6 +8,8 @@ export interface StudentRequest {
   currentQuestion?: number;
   tabSwitches?: number;
   isSubmitted?: boolean;
+  isLocked?: boolean;
+  lastLockedAt?: string;
 }
 
 export interface Exam {
@@ -20,6 +22,17 @@ export interface Exam {
   isStarted?: boolean;
   isEnded?: boolean;
   requests: StudentRequest[];
+  parts?: unknown[];
+  scheduledStartAt?: string; // ISO timestamp — when the exam should auto-start
+}
+
+export interface CreateExamInput {
+  title: string;
+  courseCode: string;
+  durationMinutes: number;
+  parts: unknown[];
+  questionCount: number;
+  scheduledStartAt?: string;
 }
 
 interface ExamStore {
@@ -37,6 +50,22 @@ interface ExamStore {
   deleteExam: (id: string) => void;
   startExam: (roomCode: string) => void;
   endExam: (roomCode: string) => void;
+  flagTabSwitch: (roomCode: string, requestId: string) => void;
+  grantContinue: (roomCode: string, requestId: string) => void;
+  createExam: (input: CreateExamInput) => { id: string; roomCode: string };
+  updateExam: (id: string, input: Partial<CreateExamInput>) => void;
+}
+
+function generateRoomCode(existingCodes: string[]): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  do {
+    code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+  } while (existingCodes.includes(code));
+  return code;
 }
 
 export const useExamStore = create<ExamStore>((set, get) => ({
@@ -59,6 +88,7 @@ export const useExamStore = create<ExamStore>((set, get) => ({
           currentQuestion: 1,
           tabSwitches: 0,
           isSubmitted: false,
+          isLocked: false,
         },
       ],
     },
@@ -94,6 +124,7 @@ export const useExamStore = create<ExamStore>((set, get) => ({
       currentQuestion: 1,
       tabSwitches: 0,
       isSubmitted: false,
+      isLocked: false,
     };
 
     const updatedExams = [...state.exams];
@@ -159,6 +190,85 @@ export const useExamStore = create<ExamStore>((set, get) => ({
       exams: state.exams.map((exam) =>
         exam.roomCode.toUpperCase() === roomCode.toUpperCase()
           ? { ...exam, isEnded: true }
+          : exam
+      ),
+    }));
+  },
+
+  flagTabSwitch: (roomCode, requestId) => {
+    set((state) => ({
+      exams: state.exams.map((exam) => {
+        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
+        return {
+          ...exam,
+          requests: exam.requests.map((req) =>
+            req.id === requestId
+              ? {
+                  ...req,
+                  tabSwitches: (req.tabSwitches ?? 0) + 1,
+                  isLocked: true,
+                  lastLockedAt: new Date().toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                }
+              : req
+          ),
+        };
+      }),
+    }));
+  },
+
+  grantContinue: (roomCode, requestId) => {
+    set((state) => ({
+      exams: state.exams.map((exam) => {
+        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
+        return {
+          ...exam,
+          requests: exam.requests.map((req) =>
+            req.id === requestId ? { ...req, isLocked: false } : req
+          ),
+        };
+      }),
+    }));
+  },
+
+  createExam: (input) => {
+    const state = get();
+    const existingCodes = state.exams.map((e) => e.roomCode);
+    const roomCode = generateRoomCode(existingCodes);
+    const id = `exam-${Date.now()}`;
+
+    const newExam: Exam = {
+  id,
+  courseCode: input.courseCode,
+  title: input.title,
+  durationMinutes: input.durationMinutes,
+  questionCount: input.questionCount,
+  roomCode,
+  isStarted: false,
+  isEnded: false,
+  requests: [],
+  parts: input.parts,
+  scheduledStartAt: input.scheduledStartAt,
+};
+
+    set({ exams: [newExam, ...state.exams] });
+    return { id, roomCode };
+  },
+
+  updateExam: (id, input) => {
+    set((state) => ({
+      exams: state.exams.map((exam) =>
+        exam.id === id
+          ? {
+              ...exam,
+              ...(input.title !== undefined && { title: input.title }),
+              ...(input.courseCode !== undefined && { courseCode: input.courseCode }),
+              ...(input.durationMinutes !== undefined && { durationMinutes: input.durationMinutes }),
+              ...(input.questionCount !== undefined && { questionCount: input.questionCount }),
+              ...(input.parts !== undefined && { parts: input.parts }),
+            }
           : exam
       ),
     }));

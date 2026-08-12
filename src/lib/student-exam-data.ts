@@ -14,7 +14,7 @@ export interface StudentExamSession {
 }
 
 export function getMockExamSession(): StudentExamSession {
-  const startAt = new Date(Date.now() + 15 * 1000).toISOString(); // 15s from now, for dev testing
+  const startAt = new Date(Date.now() + 5 * 1000).toISOString(); // 5s from now, for dev testing
 
   return {
     examTitle: "Midterm Assessment",
