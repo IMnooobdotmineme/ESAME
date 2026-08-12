@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { EsameLogo } from "@/components/organization/EsameLogo";
 
 export default function Home() {
   return (
@@ -9,46 +10,39 @@ export default function Home() {
       <div className="relative w-full bg-white">
 
         {/* Top Right Light Blue Curve Accent */}
-        <div className="absolute top-0 right-0 w-1/2 h-[600px] bg-[#eef5fd] rounded-bl-[100%] z-0"></div>
+        <div className="absolute top-21.5 right-0 w-1/2 h-[500px] bg-[#eef5fd] rounded-bl-[100%] z-0"></div>
 
         <div className="max-w-[1200px] mx-auto px-6 relative z-10">
           {/* Navbar */}
-          <nav className="flex items-center justify-between py-6 mb-10">
-            <div className="flex items-center gap-2">
-              <svg className="w-8 h-8 text-[#1f385c]" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M5 4h2v16H5zM9 4h9v4H9zM9 10h7v4H9zM9 16h9v4H9z" />
-              </svg>
-              <span className="text-3xl font-bold text-[#1f385c]">Esame</span>
-            </div>
+          <nav className="flex items-center justify-between py-6 mb-10 border-b border-slate-100">
+            <Link href="/">
+              <EsameLogo height={32} />
+            </Link>
 
             <div className="flex items-center gap-4">
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  placeholder="Student Key"
-                  className="pl-5 pr-12 py-2 border border-slate-300 rounded-full text-sm text-slate-500 w-56 focus:outline-none focus:border-[#1f385c]"
-                />
-                <button className="absolute right-1 w-8 h-8 bg-[#1f385c] text-white rounded-full flex items-center justify-center">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+              <Link href="/student/join">
+                <button className="flex items-center gap-2 pl-5 pr-2 py-2 border border-slate-300 rounded-full text-sm text-[#1f385c] font-semibold hover:bg-slate-50 transition">
+                  Student Key
+                  <span className="w-7 h-7 bg-[#1f385c] text-white rounded-full flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                  </span>
                 </button>
-              </div>
+              </Link>
               <Link href="/sign-up">
-                  <button className="px-6 py-2 bg-[#1f385c] text-white rounded-full text-sm font-semibold hover:bg-[#152a48] transition">
-               Sign Up
-              </button>
+                <button className="px-6 py-2 bg-[#1f385c] text-white rounded-full text-sm font-semibold hover:bg-[#152a48] transition">
+                  Sign Up
+                </button>
               </Link>
               <Link href="/login">
-              <button className="px-6 py-2 border border-slate-300 text-[#1f385c] rounded-full text-sm font-semibold hover:bg-slate-50 transition">
-                
-             Login
-              </button>
+                <button className="px-6 py-2 border border-slate-300 text-[#1f385c] rounded-full text-sm font-semibold hover:bg-slate-50 transition">
+                  Login
+                </button>
               </Link>
-              
             </div>
           </nav>
 
           {/* Hero Content */}
-          <div className="flex flex-col lg:flex-row items-center justify-between pb-32">
+          <div className="flex flex-col lg:flex-row items-center justify-between pb-55">
             <div className="max-w-[600px] space-y-6">
               <div className="inline-block px-5 py-1.5 border border-[#1f385c]/20 rounded-full text-sm text-[#1f385c] bg-white">
                 Secure Assessment Platform
@@ -56,7 +50,7 @@ export default function Home() {
 
               <h1 className="text-[3.5rem] font-black text-black leading-tight tracking-tight">
                 Reliable, Secure &<br />
-                Intelligent <span className="text-[#89c8ff]">Online<br/>Examinations</span>
+                Intelligent <span className="text-[#89c8ff]">Online Examinations</span>
               </h1>
 
               <p className="text-[1.1rem] text-slate-700 leading-snug max-w-[500px]">
@@ -84,28 +78,23 @@ export default function Home() {
                 </div>
               </div>
             </div>
+            
 
-            {/* Hero Illustration (original inline SVG — replaces missing /WEB_ONE.jpg) */}
+            {/* Hero Illustration */}
             <div className="w-[440px] flex-shrink-0 z-10 relative mt-14 lg:mt-0">
-              {/* Soft glow behind illustration */}
               <div className="absolute inset-0 flex items-center justify-center -z-10">
-                <div className="w-[360px] h-[360px] rounded-full bg-[#eaf3ff]"></div>
+                <div className="w-[360px] h-[360px] rounded-full bg-[#eef5fd]"></div>
               </div>
 
               <svg viewBox="0 0 420 420" className="w-full h-auto">
-                {/* decorative ring */}
                 <circle cx="210" cy="210" r="170" fill="none" stroke="#dceafd" strokeWidth="2" />
                 <circle cx="210" cy="210" r="140" fill="none" stroke="#dceafd" strokeWidth="2" />
 
-                {/* clipboard body */}
                 <rect x="120" y="70" width="180" height="260" rx="16" fill="#ffffff" stroke="#1f385c" strokeWidth="4" />
-                {/* clip */}
                 <rect x="185" y="52" width="50" height="26" rx="8" fill="#1f385c" />
-                {/* title bar */}
                 <rect x="140" y="96" width="140" height="34" rx="6" fill="#ffdf6b" />
                 <text x="210" y="120" textAnchor="middle" fontFamily="Arial, sans-serif" fontWeight="800" fontSize="20" fill="#1f385c">TEST</text>
 
-                {/* checklist rows */}
                 <g>
                   <rect x="140" y="150" width="18" height="18" rx="4" fill="#89c8ff" />
                   <path d="M144 159l4 4 8-8" stroke="#ffffff" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -125,33 +114,28 @@ export default function Home() {
                   <rect x="168" y="249" width="75" height="10" rx="4" fill="#e6edf5" />
                 </g>
 
-                {/* pencil */}
                 <g transform="rotate(45 300 300)">
                   <rect x="288" y="230" width="16" height="90" rx="4" fill="#ffdf6b" />
                   <path d="M288 230 L304 230 L296 210 Z" fill="#f0a04b" />
                   <rect x="288" y="316" width="16" height="10" fill="#e6edf5" />
                 </g>
 
-                {/* hand holding clipboard base */}
                 <path d="M150 330 Q210 360 270 330 L270 345 Q210 372 150 345 Z" fill="#1f385c" />
               </svg>
             </div>
           </div>
         </div>
 
-        {/* Overlapping waves */}
-        <div className="absolute bottom-[-150px] left-0 w-full overflow-hidden leading-none z-0 h-[300px]">
+        {/* Bottom wave — single navy layer only */}
+        <div className="absolute bottom-[-1px] left-0 w-full overflow-hidden leading-none z-0 h-[200px]">
           <svg viewBox="0 0 1440 320" className="absolute bottom-0 w-full h-full" preserveAspectRatio="none">
             <path fill="#1f385c" d="M0,160L80,149.3C160,139,320,117,480,128C640,139,800,181,960,208C1120,235,1280,245,1360,250.7L1440,256L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z"></path>
-          </svg>
-          <svg viewBox="0 0 1440 320" className="absolute bottom-[-50px] w-full h-full opacity-90" preserveAspectRatio="none">
-             <path fill="#6ca2e8" d="M0,224L80,240C160,256,320,288,480,277.3C640,267,800,213,960,202.7C1120,192,1280,224,1360,240L1440,256L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z"></path>
           </svg>
         </div>
       </div>
 
       {/* ================= WHY CHOOSE SECTION ================= */}
-      <section className="pt-56 pb-24 px-6 max-w-[1100px] mx-auto text-center relative z-10">
+      <section className="pt-40 pb-24 px-6 max-w-[1100px] mx-auto text-center relative z-10">
         <h2 className="text-4xl font-bold text-black mb-6">Why choose Esame?</h2>
         <p className="text-slate-600 max-w-3xl mx-auto mb-16 text-[1.05rem] leading-relaxed">
           Traditional digital assessments fail to balance academic reliability with simple access control. ESAME solves this by combining client-less deployment with multi-layer browser integrity infrastructure
@@ -179,23 +163,24 @@ export default function Home() {
       </section>
 
       {/* ================= USE CASES ================= */}
-      {/* Reference layout: heading/paragraph as its own full-width row, then the two
-          use-case cards sit side-by-side beneath it (not stacked in a narrow column) */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute left-[-50px] top-[5%] w-[450px] h-[300px] bg-[#1f385c] rounded-r-full z-0"></div>
-        <div className="absolute left-[-20px] top-[28%] w-[350px] h-[150px] bg-[#6ca2e8] rounded-r-full z-0 -z-10"></div>
-
+      <section className="py-24 relative overflow-hidden bg-[#f8fafc]">
         <div className="max-w-[1200px] mx-auto px-6 relative z-10">
-          <div className="pl-8 lg:pl-40 mb-14 max-w-2xl">
+          <div className="mb-14 max-w-2xl">
+            <span className="inline-block px-4 py-1 rounded-full bg-[#a6c8f0] text-[#1f385c] text-xs font-semibold mb-4">
+              Built For Every Role
+            </span>
             <h2 className="text-[2.5rem] font-bold text-black mb-4 leading-tight">Just a few ways you can use</h2>
             <p className="text-slate-600 text-lg leading-relaxed">
               ESAME scales dynamically according to role privileges and system scopes—whether you are hosting large university cohorts or fast modular class tests.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 pl-8 lg:pl-40">
-            {/* Blue Tinted Card */}
-            <div className="bg-[#f4f7fc] p-10 rounded-[20px] border border-blue-50 shadow-sm">
+          <div className="grid md:grid-cols-2 gap-6 relative">
+            {/* Contained decorative accent — sits behind the cards only, never near the text above */}
+            <div className="absolute -left-10 -top-10 w-56 h-56 bg-[#1f385c]/[0.06] rounded-full -z-10 hidden lg:block"></div>
+            <div className="absolute -right-10 -bottom-10 w-56 h-56 bg-[#a3e8b9]/20 rounded-full -z-10 hidden lg:block"></div>
+
+            <div className="bg-[#f4f7fc] p-10 rounded-[20px] border border-blue-50 shadow-sm relative">
               <span className="inline-block px-8 py-1.5 bg-[#abc7eb] text-[#1f385c] rounded-full text-sm font-medium mb-6">
                 Institutional Lead
               </span>
@@ -203,8 +188,7 @@ export default function Home() {
               <p className="text-sm text-slate-600 leading-relaxed">Set up entire semesters, departments, and academic years. Register and delegate access vectors directly to your active training staff while tracking core success parameters on institutional dashboards.</p>
             </div>
 
-            {/* Green Tinted Card */}
-            <div className="bg-[#f4fcf6] p-10 rounded-[20px] border border-green-50 shadow-sm">
+            <div className="bg-[#f4fcf6] p-10 rounded-[20px] border border-green-50 shadow-sm relative">
               <span className="inline-block px-8 py-1.5 bg-[#a3e8b9] text-emerald-900 rounded-full text-sm font-medium mb-6">
                 Course Supervisor
               </span>
@@ -215,12 +199,14 @@ export default function Home() {
         </div>
       </section>
 
+      
+      
       {/* ================= SECURE EXAM BANNER & FEATURES ================= */}
-      <section className="pt-20 pb-32 px-6 max-w-[1200px] mx-auto relative overflow-hidden">
+      <section className="pt-20 pb-32 px-6 max-w-[1200px] mx-auto relative">
 
         <div className="bg-[#1f385c] rounded-2xl p-14 flex flex-col md:flex-row items-center justify-between text-white shadow-xl mb-32 z-20 relative">
           <div className="mb-6 md:mb-0 max-w-lg text-center md:text-left">
-            <h2 className="text-[2rem] font-medium mb-2 tracking-wide">Your next secure exam session is here</h2>
+            <h2 className="text-[2rem] font-medium mb-2 tracking-wide">Your next secure exam is here</h2>
             <p className="text-[#a0bcdb] text-[1.1rem]">Everything you need to deploy high-integrity<br/> testing environments</p>
           </div>
           <button className="px-10 py-3.5 bg-white text-[#1f385c] font-bold rounded-full hover:bg-slate-100 transition shadow">
@@ -236,11 +222,16 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="absolute bottom-[20%] left-[-10%] w-[120%] h-[300px] bg-[#1f385c] -rotate-[8deg] z-0"></div>
-        <div className="absolute bottom-[10%] left-[-10%] w-[120%] h-[200px] bg-[#6ca2e8] -rotate-[8deg] z-0"></div>
+        {/* single navy diagonal bar — removed the extra lighter-blue layer */}
+        {/* Clean diagonal navy band, sized to a fixed container so it can't poke outside the cards */}
+        <div className="relative isolate overflow-visible">
+          <div className="absolute left-1/2 top-1/2 h-[280px] w-[100vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden pointer-events-none mt-15">
+            <svg viewBox="0 0 1440 280" preserveAspectRatio="none" className="h-full w-full ">
+              <polygon points="0,170 1440,40 1440,280 0,280" fill="#1f385c" />
+            </svg>
+          </div>
 
-        {/* Feature Cards Grid — square badge icons to match reference (was rounded-full) */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative z-20">
+          <div className="relative z-20 grid grid-cols-1 gap-6 md:grid-cols-4">
 
           <div className="bg-white p-6 rounded-[20px] shadow-lg border border-slate-100 flex flex-col items-start min-h-[260px]">
             <div className="w-10 h-10 bg-[#405f87] rounded-xl flex items-center justify-center text-white mb-5">
@@ -275,6 +266,7 @@ export default function Home() {
           </div>
 
         </div>
+        </div>
       </section>
 
       {/* ================= PRE-FOOTER CTA ================= */}
@@ -295,7 +287,8 @@ export default function Home() {
 
       {/* ================= FOOTER ================= */}
       <div className="relative bg-[#1f385c]">
-        <div className="absolute top-[-100px] left-0 w-full overflow-hidden leading-none z-10">
+        {/* single navy wave, curving up into the white section above — no second layer */}
+        <div className="absolute top-[-99px] left-0 w-full overflow-hidden leading-none z-10">
            <svg viewBox="0 0 1440 150" preserveAspectRatio="none" className="block w-full h-[150px]">
              <path fill="#1f385c" d="M0,32L120,42.7C240,53,480,75,720,80C960,85,1200,75,1320,69.3L1440,64L1440,150L1320,150C1200,150,960,150,720,150C480,150,240,150,120,150L0,150Z"></path>
            </svg>
@@ -307,29 +300,30 @@ export default function Home() {
             <div className="col-span-1">
               <h3 className="text-[1.05rem] mb-4 text-[#e0e0e0]">A little more about us :</h3>
               <p className="text-[0.85rem] text-[#9ca3af] mb-6 leading-relaxed">
-                We make it easy for students, job seekers, and companies to find the right match through a simple job posting and application system.
+                Esame helps institutions run reliable, secure online exams — from teacher-created assessments to real-time proctoring and instant results, all without the overhead of legacy testing software.
               </p>
               <button className="px-6 py-2 bg-white text-[#1f385c] rounded-full text-xs font-bold hover:bg-slate-100 transition shadow">
-                Join us!
+                Get Started
               </button>
             </div>
 
             <div className="col-span-1 md:pl-10">
               <h3 className="font-bold mb-4 text-white text-[0.9rem]">Platform</h3>
               <ul className="space-y-3 text-[0.85rem] text-[#9ca3af]">
-                <li><Link href="#" className="hover:text-white transition">Browse Jobs</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Post a Job</Link></li>
+                <li><Link href="#" className="hover:text-white transition">For Organizations</Link></li>
+                <li><Link href="#" className="hover:text-white transition">For Teachers</Link></li>
+                <li><Link href="#" className="hover:text-white transition">For Students</Link></li>
                 <li><Link href="#" className="hover:text-white transition">Pricing</Link></li>
               </ul>
             </div>
 
             <div className="col-span-1">
-              <h3 className="font-bold mb-4 text-white text-[0.9rem]">Explore</h3>
+              <h3 className="font-bold mb-4 text-white text-[0.9rem]">Features</h3>
               <ul className="space-y-3 text-[0.85rem] text-[#9ca3af]">
-                <li><Link href="#" className="hover:text-white transition">Internships</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Companies</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Career Tips</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Collaboration features</Link></li>
+                <li><Link href="#" className="hover:text-white transition">Anti-Cheating Detection</Link></li>
+                <li><Link href="#" className="hover:text-white transition">AI Question Generation</Link></li>
+                <li><Link href="#" className="hover:text-white transition">Automated Grading</Link></li>
+                <li><Link href="#" className="hover:text-white transition">Analytics &amp; Reporting</Link></li>
               </ul>
             </div>
 
@@ -347,14 +341,9 @@ export default function Home() {
 
         <div className="bg-white w-full py-6">
           <div className="max-w-[1200px] mx-auto px-6 flex flex-col md:flex-row items-center justify-between">
-            <div className="text-2xl font-bold text-[#1f385c] flex items-center gap-2">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M5 4h2v16H5zM9 4h9v4H9zM9 10h7v4H9zM9 16h9v4H9z" />
-              </svg>
-              Esame
-            </div>
+            <EsameLogo height={28} />
             <p className="text-[0.7rem] text-slate-500 mt-4 md:mt-0">
-              © 2026 NextHire. All rights reserved. Making job searching simple and accessible.
+              © 2026 Esame. All rights reserved. Secure, intelligent online examinations.
             </p>
           </div>
         </div>

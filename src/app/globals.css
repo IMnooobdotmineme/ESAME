@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+input, textarea, select {
+  color: var(--color-navy-900);
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
