@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useExamStore } from "@/store/useExamStore";
 import {
   Check,
   CheckCircle2,
@@ -10,7 +9,12 @@ import {
   Layers,
   Lock,
   ArrowLeft,
-  Plus
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
+  Terminal,
+  Info
 } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
@@ -46,6 +50,7 @@ interface Question {
   essayMinMax?: { min: number; max: number };
   codingLang?: string;
   codingStarter?: string;
+  codingTestCases?: { id: string; input: string; expectedOutput: string; hidden: boolean }[];
   blanksText?: string;
   matchingPairs?: { left: string; right: string }[];
   orderingItems?: string[];
@@ -87,10 +92,8 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 };
 
 function ExamBuilderContent() {
-  
   const router = useRouter();
   const searchParams = useSearchParams();
-  const createExam = useExamStore((state) => state.createExam);
 
   const editId = searchParams.get("edit");
   const tabParam = searchParams.get("tab");
@@ -99,13 +102,13 @@ function ExamBuilderContent() {
 
   // --- EXAM PARAMETERS STATE ---
   const [examData, setExamData] = useState({
-  title: "",
-  description: "",
-  department: "Computer Science",
-  scheduledStartAt: "",
-  duration: 60,
-  saveAsTemplate: false
-});
+    title: "",
+    description: "",
+    department: "Computer Science",
+    academicYear: "2026-2027",
+    duration: 60,
+    saveAsTemplate: false
+  });
 
   const [isLaunched, setIsLaunched] = useState(false);
   const [accessCode, setAccessCode] = useState("");
@@ -133,10 +136,11 @@ function ExamBuilderContent() {
   const [multiOptions, setMultiOptions] = useState<string[]>(["Option A", "Option B"]);
   const [multiCorrect, setMultiCorrect] = useState<boolean[]>([true, false]);
   const [tfCorrect, setTfCorrect] = useState<boolean>(true);
-  const [shortAnswers, setShortAnswers] = useState<string[]>([""]);
-  const [essayMinMax, setEssayMinMax] = useState({ min: 100, max: 1000 });
   const [codingLang, setCodingLang] = useState("python");
   const [codingStarter, setCodingStarter] = useState("# Write your code here\n");
+  const [codingTestCases, setCodingTestCases] = useState<
+    { id: string; input: string; expectedOutput: string; hidden: boolean }[]
+  >([{ id: "tc-1", input: "", expectedOutput: "", hidden: false }]);
   const [blanksText, setBlanksText] = useState("The capital of France is [Paris].");
   const [matchingPairs, setMatchingPairs] = useState<{ left: string; right: string }[]>([
     { left: "HTML", right: "Structure" },
@@ -148,11 +152,128 @@ function ExamBuilderContent() {
   const activePart = parts.find((p) => p.id === activePartId);
   const currentFormat = activePart?.allowedType || "mcq";
 
+  // Full reset used when the teacher switches to a different section —
+  // every field goes back to a clean default so nothing "leaks" from the
+  // previous section's question type.
+  const resetQuestionForm = () => {
+    setQText("");
+    setQMarks(5);
+    setQMandatory(true);
+    setQExplanation("");
+    setQMediaType("none");
+    setQMediaUrl("");
+    setMcqOptions(["Option A", "Option B"]);
+    setMcqCorrect(0);
+    setMultiOptions(["Option A", "Option B"]);
+    setMultiCorrect([true, false]);
+    setTfCorrect(true);
+    setCodingLang("python");
+    setCodingStarter("# Write your code here\n");
+    setCodingTestCases([{ id: "tc-1", input: "", expectedOutput: "", hidden: false }]);
+    setBlanksText("The capital of France is [Paris].");
+    setMatchingPairs([
+      { left: "HTML", right: "Structure" },
+      { left: "CSS", right: "Styling" }
+    ]);
+    setOrderingItems(["Step 1", "Step 2", "Step 3"]);
+    setNumericAnswer({ val: 9.81, tolerance: 0.05, unit: "m/s²" });
+  };
+
+  // Lighter reset used right after saving a question into the current
+  // section — keeps Marks and Mandatory as-is (handy when adding several
+  // similar questions in a row) but clears the prompt and answer fields.
+  const resetQuestionDraftAfterSave = () => {
+    setQText("");
+    setQExplanation("");
+    setQMediaType("none");
+    setQMediaUrl("");
+    setMcqOptions(["Option A", "Option B"]);
+    setMcqCorrect(0);
+    setMultiOptions(["Option A", "Option B"]);
+    setMultiCorrect([true, false]);
+    setTfCorrect(true);
+    setCodingStarter("# Write your code here\n");
+    setCodingTestCases([{ id: "tc-1", input: "", expectedOutput: "", hidden: false }]);
+    setBlanksText("The capital of France is [Paris].");
+    setMatchingPairs([
+      { left: "HTML", right: "Structure" },
+      { left: "CSS", right: "Styling" }
+    ]);
+    setOrderingItems(["Step 1", "Step 2", "Step 3"]);
+    setNumericAnswer({ val: 9.81, tolerance: 0.05, unit: "m/s²" });
+  };
+
+  // Clear the question draft every time the teacher switches sections, so
+  // switching from e.g. a Multiple Choice section to a Fill in the Blank
+  // section starts from a blank prompt instead of keeping the old text.
   useEffect(() => {
-    if (tabParam === "questions") {
+    resetQuestionForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePartId]);
+
+  useEffect(() => {
+    if (editId) {
+      const rawData = localStorage.getItem("localExamsData");
+      if (rawData) {
+        try {
+          const currentExams = JSON.parse(rawData) as {
+            active?: PersistedExamRecord[];
+            scheduled?: PersistedExamRecord[];
+            completed?: PersistedExamRecord[];
+          };
+          const allExams = [
+            ...(currentExams.active || []),
+            ...(currentExams.scheduled || []),
+            ...(currentExams.completed || [])
+          ];
+          const found = allExams.find((e) => e.id === editId);
+          if (found) {
+            const restoredDuration =
+              typeof found.duration === "number"
+                ? found.duration
+                : typeof found.duration === "string"
+                ? Number.parseInt(found.duration, 10)
+                : Number.NaN;
+
+            setExamData((prev) => ({
+              ...prev,
+              title: typeof found.title === "string" ? found.title : prev.title,
+              department:
+                typeof found.department === "string"
+                  ? found.department
+                  : typeof found.course === "string"
+                  ? found.course
+                  : prev.department,
+              academicYear: typeof found.academicYear === "string" ? found.academicYear : prev.academicYear,
+              duration: Number.isFinite(restoredDuration) ? restoredDuration : prev.duration
+            }));
+
+            if (found.parts && Array.isArray(found.parts) && found.parts.length > 0) {
+              setParts(found.parts);
+              setActivePartId(found.parts[0].id);
+            } else if (found.questions && Array.isArray(found.questions) && found.questions.length > 0) {
+              const convertedPart: ExamPart = {
+                id: "restored-section-1",
+                title: "Section 1: Restored Questions",
+                marks: 100,
+                description: "Section automatically generated from saved exam questions.",
+                allowedType: found.questions[0]?.type || "mcq",
+                questions: found.questions
+              };
+              setParts([convertedPart]);
+              setActivePartId(convertedPart.id);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to parse local exams data:", err);
+        }
+      }
+    }
+
+    if (editId || tabParam === "questions") {
       setStep(2);
     }
-  }, [tabParam]);
+  }, [editId, tabParam]);
 
   const generateAccessCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -220,9 +341,7 @@ function ExamBuilderContent() {
       ...(qType === "mcq" && { mcqOptions: [...mcqOptions], mcqCorrect }),
       ...(qType === "multi_select" && { multiOptions: [...multiOptions], multiCorrect: [...multiCorrect] }),
       ...(qType === "true_false" && { tfCorrect }),
-      ...(qType === "short_answer" && { shortAnswers: shortAnswers.filter((a) => a.trim() !== "") }),
-      ...(qType === "essay" && { essayMinMax: { ...essayMinMax } }),
-      ...(qType === "coding" && { codingLang, codingStarter }),
+      ...(qType === "coding" && { codingLang, codingStarter, codingTestCases: [...codingTestCases] }),
       ...(qType === "fill_blank" && { blanksText }),
       ...(qType === "matching" && { matchingPairs: [...matchingPairs] }),
       ...(qType === "ordering" && { orderingItems: [...orderingItems] }),
@@ -238,15 +357,7 @@ function ExamBuilderContent() {
       })
     );
 
-    setQText("");
-    setQExplanation("");
-    setQMediaType("none");
-    setQMediaUrl("");
-    setMcqOptions(["Option A", "Option B"]);
-    setMcqCorrect(0);
-    setMultiOptions(["Option A", "Option B"]);
-    setMultiCorrect([true, false]);
-    setShortAnswers([""]);
+    resetQuestionDraftAfterSave();
   };
 
   const handleDeleteQuestion = (partId: string, questionId: string) => {
@@ -274,16 +385,45 @@ function ExamBuilderContent() {
       return;
     }
 
-    const { roomCode } = createExam({
-  title: examData.title || "Untitled Examination",
-  courseCode: examData.department,
-  durationMinutes: examData.duration,
-  parts,
-  questionCount: totalQCount,
-  scheduledStartAt: examData.scheduledStartAt || undefined,
-});
+    const generatedCode = generateAccessCode();
+    setAccessCode(generatedCode);
 
-    setAccessCode(roomCode);
+    const finalExam = {
+      id: editId || Date.now().toString(),
+      title: examData.title || "Untitled Examination",
+      course: examData.department,
+      department: examData.department,
+      academicYear: examData.academicYear,
+      duration: `${examData.duration} mins`,
+      questions: totalQCount,
+      code: generatedCode,
+      date: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
+      students: "0 Registered",
+      isTemplate: examData.saveAsTemplate,
+      parts: parts
+    };
+
+    const rawData = localStorage.getItem("localExamsData");
+    const defaultData = { active: [], scheduled: [], completed: [] };
+    const currentExams = rawData ? JSON.parse(rawData) : defaultData;
+
+    if (editId) {
+      ["active", "scheduled", "completed"].forEach((key) => {
+        const list = currentExams[key];
+        if (Array.isArray(list)) {
+          currentExams[key] = list.map((item: any) =>
+            item.id === editId ? { ...finalExam, questions: parts.flatMap((part) => part.questions) } : item
+          );
+        }
+      });
+    } else {
+      currentExams.scheduled = [
+        { ...finalExam, questions: parts.flatMap((part) => part.questions) },
+        ...(currentExams.scheduled || [])
+      ];
+    }
+
+    localStorage.setItem("localExamsData", JSON.stringify(currentExams));
     setIsLaunched(true);
   };
 
@@ -379,17 +519,15 @@ function ExamBuilderContent() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  SCHEDULED START TIME
+                  ACADEMIC YEAR
                 </label>
                 <input
-                  type="datetime-local"
-                  value={examData.scheduledStartAt}
-                  onChange={(e) => setExamData({ ...examData, scheduledStartAt: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all"
+                  type="text"
+                  placeholder="2026-2027"
+                  value={examData.academicYear}
+                  onChange={(e) => setExamData({ ...examData, academicYear: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 transition-all placeholder:text-slate-400"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Leave blank to start manually only
-                </p>
               </div>
 
               <div>
@@ -770,77 +908,30 @@ function ExamBuilderContent() {
                 </div>
               )}
 
-              {/* 4. SHORT ANSWER */}
+              {/* 4. SHORT ANSWER — no extra config; graded manually from the shared prompt above */}
               {currentFormat === "short_answer" && (
-                <div className="space-y-2.5">
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Accepted Answer Variants (Auto-grading)
-                  </label>
-                  {shortAnswers.map((ans, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <input
-                        type="text"
-                        placeholder="e.g. CPU, Central Processing Unit"
-                        value={ans}
-                        onChange={(e) => {
-                          const c = [...shortAnswers];
-                          c[i] = e.target.value;
-                          setShortAnswers(c);
-                        }}
-                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-sky-400"
-                      />
-                      {shortAnswers.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setShortAnswers(shortAnswers.filter((_, idx) => idx !== i))}
-                          className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setShortAnswers([...shortAnswers, ""])}
-                    className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
-                  >
-                    + Add Accepted Answer Variant
-                  </button>
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3">
+                  <p className="text-xs text-slate-500 font-medium">
+                    Short answer questions are graded manually by you after submission — no extra
+                    setup is needed here beyond the question prompt above.
+                  </p>
                 </div>
               )}
 
-              {/* 5. ESSAY */}
+              {/* 5. ESSAY — no word limit; free-form long answer graded manually */}
               {currentFormat === "essay" && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Minimum Word Count
-                    </label>
-                    <input
-                      type="number"
-                      value={essayMinMax.min}
-                      onChange={(e) => setEssayMinMax({ ...essayMinMax, min: parseInt(e.target.value) || 0 })}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Maximum Word Count
-                    </label>
-                    <input
-                      type="number"
-                      value={essayMinMax.max}
-                      onChange={(e) => setEssayMinMax({ ...essayMinMax, max: parseInt(e.target.value) || 0 })}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
-                    />
-                  </div>
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3">
+                  <p className="text-xs text-slate-500 font-medium">
+                    Essay questions accept a free-form long answer with no word limit, graded
+                    manually by you after submission — no extra setup is needed here beyond the
+                    question prompt above.
+                  </p>
                 </div>
               )}
 
               {/* 6. CODING */}
               {currentFormat === "coding" && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="w-48">
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Programming Language
@@ -856,33 +947,237 @@ function ExamBuilderContent() {
                       <option value="java">Java 17</option>
                     </select>
                   </div>
+
+                  {/* STARTER CODE — styled like a real code editor */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Starter Code Template
                     </label>
-                    <textarea
-                      rows={4}
-                      value={codingStarter}
-                      onChange={(e) => setCodingStarter(e.target.value)}
-                      className="w-full font-mono text-xs bg-slate-900 text-sky-300 p-3.5 rounded-xl focus:outline-none"
-                    />
+                    <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-900 shadow-xs">
+                      <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-950/60 border-b border-slate-800">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500/70" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400/70" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/70" />
+                        <span className="ml-2 text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                          {codingLang === "cpp" ? "main.cpp" : codingLang === "java" ? "Main.java" : codingLang === "javascript" ? "solution.js" : "solution.py"}
+                        </span>
+                      </div>
+                      <div className="flex">
+                        <div
+                          aria-hidden
+                          className="select-none text-right pr-3 pl-3 py-3.5 text-xs font-mono leading-5 text-slate-600 bg-slate-950/40 border-r border-slate-800"
+                        >
+                          {codingStarter.split("\n").map((_, i) => (
+                            <div key={i}>{i + 1}</div>
+                          ))}
+                        </div>
+                        <textarea
+                          rows={8}
+                          spellCheck={false}
+                          value={codingStarter}
+                          onChange={(e) => setCodingStarter(e.target.value)}
+                          className="flex-1 min-w-0 font-mono text-xs leading-5 bg-transparent text-sky-300 p-3.5 focus:outline-none resize-y whitespace-pre"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      This is what the student sees pre-filled in their code editor when the exam starts.
+                    </p>
+                  </div>
+
+                  {/* TEST CASES — auto-grading */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        Test Cases (Auto-Grading)
+                      </label>
+                      <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                        <Info className="w-3 h-3" />
+                        Student code runs against every case below
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {codingTestCases.map((tc, i) => (
+                        <div key={tc.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                              Test Case {i + 1}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const c = [...codingTestCases];
+                                  c[i] = { ...c[i], hidden: !c[i].hidden };
+                                  setCodingTestCases(c);
+                                }}
+                                className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                                  tc.hidden
+                                    ? "bg-slate-800 border-slate-800 text-white"
+                                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                              >
+                                {tc.hidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                {tc.hidden ? "Hidden" : "Visible to student"}
+                              </button>
+                              {codingTestCases.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCodingTestCases(codingTestCases.filter((_, idx) => idx !== i))}
+                                  className="text-rose-500 hover:text-rose-600 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                                Input
+                              </label>
+                              <textarea
+                                rows={2}
+                                placeholder="e.g. 5 3"
+                                value={tc.input}
+                                onChange={(e) => {
+                                  const c = [...codingTestCases];
+                                  c[i] = { ...c[i], input: e.target.value };
+                                  setCodingTestCases(c);
+                                }}
+                                className="w-full font-mono text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-sky-400 resize-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                                Expected Output
+                              </label>
+                              <textarea
+                                rows={2}
+                                placeholder="e.g. 8"
+                                value={tc.expectedOutput}
+                                onChange={(e) => {
+                                  const c = [...codingTestCases];
+                                  c[i] = { ...c[i], expectedOutput: e.target.value };
+                                  setCodingTestCases(c);
+                                }}
+                                className="w-full font-mono text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-sky-400 resize-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCodingTestCases([
+                          ...codingTestCases,
+                          { id: `tc-${Date.now()}`, input: "", expectedOutput: "", hidden: false }
+                        ])
+                      }
+                      className="mt-2.5 text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                      + Add Test Case
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* 7. FILL IN THE BLANK */}
+              {/* 7. FILL IN THE BLANK — redesigned with live preview + detected blanks list */}
               {currentFormat === "fill_blank" && (
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Template Text (Use brackets [blank] for missing words)
-                  </label>
-                  <input
-                    type="text"
-                    value={blanksText}
-                    onChange={(e) => setBlanksText(e.target.value)}
-                    placeholder="e.g. The capital of France is [Paris]."
-                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400"
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Template Text
+                    </label>
+                    <p className="text-[11px] text-slate-400 mb-1.5">
+                      Wrap the correct word or phrase in brackets — e.g.{" "}
+                      <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">
+                        The capital of France is [Paris].
+                      </code>{" "}
+                      Add as many bracketed blanks as you need.
+                    </p>
+                    <textarea
+                      rows={3}
+                      value={blanksText}
+                      onChange={(e) => setBlanksText(e.target.value)}
+                      placeholder="e.g. The [mitochondria] is the powerhouse of the [cell]."
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-sky-400 resize-none"
+                    />
+                  </div>
+
+                  {/* LIVE PREVIEW — how the student will see it */}
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Student Preview
+                    </label>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs leading-relaxed text-slate-700">
+                      {(() => {
+                        const parts = blanksText.split(/(\[[^\]]*\])/g).filter((p) => p !== "");
+                        if (parts.length === 0 || (parts.length === 1 && !/\[[^\]]*\]/.test(parts[0]))) {
+                          return <span className="text-slate-400 italic">Your template preview will appear here...</span>;
+                        }
+                        let blankIndex = 0;
+                        return parts.map((part, i) => {
+                          if (/^\[[^\]]*\]$/.test(part)) {
+                            blankIndex += 1;
+                            return (
+                              <span
+                                key={i}
+                                className="inline-flex items-center justify-center mx-1 px-2.5 min-w-[2.5rem] rounded-md border border-sky-300 bg-sky-50 text-sky-700 font-bold text-[10px] align-middle"
+                              >
+                                Blank {blankIndex}
+                              </span>
+                            );
+                          }
+                          return <span key={i}>{part}</span>;
+                        });
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* DETECTED BLANKS & ANSWERS */}
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Detected Blanks &amp; Accepted Answers
+                    </label>
+                    {(() => {
+                      const matches = Array.from(blanksText.matchAll(/\[([^\]]*)\]/g)).map((m) => m[1].trim());
+                      if (matches.length === 0) {
+                        return (
+                          <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-400">
+                            No blanks detected yet — wrap a word in [brackets] above.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="flex flex-wrap gap-2">
+                          {matches.map((ans, i) => (
+                            <div
+                              key={i}
+                              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white pl-2.5 pr-3 py-1.5"
+                            >
+                              <span className="text-[10px] font-bold text-white bg-navy-900 rounded px-1.5 py-0.5">
+                                {i + 1}
+                              </span>
+                              <span className="text-xs font-medium text-slate-800">
+                                {ans === "" ? (
+                                  <span className="text-rose-500 italic">empty — add an answer</span>
+                                ) : (
+                                  ans
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
 
@@ -960,43 +1255,70 @@ function ExamBuilderContent() {
                 </div>
               )}
 
-              {/* 10. NUMERIC */}
+              {/* 10. NUMERIC — redesigned with a plain-language explanation + live accepted-range preview */}
               {currentFormat === "numeric" && (
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Target Value
-                    </label>
-                    <input
-                      type="number"
-                      value={numericAnswer.val}
-                      onChange={(e) => setNumericAnswer({ ...numericAnswer, val: parseFloat(e.target.value) || 0 })}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
-                    />
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50/60 px-3.5 py-2.5">
+                    <Info className="w-3.5 h-3.5 text-sky-600 mt-0.5 shrink-0" />
+                    <p className="text-[11px] text-sky-800 leading-relaxed">
+                      The student's answer is marked correct if it falls within{" "}
+                      <strong>Correct Answer ± Tolerance</strong>. For example, a Correct Answer of{" "}
+                      <strong>9.81</strong> with a Tolerance of <strong>0.05</strong> accepts any value from{" "}
+                      <strong>9.76 to 9.86</strong>. Use a Tolerance of <strong>0</strong> to require an exact match.
+                    </p>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Tolerance (±)
-                    </label>
-                    <input
-                      type="number"
-                      value={numericAnswer.tolerance}
-                      onChange={(e) =>
-                        setNumericAnswer({ ...numericAnswer, tolerance: parseFloat(e.target.value) || 0 })
-                      }
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
-                    />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Correct Answer
+                      </label>
+                      <input
+                        type="number"
+                        value={numericAnswer.val}
+                        onChange={(e) => setNumericAnswer({ ...numericAnswer, val: parseFloat(e.target.value) || 0 })}
+                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Tolerance (±)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={numericAnswer.tolerance}
+                        onChange={(e) =>
+                          setNumericAnswer({ ...numericAnswer, tolerance: parseFloat(e.target.value) || 0 })
+                        }
+                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
+                      />
+                    </div>
                   </div>
-                  <div>
+
+                  <div className="max-w-xs">
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Unit Label
+                      Unit Label <span className="normal-case font-medium text-slate-400">(optional, shown next to the answer)</span>
                     </label>
                     <input
                       type="text"
+                      placeholder="e.g. m/s², kg, %"
                       value={numericAnswer.unit}
                       onChange={(e) => setNumericAnswer({ ...numericAnswer, unit: e.target.value })}
                       className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-sky-400"
                     />
+                  </div>
+
+                  {/* LIVE ACCEPTED RANGE PREVIEW */}
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">
+                      Accepted Range
+                    </span>
+                    <span className="text-sm font-bold text-emerald-800 font-mono">
+                      {(numericAnswer.val - numericAnswer.tolerance).toFixed(2)} &ndash;{" "}
+                      {(numericAnswer.val + numericAnswer.tolerance).toFixed(2)}
+                      {numericAnswer.unit ? ` ${numericAnswer.unit}` : ""}
+                    </span>
                   </div>
                 </div>
               )}

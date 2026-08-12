@@ -3,22 +3,21 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useExamStore, type Exam } from "@/store/useExamStore";
-import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
-import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Plus,
-  Settings2,
+  Edit3,
   Play,
   Trash2,
   Copy,
   Check,
+  X,
   ShieldCheck,
   Clock,
   HelpCircle,
   FileText,
-  Key,
+  Key
 } from "lucide-react";
+import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 
 type ExamCard = Exam & {
   accessCode: string;
@@ -29,7 +28,11 @@ type ExamCard = Exam & {
   questions?: unknown[];
 };
 
+// ----------------------------------------------------------------------
+// 1. DEMO MOCK DATA
+// ----------------------------------------------------------------------
 const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
+  // --- ACTIVE EXAMS ---
   {
     id: "demo-1",
     title: "Introduction to Computer Science (Midterm)",
@@ -48,6 +51,8 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
     questionCount: 25,
     status: "active",
   },
+
+  // --- SCHEDULED EXAMS ---
   {
     id: "demo-3",
     title: "Database Systems & SQL Optimization Final",
@@ -66,6 +71,8 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
     questionCount: 15,
     status: "scheduled",
   },
+
+  // --- COMPLETED EXAMS ---
   {
     id: "demo-5",
     title: "Web Development Fundamentals - HTML/CSS",
@@ -86,27 +93,28 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
   },
 ];
 
-function getExamStatus(exam: Partial<ExamCard>): "active" | "scheduled" | "completed" {
+// ----------------------------------------------------------------------
+// 2. DYNAMIC STATUS RESOLVER
+// ----------------------------------------------------------------------
+function getExamStatus(exam: any): "active" | "scheduled" | "completed" {
   if (exam.status === "active" || exam.status === "scheduled" || exam.status === "completed") {
     return exam.status;
   }
 
   const now = new Date();
 
-  if (exam.startDate) {
-    const start = new Date(exam.startDate);
+  if (exam.startDate || exam.startTime) {
+    const start = new Date(exam.startDate || exam.startTime);
     if (start > now) return "scheduled";
   }
 
-  if (exam.endDate) {
-    const end = new Date(exam.endDate);
+  if (exam.endDate || exam.endTime) {
+    const end = new Date(exam.endDate || exam.endTime);
     if (end < now) return "completed";
   }
 
   return "active";
 }
-
-const TABS = ["active", "scheduled", "completed"] as const;
 
 export default function MyExamsPage() {
   const router = useRouter();
@@ -117,9 +125,8 @@ export default function MyExamsPage() {
   const rawExams = storeExams.length > 0 ? storeExams : (DEMO_MOCK_EXAMS as Exam[]);
 
   const [selectedExam, setSelectedExam] = useState<ExamCard | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("active");
+  const [activeTab, setActiveTab] = useState<"active" | "scheduled" | "completed">("active");
 
   const mappedExams: ExamCard[] = rawExams.map((exam) => ({
     ...exam,
@@ -136,173 +143,183 @@ export default function MyExamsPage() {
     completed: mappedExams.filter((e) => e.status === "completed").length,
   };
 
-  function handleCopyCode(code: string) {
+  const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
+  };
 
-  function confirmDelete() {
-    if (pendingDeleteId) {
-      deleteExam?.(pendingDeleteId);
-      setPendingDeleteId(null);
+  const handleDeleteExam = (id: string) => {
+    if (confirm("Are you sure you want to delete this exam?")) {
+      deleteExam?.(id);
     }
-  }
+  };
 
   return (
     <>
       <TeacherTopbar
-        title="My Exams"
-        description="Manage your created examinations, launch live proctoring, or create new assessments"
+        title="Exams Repository"
+        description="Manage your created examinations, launch live proctoring, or create new assessments."
       />
 
-      <main className="p-6 space-y-6">
-        {/* Header action */}
-        <div className="flex justify-end">
+      <main className="p-6 space-y-6 font-sans">
+
+      {/* PAGE ACTION ROW */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => router.push("/teacher/exams/new")}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Create New Exam</span>
+        </button>
+      </div>
+
+      {/* NAVIGATION TABS WITH LIVE COUNTS */}
+      <div className="border-b border-slate-200 flex gap-2 overflow-x-auto no-scrollbar">
+        {(["active", "scheduled", "completed"] as const).map((tab) => (
           <button
-            onClick={() => router.push("/teacher/exams/new")}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold rounded-full shadow-sm hover:shadow-md transition-all active:scale-[0.98]"
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`pb-3 px-4 text-xs font-semibold capitalize transition-all cursor-pointer relative ${
+              activeTab === tab
+                ? "text-slate-900 border-b-2 border-sky-400"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
           >
-            <Plus className="w-4 h-4" />
-            Create New Exam
+            {tab} Exams ({counts[tab]})
           </button>
-        </div>
+        ))}
+      </div>
 
-        {/* Filter tabs — pill style, matching design system convention */}
-        <div className="flex gap-2">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={
-                activeTab === tab
-                  ? "rounded-full px-4 py-1.5 text-sm font-medium bg-navy-900 text-white capitalize"
-                  : "rounded-full px-4 py-1.5 text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 capitalize"
-              }
-            >
-              {tab} Exams ({counts[tab]})
-            </button>
-          ))}
-        </div>
-
-        {/* Exams list */}
-        <div className="space-y-3">
-          {filteredExams.length === 0 ? (
-            <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center space-y-3">
-              <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center mx-auto mb-2 border border-slate-200">
-                <FileText className="w-6 h-6" />
-              </div>
-              <p className="text-xs font-semibold text-slate-400">
-                No {activeTab} exams available in repository.
-              </p>
-              {activeTab === "active" && (
-                <button
-                  onClick={() => router.push("/teacher/exams/new")}
-                  className="text-xs text-sky-600 font-semibold hover:text-sky-700 transition-colors"
-                >
-                  Create your first exam
-                </button>
-              )}
+      {/* EXAMS LIST */}
+      <div className="space-y-3">
+        {filteredExams.length === 0 ? (
+          <div className="bg-white p-12 rounded-xl border border-slate-200 shadow-xs text-center space-y-3">
+            <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center mx-auto mb-2 border border-slate-200">
+              <FileText className="w-6 h-6" />
             </div>
-          ) : (
-            filteredExams.map((exam) => (
-              <div
-                key={exam.id}
-                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+            <p className="text-xs font-semibold text-slate-400">
+              No {activeTab} exams available in repository.
+            </p>
+            {activeTab === "active" && (
+              <button
+                onClick={() => router.push("/teacher/exams/new")}
+                className="text-xs text-sky-600 font-semibold hover:text-sky-700 transition-colors inline-block cursor-pointer"
               >
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase">
-                      {exam.courseCode || "EXAM"}
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
-                      <Clock className="w-3.5 h-3.5" />
-                      {exam.duration} mins
-                    </span>
-                    <span className="text-slate-300">•</span>
-                    <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
-                      <HelpCircle className="w-3.5 h-3.5" />
-                      {exam.questions?.length ?? exam.questionCount ?? 0} Questions
-                    </span>
-                  </div>
-
-                  <h3 className="text-sm font-bold text-navy-900">{exam.title}</h3>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <Key className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-[11px] font-medium text-slate-400">ACCESS JOIN CODE:</span>
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-800 font-mono font-bold text-xs rounded border border-slate-200">
-                      {exam.accessCode}
-                    </span>
-                  </div>
+                Create your first exam
+              </button>
+            )}
+          </div>
+        ) : (
+          filteredExams.map((exam) => (
+            <div
+              key={exam.id}
+              className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+            >
+              {/* Exam Information */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase">
+                    {exam.courseCode || "EXAM"}
+                  </span>
+                  <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
+                    <Clock className="w-3.5 h-3.5" />
+                    {exam.duration} mins
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    {exam.questions?.length ?? exam.questionCount ?? 0} Questions
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <h3 className="text-sm font-bold text-slate-900">{exam.title}</h3>
+
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Key className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px] font-medium text-slate-400">ACCESS JOIN CODE:</span>
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-800 font-mono font-bold text-xs rounded border border-slate-200">
+                    {exam.accessCode}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => router.push(`/teacher/exams/${exam.accessCode}`)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Edit Exam</span>
+                </button>
+
+                {exam.status !== "completed" && (
                   <button
-                    onClick={() => router.push(`/teacher/exams/${exam.accessCode}`)}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-full text-xs font-semibold transition-all"
+                    onClick={() => setSelectedExam(exam)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-navy-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
                   >
-                    <Settings2 className="w-3.5 h-3.5 text-slate-500" />
-                    Manage Exam
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Launch Live Monitor</span>
                   </button>
+                )}
 
-                  {exam.status !== "completed" && (
-                    <button
-                      onClick={() => setSelectedExam(exam)}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-navy-900 hover:bg-navy-800 text-white rounded-full text-xs font-semibold transition-all shadow-sm"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      Launch Live Monitor
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => setPendingDeleteId(exam.id)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors"
-                    title="Delete Exam"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </main>
-
-      {/* Access join code + launch monitor modal */}
-      <Dialog open={!!selectedExam} onClose={() => setSelectedExam(null)} className="max-w-md">
-        {selectedExam && (
-          <>
-            <DialogHeader title="Exam Access Session" onClose={() => setSelectedExam(null)} />
-            <div className="px-6 py-5 space-y-5">
-              <div className="flex items-center gap-2 text-navy-900">
-                <ShieldCheck className="w-5 h-5 text-sky-600" />
-                <span className="text-xs font-bold uppercase tracking-wider">
-                  Share this code with students
-                </span>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-bold text-navy-900">{selectedExam.title}</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Share this Access Join Code with your students to let them start the examination.
-                </p>
-              </div>
-
-              <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-6 rounded-xl text-center space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  Student Access Join Code
-                </span>
-                <div className="text-2xl font-extrabold text-navy-900 tracking-widest font-mono">
-                  {selectedExam.accessCode}
-                </div>
+                <button
+                  onClick={() => handleDeleteExam(exam.id)}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                  title="Delete Exam"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
-            <DialogFooter>
+          ))
+        )}
+      </div>
+
+      {/* POPUP MODAL: ACCESS JOIN CODE & LIVE MONITOR LAUNCH */}
+      {selectedExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-slate-200 p-6 space-y-5">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-slate-900">
+                <ShieldCheck className="w-5 h-5 text-sky-600" />
+                <span className="text-xs font-bold uppercase tracking-wider">Exam Access Session</span>
+              </div>
+              <button
+                onClick={() => setSelectedExam(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Details */}
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-slate-900">{selectedExam.title}</h3>
+              <p className="text-xs font-medium text-slate-500">
+                Share this Access Join Code with your students to let them start the examination.
+              </p>
+            </div>
+
+            {/* Access Code Display */}
+            <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-6 rounded-xl text-center space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Student Access Join Code
+              </span>
+              <div className="text-2xl font-extrabold text-slate-900 tracking-widest font-mono">
+                {selectedExam.accessCode}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex flex-col gap-2">
               <button
                 onClick={() => handleCopyCode(selectedExam.accessCode)}
-                className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-full text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 {copied ? (
                   <>
@@ -312,35 +329,28 @@ export default function MyExamsPage() {
                 ) : (
                   <>
                     <Copy className="w-4 h-4 text-slate-500" />
-                    Copy Access Code
+                    <span>Copy Access Code</span>
                   </>
                 )}
               </button>
+
               <button
                 onClick={() => {
                   const code = selectedExam.accessCode;
                   setSelectedExam(null);
                   router.push(`/teacher/exams/${code}`);
                 }}
-                className="flex-1 py-2.5 px-4 bg-navy-900 hover:bg-navy-800 text-white rounded-full text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-all"
+                className="w-full py-2.5 px-4 bg-navy-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-current" />
-                Enter Live Monitoring
+                <span>Enter Live Monitoring Room</span>
               </button>
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Delete confirmation */}
-      <ConfirmDialog
-        open={!!pendingDeleteId}
-        onClose={() => setPendingDeleteId(null)}
-        onConfirm={confirmDelete}
-        title="Delete this exam?"
-        description="This will permanently remove the exam and its data. This action cannot be undone."
-        confirmLabel="Delete"
-      />
+      </main>
     </>
   );
 }

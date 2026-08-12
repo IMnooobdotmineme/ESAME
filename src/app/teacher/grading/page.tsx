@@ -5,12 +5,16 @@ import {
   ArrowLeft,
   ChevronRight,
   Download,
+  X,
   Check,
   Edit3,
   FileSpreadsheet,
+  FileText,
+  HelpCircle,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
-import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 
 // Types
 interface QuestionAnswer {
@@ -174,7 +178,7 @@ export default function GradingPage() {
   ]);
 
   // Navigation & Selection State
-  const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
+  const [selectedExamId, setSelectedExamId] = useState<string | null>("exam-101");
   const [gradingSubmission, setGradingSubmission] = useState<StudentSubmission | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -492,7 +496,7 @@ export default function GradingPage() {
               <div
                 key={exam.id}
                 onClick={() => setSelectedExamId(exam.id)}
-                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all cursor-pointer group space-y-4"
+                className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all cursor-pointer group space-y-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
@@ -560,7 +564,7 @@ export default function GradingPage() {
       {/* LEVEL 2: STUDENT ROSTER VIEW */}
       {selectedExamId && currentExam && (
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-xs">
             <button
               onClick={() => setSelectedExamId(null)}
               className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 transition-colors cursor-pointer"
@@ -573,7 +577,7 @@ export default function GradingPage() {
               {/* Excel Export Button */}
               <button
                 onClick={() => handleExportExcel(currentExam)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-full shadow-2xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-2xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 <span>Export Excel</span>
@@ -590,7 +594,7 @@ export default function GradingPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -664,30 +668,28 @@ export default function GradingPage() {
                             </span>
                           )}
                         </td>
-                        <td className="p-4 pr-6">
-                          <div className="flex items-center justify-end gap-2 flex-wrap">
-                            <button
-                              onClick={() => handleDownloadPDF(sub)}
-                              disabled={isExporting}
-                              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-semibold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                            >
-                              <Download className="w-3.5 h-3.5 text-slate-500" />
-                              <span>{isExporting ? "Exporting..." : "PDF"}</span>
-                            </button>
-                            <button
-                              onClick={() => handleOpenGrading(sub)}
-                              className={`py-1.5 px-3.5 rounded-full text-xs font-semibold transition-colors inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                                isEvaluated
-                                  ? "bg-slate-100 hover:bg-slate-200 text-slate-800"
-                                  : "bg-navy-900 hover:bg-navy-800 text-white shadow-2xs"
-                              }`}
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                              <span>
-                                {isEvaluated ? "Review Score" : "Grade Script"}
-                              </span>
-                            </button>
-                          </div>
+                        <td className="p-4 pr-6 text-right space-x-2 shrink-0">
+                          <button
+                            onClick={() => handleDownloadPDF(sub)}
+                            disabled={isExporting}
+                            className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5 text-slate-500" />
+                            <span>{isExporting ? "Exporting..." : "PDF"}</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenGrading(sub)}
+                            className={`py-1.5 px-3.5 rounded-xl text-xs font-semibold transition-colors inline-flex items-center gap-1.5 cursor-pointer ${
+                              isEvaluated
+                                ? "bg-slate-100 hover:bg-slate-200 text-slate-800"
+                                : "bg-navy-900 hover:bg-slate-800 text-white shadow-2xs"
+                            }`}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>
+                              {isEvaluated ? "Review Score" : "Grade Script"}
+                            </span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -699,41 +701,49 @@ export default function GradingPage() {
         </div>
       )}
 
-      {/* LEVEL 3: SCRIPT EVALUATION MODAL — now using the Dialog component */}
-      <Dialog
-        open={!!gradingSubmission}
-        onClose={() => setGradingSubmission(null)}
-        className="max-w-3xl"
-      >
-        {gradingSubmission && (
-          <>
-            <DialogHeader
-              title={gradingSubmission.studentName}
-              onClose={() => setGradingSubmission(null)}
-            />
-
-            <div className="px-6 pt-4">
-              <div className="flex items-center justify-between gap-3 pb-4 border-b border-slate-100">
-                <p className="text-xs font-mono font-bold text-slate-400">
+      {/* LEVEL 3: SCRIPT EVALUATION MODAL */}
+      {gradingSubmission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white w-full max-w-3xl max-h-[90vh] rounded-xl shadow-xl flex flex-col overflow-hidden border border-slate-200">
+            {/* Modal Header */}
+            <div className="p-5 bg-navy-900 text-white flex items-center justify-between shrink-0">
+              <div>
+                <span className="text-[10px] font-bold tracking-widest text-slate-300 uppercase font-mono block mb-0.5">
+                  Script Review Desk
+                </span>
+                <h3 className="text-base font-bold">
+                  {gradingSubmission.studentName}
+                </h3>
+                <p className="text-xs text-slate-300 font-mono">
                   {gradingSubmission.studentId}
                 </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => handleDownloadPDF(gradingSubmission)}
                   disabled={isExporting}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 rounded-full flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold text-white rounded-xl flex items-center gap-1.5 transition-colors border border-white/10 disabled:opacity-50 cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5 text-slate-500" />
+                  <Download className="w-3.5 h-3.5 text-slate-300" />
                   <span>{isExporting ? "Saving PDF..." : "Download PDF"}</span>
+                </button>
+
+                <button
+                  onClick={() => setGradingSubmission(null)}
+                  className="p-1.5 text-slate-300 hover:text-white rounded-xl bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* Questions Answer Review Body */}
-            <div className="px-6 py-4 max-h-[60vh] overflow-y-auto space-y-4">
+            <div className="p-5 overflow-y-auto space-y-4 flex-1 bg-slate-50/50">
               {gradingSubmission.answers.map((question, index) => (
                 <div
                   key={question.id}
-                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3"
+                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3"
                 >
                   <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -844,24 +854,25 @@ export default function GradingPage() {
               ))}
             </div>
 
-            <DialogFooter>
+            {/* Modal Footer */}
+            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
               <button
                 onClick={() => setGradingSubmission(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-full transition-colors cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveGrades}
-                className="px-4 py-2 bg-navy-900 hover:bg-navy-800 text-white text-xs font-semibold rounded-full shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-4 h-4" />
                 <span>Save Evaluation</span>
               </button>
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
+            </div>
+          </div>
+        </div>
+      )}
       </main>
     </>
   );
