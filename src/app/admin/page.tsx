@@ -9,6 +9,7 @@ import {
   FileBarChart2,
   ArrowRight,
   Building,
+  Megaphone,
   ScrollText,
   LogIn,
   Server,
@@ -152,6 +153,12 @@ export default function AdminDashboardPage() {
                 <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
                   <Building size={18} className="text-sky-600" />
                   Manage Organizations
+                </button>
+              </Link>
+              <Link href="/admin/broadcast">
+                <button className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-navy-900 hover:bg-slate-50 transition-colors">
+                  <Megaphone size={18} className="text-sky-600" />
+                  Send Broadcast
                 </button>
               </Link>
               <Link href="/admin/logs">

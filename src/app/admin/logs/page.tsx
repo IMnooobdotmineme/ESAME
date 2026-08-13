@@ -1,10 +1,20 @@
 "use client";
 
 import React, { useState } from "react";
-import { Search, Clock, Building2, Server } from "lucide-react";
+import {
+  Search,
+  Clock,
+  Building2,
+  Server,
+  Archive,
+  ArchiveRestore,
+  ArchiveX,
+  Trash2,
+} from "lucide-react";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type LogTab = "user" | "system";
 
@@ -15,6 +25,7 @@ interface UserLogEntry {
   event: string;
   timestamp: string;
   severity: "info" | "warning" | "critical";
+  archived?: boolean;
 }
 
 interface SystemLogEntry {
@@ -22,9 +33,10 @@ interface SystemLogEntry {
   event: string;
   timestamp: string;
   severity: "info" | "warning" | "critical";
+  archived?: boolean;
 }
 
-const USER_LOGS: UserLogEntry[] = [
+const INITIAL_USER_LOGS: UserLogEntry[] = [
   {
     id: "ulog-01",
     actor: "admin@its.edu (Org Admin)",
@@ -51,7 +63,7 @@ const USER_LOGS: UserLogEntry[] = [
   },
 ];
 
-const SYSTEM_LOGS: SystemLogEntry[] = [
+const INITIAL_SYSTEM_LOGS: SystemLogEntry[] = [
   {
     id: "slog-01",
     event: "Scheduled database backup completed successfully",
@@ -87,17 +99,69 @@ function severityBadge(severity: "info" | "warning" | "critical") {
 export default function AdminLogsPage() {
   const [tab, setTab] = useState<LogTab>("user");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [userLogs, setUserLogs] = useState<UserLogEntry[]>(INITIAL_USER_LOGS);
+  const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>(INITIAL_SYSTEM_LOGS);
+  const [archiveAllConfirm, setArchiveAllConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ tab: LogTab; id: string; label: string } | null>(null);
 
-  const filteredUserLogs = USER_LOGS.filter(
+  function toggleUserArchive(id: string) {
+    setUserLogs((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, archived: !l.archived } : l))
+    );
+  }
+
+  function toggleSystemArchive(id: string) {
+    setSystemLogs((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, archived: !l.archived } : l))
+    );
+  }
+
+  const filteredUserLogs = userLogs.filter(
     (log) =>
-      log.actor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      !!log.archived === showArchived &&
+      (log.actor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.event.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredSystemLogs = systemLogs.filter(
+    (log) =>
+      !!log.archived === showArchived &&
       log.event.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredSystemLogs = SYSTEM_LOGS.filter((log) =>
-    log.event.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const archivedCount =
+    tab === "user"
+      ? userLogs.filter((l) => l.archived).length
+      : systemLogs.filter((l) => l.archived).length;
+
+  function confirmArchiveAll() {
+    if (tab === "user") {
+      const visibleIds = new Set(filteredUserLogs.map((l) => l.id));
+      setUserLogs((prev) =>
+        prev.map((l) => (visibleIds.has(l.id) ? { ...l, archived: true } : l))
+      );
+    } else {
+      const visibleIds = new Set(filteredSystemLogs.map((l) => l.id));
+      setSystemLogs((prev) =>
+        prev.map((l) => (visibleIds.has(l.id) ? { ...l, archived: true } : l))
+      );
+    }
+    setArchiveAllConfirm(false);
+  }
+
+  function confirmDeleteLog() {
+    if (!deleteTarget) return;
+    if (deleteTarget.tab === "user") {
+      setUserLogs((prev) => prev.filter((l) => l.id !== deleteTarget.id));
+    } else {
+      setSystemLogs((prev) => prev.filter((l) => l.id !== deleteTarget.id));
+    }
+    setDeleteTarget(null);
+  }
+
+  const visibleCountForTab = tab === "user" ? filteredUserLogs.length : filteredSystemLogs.length;
 
   return (
     <>
@@ -109,27 +173,57 @@ export default function AdminLogsPage() {
       <main className="p-6 space-y-6">
         {/* Tabs & search */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex gap-1.5 bg-slate-100 p-1 rounded-full border border-slate-200 w-fit">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex gap-1.5 bg-slate-100 p-1 rounded-full border border-slate-200 w-fit">
+              <button
+                onClick={() => setTab("user")}
+                className={
+                  tab === "user"
+                    ? "px-4 py-1.5 text-sm font-medium rounded-full bg-white text-navy-900 shadow-sm inline-flex items-center gap-1.5"
+                    : "px-4 py-1.5 text-sm font-medium rounded-full text-slate-500 hover:text-slate-800 inline-flex items-center gap-1.5"
+                }
+              >
+                <Building2 size={14} /> User Logs
+              </button>
+              <button
+                onClick={() => setTab("system")}
+                className={
+                  tab === "system"
+                    ? "px-4 py-1.5 text-sm font-medium rounded-full bg-white text-navy-900 shadow-sm inline-flex items-center gap-1.5"
+                    : "px-4 py-1.5 text-sm font-medium rounded-full text-slate-500 hover:text-slate-800 inline-flex items-center gap-1.5"
+                }
+              >
+                <Server size={14} /> System Logs
+              </button>
+            </div>
+
             <button
-              onClick={() => setTab("user")}
+              onClick={() => setShowArchived((v) => !v)}
               className={
-                tab === "user"
-                  ? "px-4 py-1.5 text-sm font-medium rounded-full bg-white text-navy-900 shadow-sm inline-flex items-center gap-1.5"
-                  : "px-4 py-1.5 text-sm font-medium rounded-full text-slate-500 hover:text-slate-800 inline-flex items-center gap-1.5"
+                showArchived
+                  ? "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-navy-900 bg-navy-900 text-white transition-colors"
+                  : "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-slate-200 text-slate-500 hover:border-slate-300 transition-colors"
               }
             >
-              <Building2 size={14} /> User Logs
+              <Archive size={13} />
+              {showArchived ? "Viewing Archived" : "View Archived"}
+              {archivedCount > 0 && !showArchived && (
+                <span className="ml-0.5 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-slate-200 text-slate-600 text-[10px] font-semibold">
+                  {archivedCount}
+                </span>
+              )}
             </button>
-            <button
-              onClick={() => setTab("system")}
-              className={
-                tab === "system"
-                  ? "px-4 py-1.5 text-sm font-medium rounded-full bg-white text-navy-900 shadow-sm inline-flex items-center gap-1.5"
-                  : "px-4 py-1.5 text-sm font-medium rounded-full text-slate-500 hover:text-slate-800 inline-flex items-center gap-1.5"
-              }
-            >
-              <Server size={14} /> System Logs
-            </button>
+
+            {!showArchived && (
+              <button
+                onClick={() => setArchiveAllConfirm(true)}
+                disabled={visibleCountForTab === 0}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border border-slate-200 text-slate-500 hover:border-slate-300 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <ArchiveX size={13} />
+                Archive All
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 w-full md:w-80">
@@ -154,6 +248,7 @@ export default function AdminLogsPage() {
                   <th className="px-5 py-3 font-medium">Event</th>
                   <th className="px-5 py-3 font-medium">Timestamp</th>
                   <th className="px-5 py-3 font-medium text-right">Severity</th>
+                  <th className="px-5 py-3 font-medium text-right">&nbsp;</th>
                 </tr>
               </thead>
               <tbody>
@@ -169,12 +264,36 @@ export default function AdminLogsPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-right">{severityBadge(log.severity)}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => toggleUserArchive(log.id)}
+                            title={log.archived ? "Unarchive" : "Archive"}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                          >
+                            {log.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                          </button>
+                          {log.archived && (
+                            <button
+                              onClick={() =>
+                                setDeleteTarget({ tab: "user", id: log.id, label: log.event })
+                              }
+                              title="Delete permanently"
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-red-50 text-slate-400 hover:text-red-600"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-5 py-10 text-center text-slate-400 text-sm">
-                      No user log entries matching your search.
+                    <td colSpan={6} className="px-5 py-10 text-center text-slate-400 text-sm">
+                      {showArchived
+                        ? "No archived user logs."
+                        : "No user log entries matching your search."}
                     </td>
                   </tr>
                 )}
@@ -192,6 +311,7 @@ export default function AdminLogsPage() {
                   <th className="px-5 py-3 font-medium">Event</th>
                   <th className="px-5 py-3 font-medium">Timestamp</th>
                   <th className="px-5 py-3 font-medium text-right">Severity</th>
+                  <th className="px-5 py-3 font-medium text-right">&nbsp;</th>
                 </tr>
               </thead>
               <tbody>
@@ -205,12 +325,36 @@ export default function AdminLogsPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-right">{severityBadge(log.severity)}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => toggleSystemArchive(log.id)}
+                            title={log.archived ? "Unarchive" : "Archive"}
+                            className="h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                          >
+                            {log.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                          </button>
+                          {log.archived && (
+                            <button
+                              onClick={() =>
+                                setDeleteTarget({ tab: "system", id: log.id, label: log.event })
+                              }
+                              title="Delete permanently"
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-red-50 text-slate-400 hover:text-red-600"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className="px-5 py-10 text-center text-slate-400 text-sm">
-                      No system log entries matching your search.
+                    <td colSpan={4} className="px-5 py-10 text-center text-slate-400 text-sm">
+                      {showArchived
+                        ? "No archived system logs."
+                        : "No system log entries matching your search."}
                     </td>
                   </tr>
                 )}
@@ -219,6 +363,26 @@ export default function AdminLogsPage() {
           </Card>
         )}
       </main>
+
+      <ConfirmDialog
+        open={archiveAllConfirm}
+        onClose={() => setArchiveAllConfirm(false)}
+        onConfirm={confirmArchiveAll}
+        title="Archive all visible logs?"
+        description={`This will archive ${visibleCountForTab} ${tab === "user" ? "user" : "system"} log${
+          visibleCountForTab !== 1 ? "s" : ""
+        } currently shown. You can unarchive them later.`}
+        confirmLabel="Archive All"
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteLog}
+        title="Delete log entry?"
+        description={`This will permanently delete this log entry. This action cannot be undone.`}
+        confirmLabel="Delete Permanently"
+      />
     </>
   );
 }

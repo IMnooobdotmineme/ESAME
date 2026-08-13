@@ -6,8 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
-  ScrollText,
-  UserCircle,
+  Megaphone,
+  FileText,
+  Lock,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,8 +18,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Organizations", href: "/admin/organizations", icon: Building2 },
-  { label: "Logs", href: "/admin/logs", icon: ScrollText },
-  { label: "Profile", href: "/admin/profile", icon: UserCircle },
+  { label: "Broadcast", href: "/admin/broadcast", icon: Megaphone },
+  { label: "Logs", href: "/admin/logs", icon: FileText },
+  { label: "Profile", href: "/admin/profile", icon: Lock },
 ];
 
 export function AdminSidebar() {
@@ -82,6 +84,7 @@ export function AdminSidebar() {
         title="Log out?"
         description="You'll need to sign in again to access the admin portal."
         confirmLabel="Log out"
+        variant="logout"
       />
     </aside>
   );
