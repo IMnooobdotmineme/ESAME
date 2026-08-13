@@ -7,22 +7,55 @@ import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getTeacherByName } from "@/lib/teachers-data";
+import { getTeacherByName, uniqueDepartments, uniqueSubjects } from "@/lib/teachers-data";
 import { EXAMS } from "@/lib/exam-data";
-import { ChevronLeft, FileText, Mail, Building2, BookOpen, CalendarDays } from "lucide-react";
+import { ChevronDown, ChevronLeft, FileText, Mail, Building2, BookOpen, CalendarDays } from "lucide-react";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "danger" | "neutral"> = {
   Active: "success",
   Pending: "warning",
   Suspended: "danger",
-  Deactivated: "neutral",
 };
+
+/** First value shown inline; hovering the chevron reveals the rest. */
+function MultiValueList({ values }: { values: string[] }) {
+  const [primary, ...rest] = values;
+  const hasMore = rest.length > 0;
+
+  return (
+    <div className="relative inline-flex items-center gap-1 group/cell cursor-default">
+      <span className="text-sm font-medium text-navy-900">{primary}</span>
+      {hasMore && (
+        <span className="inline-flex items-center gap-0.5 text-slate-400">
+          <ChevronDown size={12} className="transition-transform group-hover/cell:rotate-180" />
+          <span className="text-[10px] font-medium">+{rest.length}</span>
+        </span>
+      )}
+      {hasMore && (
+        <div
+          className="invisible opacity-0 translate-y-1 group-hover/cell:visible group-hover/cell:opacity-100 group-hover/cell:translate-y-0
+                     transition-all duration-150 absolute left-0 top-full mt-1.5 z-20 min-w-[180px]
+                     rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
+        >
+          {values.map((v) => (
+            <p key={v} className="px-2 py-1 text-xs text-slate-600 rounded-lg hover:bg-slate-50">
+              {v}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TeacherProfilePage() {
   const params = useParams<{ name: string }>();
   const router = useRouter();
   const teacherName = decodeURIComponent(params.name);
   const teacher = getTeacherByName(teacherName);
+
+  const departments = teacher ? uniqueDepartments(teacher) : [];
+  const subjects = teacher ? uniqueSubjects(teacher) : [];
 
   const teacherExams = useMemo(
     () => EXAMS.filter((e) => e.teacher === teacherName),
@@ -32,12 +65,15 @@ export default function TeacherProfilePage() {
   const completedCount = teacherExams.filter((e) => e.status === "Completed").length;
   const totalStudentsTaught = teacherExams.reduce((sum, e) => sum + e.totalStudents, 0);
 
+  const description = teacher
+    ? `${subjects[0]}${subjects.length > 1 ? ` +${subjects.length - 1} more` : ""} · ${departments[0]}${
+        departments.length > 1 ? ` +${departments.length - 1} more` : ""
+      }`
+    : "Teacher profile";
+
   return (
     <>
-      <OrgTopbar
-        title={teacher?.name ?? teacherName}
-        description={teacher ? `${teacher.subject} · ${teacher.department}` : "Teacher profile"}
-      />
+      <OrgTopbar title={teacher?.name ?? teacherName} description={description} />
 
       <main className="p-6 space-y-5">
         <Button variant="outline" onClick={() => router.back()}>
@@ -65,10 +101,18 @@ export default function TeacherProfilePage() {
 
           {teacher && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-100">
-              <InfoTile icon={Building2} label="Department" value={teacher.department} />
-              <InfoTile icon={BookOpen} label="Subject" value={teacher.subject} />
-              <InfoTile icon={CalendarDays} label="Joined" value={teacher.joined} />
-              <InfoTile icon={FileText} label="Exams Created" value={String(teacherExams.length)} />
+              <InfoTile icon={Building2} label="Department">
+                <MultiValueList values={departments} />
+              </InfoTile>
+              <InfoTile icon={BookOpen} label="Subject">
+                <MultiValueList values={subjects} />
+              </InfoTile>
+              <InfoTile icon={CalendarDays} label="Joined">
+                <p className="text-sm font-medium text-navy-900">{teacher.joined}</p>
+              </InfoTile>
+              <InfoTile icon={FileText} label="Exams Created">
+                <p className="text-sm font-medium text-navy-900">{String(teacherExams.length)}</p>
+              </InfoTile>
             </div>
           )}
         </Card>
@@ -147,18 +191,18 @@ export default function TeacherProfilePage() {
 function InfoTile({
   icon: Icon,
   label,
-  value,
+  children,
 }: {
   icon: React.ElementType;
   label: string;
-  value: string;
+  children: React.ReactNode;
 }) {
   return (
     <div>
       <p className="text-xs text-slate-400 flex items-center gap-1.5 mb-1">
         <Icon size={13} /> {label}
       </p>
-      <p className="text-sm font-medium text-navy-900">{value}</p>
+      {children}
     </div>
   );
 }

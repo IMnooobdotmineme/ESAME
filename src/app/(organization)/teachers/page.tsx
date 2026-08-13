@@ -8,29 +8,85 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InviteTeacherModal, InviteFormData } from "@/components/organization/InviteTeacherModal";
 import { InvitationSentDialog } from "@/components/organization/InvitationSentDialog";
+import { ManageAssignmentsModal } from "@/components/organization/ManageAssignmentsModal";
 import { DEPARTMENTS } from "@/lib/academic-structure-data";
-import { INITIAL_TEACHERS, Teacher, TeacherStatus as Status } from "@/lib/teachers-data";
+import {
+  INITIAL_TEACHERS,
+  Teacher,
+  TeacherAssignment,
+  TeacherStatus as Status,
+  uniqueDepartments,
+  uniqueSubjects,
+} from "@/lib/teachers-data";
 import {
   UserPlus,
   Search,
   MoreVertical,
   CheckCircle2,
-  XCircle,
   Ban,
   Trash2,
   Eye,
+  Layers,
+  ChevronDown,
 } from "lucide-react";
 
 const STATUS_VARIANT: Record<Status, "success" | "warning" | "danger" | "neutral"> = {
   Active: "success",
   Pending: "warning",
   Suspended: "danger",
-  Deactivated: "neutral",
 };
 
-const FILTERS: ("All" | Status)[] = ["All", "Active", "Pending", "Suspended", "Deactivated"];
+const FILTERS: ("All" | Status)[] = ["All", "Active", "Pending", "Suspended"];
+
+/**
+ * Small "+N" chevron trigger + hover popover shared by the department and
+ * subject cells below. `trigger` is the primary value shown inline (plain
+ * text, or a Badge for departments); `values` is the full list to reveal.
+ */
+function MultiValuePopover({
+  values,
+  label,
+  trigger,
+}: {
+  values: string[];
+  label: string;
+  trigger: React.ReactNode;
+}) {
+  const rest = values.slice(1);
+  const hasMore = rest.length > 0;
+
+  return (
+    <div className="relative inline-flex items-center gap-1.5 group/cell cursor-default">
+      {trigger}
+      {hasMore && (
+        <span className="inline-flex items-center gap-0.5 text-slate-400">
+          <ChevronDown size={12} className="transition-transform group-hover/cell:rotate-180" />
+          <span className="text-[10px] font-medium">+{rest.length}</span>
+        </span>
+      )}
+
+      {hasMore && (
+        <div
+          className="invisible opacity-0 translate-y-1 group-hover/cell:visible group-hover/cell:opacity-100 group-hover/cell:translate-y-0
+                     transition-all duration-150 absolute left-0 top-full mt-1.5 z-20 min-w-[180px]
+                     rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
+        >
+          <p className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+            All {label}
+          </p>
+          {values.map((v) => (
+            <p key={v} className="px-2 py-1 text-xs text-slate-600 rounded-lg hover:bg-slate-50">
+              {v}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TeacherManagementPage() {
   const router = useRouter();
@@ -43,6 +99,12 @@ export default function TeacherManagementPage() {
     name: "",
     email: "",
   });
+  const [assignmentsTarget, setAssignmentsTarget] = useState<Teacher | null>(null);
+
+  // Remove is a two-step confirmation: step 1 asks to confirm, step 2 is the
+  // final "are you absolutely sure" check before anything is removed.
+  const [removeTarget, setRemoveTarget] = useState<Teacher | null>(null);
+  const [removeStep, setRemoveStep] = useState<1 | 2>(1);
 
   const filtered = teachers.filter((t) => {
     const matchesSearch =
@@ -56,21 +118,45 @@ export default function TeacherManagementPage() {
     setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
   }
 
-  function removeTeacher(id: string) {
-    setTeachers((prev) => prev.filter((t) => t.id !== id));
+  function saveAssignments(id: string, assignments: TeacherAssignment[]) {
+    setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, assignments } : t)));
+  }
+
+  function startRemove(teacher: Teacher) {
+    setRemoveTarget(teacher);
+    setRemoveStep(1);
+  }
+
+  function closeRemove() {
+    setRemoveTarget(null);
+    setRemoveStep(1);
+  }
+
+  function handleFirstConfirm() {
+    setRemoveStep(2);
+  }
+
+  function handleFinalConfirm() {
+    if (!removeTarget) return;
+    setTeachers((prev) => prev.filter((t) => t.id !== removeTarget.id));
+    closeRemove();
   }
 
   function handleInvite(data: InviteFormData) {
-    const department = DEPARTMENTS.find((d) => d.id === data.departmentId);
-    const subject = department?.subjects.find((s) => s.id === data.subjectId);
+    const assignments: TeacherAssignment[] = data.assignments
+      .map((a) => {
+        const department = DEPARTMENTS.find((d) => d.id === a.departmentId);
+        const subject = department?.subjects.find((s) => s.id === a.subjectId);
+        return department && subject ? { department: department.name, subject: subject.name } : null;
+      })
+      .filter((a): a is TeacherAssignment => a !== null);
 
     setTeachers((prev) => [
       {
         id: crypto.randomUUID(),
         name: data.name,
         email: data.email,
-        department: department?.name ?? "—",
-        subject: subject?.name ?? "—",
+        assignments,
         status: "Pending",
         joined: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       },
@@ -90,7 +176,6 @@ export default function TeacherManagementPage() {
     Active: teachers.filter((t) => t.status === "Active").length,
     Pending: teachers.filter((t) => t.status === "Pending").length,
     Suspended: teachers.filter((t) => t.status === "Suspended").length,
-    Deactivated: teachers.filter((t) => t.status === "Deactivated").length,
   };
 
   return (
@@ -130,7 +215,7 @@ export default function TeacherManagementPage() {
           ))}
         </div>
 
-        <Card className="overflow-hidden">
+        <Card className="overflow-visible">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-400 border-b border-slate-100 bg-slate-50/50">
@@ -160,9 +245,19 @@ export default function TeacherManagementPage() {
                     </Link>
                   </td>
                   <td className="px-5 py-3.5">
-                    <Badge variant="info">{teacher.department}</Badge>
+                    <MultiValuePopover
+                      values={uniqueDepartments(teacher)}
+                      label="departments"
+                      trigger={<Badge variant="info">{uniqueDepartments(teacher)[0]}</Badge>}
+                    />
                   </td>
-                  <td className="px-5 py-3.5 text-slate-600">{teacher.subject}</td>
+                  <td className="px-5 py-3.5 text-slate-600">
+                    <MultiValuePopover
+                      values={uniqueSubjects(teacher)}
+                      label="subjects"
+                      trigger={<span>{uniqueSubjects(teacher)[0]}</span>}
+                    />
+                  </td>
                   <td className="px-5 py-3.5">
                     <Badge variant={STATUS_VARIANT[teacher.status]}>{teacher.status}</Badge>
                   </td>
@@ -176,7 +271,7 @@ export default function TeacherManagementPage() {
                       }
                     >
                       {teacher.status === "Pending" ? (
-                        <DropdownItem danger onClick={() => removeTeacher(teacher.id)}>
+                        <DropdownItem danger onClick={() => startRemove(teacher)}>
                           <Trash2 size={15} /> Remove
                         </DropdownItem>
                       ) : (
@@ -188,22 +283,20 @@ export default function TeacherManagementPage() {
                           >
                             <Eye size={15} /> View Profile
                           </DropdownItem>
+                          <DropdownItem onClick={() => setAssignmentsTarget(teacher)}>
+                            <Layers size={15} /> Manage Departments &amp; Subjects
+                          </DropdownItem>
                           {teacher.status !== "Active" && (
                             <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
                               <CheckCircle2 size={15} /> Activate
                             </DropdownItem>
                           )}
                           {teacher.status === "Active" && (
-                            <DropdownItem onClick={() => updateStatus(teacher.id, "Deactivated")}>
-                              <XCircle size={15} /> Deactivate
-                            </DropdownItem>
-                          )}
-                          {teacher.status !== "Suspended" && (
                             <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
                               <Ban size={15} /> Suspend
                             </DropdownItem>
                           )}
-                          <DropdownItem danger onClick={() => removeTeacher(teacher.id)}>
+                          <DropdownItem danger onClick={() => startRemove(teacher)}>
                             <Trash2 size={15} /> Remove
                           </DropdownItem>
                         </>
@@ -234,6 +327,36 @@ export default function TeacherManagementPage() {
         onClose={() => setSentDialog((prev) => ({ ...prev, open: false }))}
         teacherName={sentDialog.name}
         teacherEmail={sentDialog.email}
+      />
+
+      {assignmentsTarget && (
+        <ManageAssignmentsModal
+          open={!!assignmentsTarget}
+          onClose={() => setAssignmentsTarget(null)}
+          teacherName={assignmentsTarget.name}
+          initialAssignments={assignmentsTarget.assignments}
+          onSave={(assignments) => saveAssignments(assignmentsTarget.id, assignments)}
+        />
+      )}
+
+      {/* Step 1: initial confirmation */}
+      <ConfirmDialog
+        open={!!removeTarget && removeStep === 1}
+        onClose={closeRemove}
+        onConfirm={handleFirstConfirm}
+        title="Remove this teacher?"
+        description={`This will remove ${removeTarget?.name} (${removeTarget?.email}) from the platform. This action cannot be undone.`}
+        confirmLabel="Continue"
+      />
+
+      {/* Step 2: final double-check before the removal actually happens */}
+      <ConfirmDialog
+        open={!!removeTarget && removeStep === 2}
+        onClose={closeRemove}
+        onConfirm={handleFinalConfirm}
+        title="Are you absolutely sure?"
+        description={`This is your final confirmation. ${removeTarget?.name}'s account and all associated records will be permanently removed right now.`}
+        confirmLabel="Yes, Remove Permanently"
       />
     </>
   );

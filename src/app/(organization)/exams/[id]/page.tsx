@@ -169,8 +169,6 @@ export default function ExamDetailPage() {
               <thead>
                 <tr className="text-left text-xs text-slate-400 border-b border-slate-100 bg-slate-50/50">
                   <th className="px-5 py-3 font-medium">Student</th>
-                  <th className="px-5 py-3 font-medium text-right">Auto Points</th>
-                  <th className="px-5 py-3 font-medium text-right">Manual Points</th>
                   <th className="px-5 py-3 font-medium text-right">Total Score</th>
                   <th className="px-5 py-3 font-medium text-right">Percentage</th>
                   <th className="px-5 py-3 font-medium text-right">Result</th>
@@ -188,8 +186,6 @@ export default function ExamDetailPage() {
                         <p className="font-medium text-navy-900">{r.studentName}</p>
                         <p className="text-xs text-slate-400">{r.studentId}</p>
                       </td>
-                      <td className="px-5 py-3.5 text-right text-slate-600">{r.autoPoints}</td>
-                      <td className="px-5 py-3.5 text-right text-slate-600">{r.manualPoints}</td>
                       <td className="px-5 py-3.5 text-right font-medium text-navy-900">
                         {total}/{r.maxPoints}
                       </td>
@@ -205,7 +201,7 @@ export default function ExamDetailPage() {
                 })}
                 {filteredResults.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-400 text-sm">
+                    <td colSpan={5} className="px-5 py-10 text-center text-slate-400 text-sm">
                       {exam.results.length === 0
                         ? "No submissions yet for this exam."
                         : "No students match your search."}

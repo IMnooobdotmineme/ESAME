@@ -12,9 +12,9 @@ import {
   ArrowLeft,
   MoreVertical,
   CheckCircle2,
-  XCircle,
   Ban,
   Trash2,
+  ChevronDown,
 } from "lucide-react";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
 import { Badge } from "@/components/ui/badge";
@@ -22,13 +22,15 @@ import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
-type UserStatus = "Active" | "Suspended" | "Deactivated";
+type UserStatus = "Active" | "Suspended";
+type StatusFilter = "All" | UserStatus;
 
 interface TeacherRecord {
   id: string;
   name: string;
   email: string;
-  department: string;
+  departments: string[];
+  subjects: string[];
   status: UserStatus;
   joinedDate: string;
 }
@@ -50,15 +52,77 @@ const ORG_META: Record<string, OrgMeta> = {
 };
 
 const INITIAL_TEACHERS: TeacherRecord[] = [
-  { id: "USR-101", name: "Professor Julian Vance", email: "j.vance@university.edu", department: "Computer Science", status: "Active", joinedDate: "Sep 2024" },
-  { id: "USR-102", name: "Dr. Aris Thorne", email: "a.thorne@university.edu", department: "Software Engineering", status: "Active", joinedDate: "Jan 2025" },
+  {
+    id: "USR-101",
+    name: "Professor Julian Vance",
+    email: "j.vance@university.edu",
+    departments: ["Computer Science", "Data Science"],
+    subjects: ["Algorithms", "Data Structures", "Machine Learning"],
+    status: "Active",
+    joinedDate: "Sep 2024",
+  },
+  {
+    id: "USR-102",
+    name: "Dr. Aris Thorne",
+    email: "a.thorne@university.edu",
+    departments: ["Software Engineering"],
+    subjects: ["Web Development"],
+    status: "Active",
+    joinedDate: "Jan 2025",
+  },
 ];
 
 const STATUS_VARIANT: Record<UserStatus, "success" | "warning" | "danger" | "neutral"> = {
   Active: "success",
   Suspended: "danger",
-  Deactivated: "neutral",
 };
+
+const STATUS_TABS: StatusFilter[] = ["All", "Active", "Suspended"];
+
+/**
+ * Shows the first value in a list inline. When there's more than one value,
+ * a chevron appears and hovering reveals the rest in a small popover —
+ * used for teachers who belong to multiple departments or teach multiple
+ * subjects.
+ */
+function MultiValueCell({ values, label }: { values: string[]; label: string }) {
+  const [primary, ...rest] = values;
+  const hasMore = rest.length > 0;
+
+  return (
+    <div className="relative inline-block group/cell">
+      <div className="inline-flex items-center gap-1 cursor-default">
+        <span>{primary}</span>
+        {hasMore && (
+          <span className="inline-flex items-center gap-0.5 text-slate-400">
+            <ChevronDown
+              size={12}
+              className="transition-transform group-hover/cell:rotate-180"
+            />
+            <span className="text-[10px] font-medium">+{rest.length}</span>
+          </span>
+        )}
+      </div>
+
+      {hasMore && (
+        <div
+          className="invisible opacity-0 translate-y-1 group-hover/cell:visible group-hover/cell:opacity-100 group-hover/cell:translate-y-0
+                     transition-all duration-150 absolute left-0 top-full mt-1.5 z-20 min-w-[180px]
+                     rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
+        >
+          <p className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+            All {label}
+          </p>
+          {values.map((v) => (
+            <p key={v} className="px-2 py-1 text-xs text-slate-600 rounded-lg hover:bg-slate-50">
+              {v}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminOrgRosterPage() {
   const params = useParams<{ orgId: string }>();
@@ -67,23 +131,46 @@ export default function AdminOrgRosterPage() {
 
   const [teachers, setTeachers] = useState<TeacherRecord[]>(INITIAL_TEACHERS);
   const [searchTerm, setSearchTerm] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<TeacherRecord | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
 
-  const filteredTeachers = teachers.filter(
-    (t) =>
-      t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.department.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Delete is a two-step confirmation: step 1 asks to confirm, step 2 is the
+  // final "are you absolutely sure" check before anything is removed.
+  const [deleteTarget, setDeleteTarget] = useState<TeacherRecord | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+
+  const filteredTeachers = teachers.filter((t) => {
+    const query = searchTerm.toLowerCase();
+    const matchesSearch =
+      t.name.toLowerCase().includes(query) ||
+      t.email.toLowerCase().includes(query) ||
+      t.departments.some((d) => d.toLowerCase().includes(query)) ||
+      t.subjects.some((s) => s.toLowerCase().includes(query));
+    const matchesStatus = statusFilter === "All" || t.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   function updateStatus(id: string, status: UserStatus) {
     setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
   }
 
-  function confirmDelete() {
+  function startDelete(teacher: TeacherRecord) {
+    setDeleteTarget(teacher);
+    setDeleteStep(1);
+  }
+
+  function closeDelete() {
+    setDeleteTarget(null);
+    setDeleteStep(1);
+  }
+
+  function handleFirstConfirm() {
+    setDeleteStep(2);
+  }
+
+  function handleFinalConfirm() {
     if (!deleteTarget) return;
     setTeachers((prev) => prev.filter((t) => t.id !== deleteTarget.id));
-    setDeleteTarget(null);
+    closeDelete();
   }
 
   return (
@@ -144,24 +231,43 @@ export default function AdminOrgRosterPage() {
           </Card>
         </div>
 
-        {/* Search */}
-        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 w-full sm:w-96">
-          <Search size={16} className="text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search teachers by name, email, or department..."
-            className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
-          />
+        {/* Tabs + Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setStatusFilter(tab)}
+                className={`h-8 px-4 rounded-full text-xs font-medium border transition-colors ${
+                  statusFilter === tab
+                    ? "bg-navy-900 border-navy-900 text-white"
+                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 w-full sm:w-96">
+            <Search size={16} className="text-slate-400" />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search teachers by name, email, department, or subject..."
+              className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
+            />
+          </div>
         </div>
 
         {/* Teacher roster table */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-visible">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-400 border-b border-slate-100 bg-slate-50/50">
                 <th className="px-5 py-3 font-medium">Teacher</th>
                 <th className="px-5 py-3 font-medium">Department</th>
+                <th className="px-5 py-3 font-medium">Subject</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Joined</th>
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
@@ -170,7 +276,7 @@ export default function AdminOrgRosterPage() {
             <tbody>
               {filteredTeachers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-slate-400 text-sm">
+                  <td colSpan={6} className="px-5 py-10 text-center text-slate-400 text-sm">
                     No matching teacher accounts found.
                   </td>
                 </tr>
@@ -188,7 +294,12 @@ export default function AdminOrgRosterPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-600">{teacher.department}</td>
+                    <td className="px-5 py-3.5 text-slate-600">
+                      <MultiValueCell values={teacher.departments} label="departments" />
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-600">
+                      <MultiValueCell values={teacher.subjects} label="subjects" />
+                    </td>
                     <td className="px-5 py-3.5">
                       <Badge variant={STATUS_VARIANT[teacher.status]}>{teacher.status}</Badge>
                     </td>
@@ -201,22 +312,17 @@ export default function AdminOrgRosterPage() {
                           </button>
                         }
                       >
-                        {teacher.status !== "Active" && (
+                        {teacher.status === "Suspended" && (
                           <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
                             <CheckCircle2 size={15} /> Activate
                           </DropdownItem>
                         )}
                         {teacher.status === "Active" && (
-                          <DropdownItem onClick={() => updateStatus(teacher.id, "Deactivated")}>
-                            <XCircle size={15} /> Deactivate
-                          </DropdownItem>
-                        )}
-                        {teacher.status !== "Suspended" && (
                           <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
                             <Ban size={15} /> Suspend
                           </DropdownItem>
                         )}
-                        <DropdownItem danger onClick={() => setDeleteTarget(teacher)}>
+                        <DropdownItem danger onClick={() => startDelete(teacher)}>
                           <Trash2 size={15} /> Delete Teacher
                         </DropdownItem>
                       </DropdownMenu>
@@ -229,13 +335,24 @@ export default function AdminOrgRosterPage() {
         </Card>
       </main>
 
+      {/* Step 1: initial confirmation */}
       <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={confirmDelete}
+        open={!!deleteTarget && deleteStep === 1}
+        onClose={closeDelete}
+        onConfirm={handleFirstConfirm}
         title="Delete teacher account?"
         description={`This will permanently remove ${deleteTarget?.name} (${deleteTarget?.email}) from the platform. This action cannot be undone.`}
-        confirmLabel="Delete Teacher"
+        confirmLabel="Continue"
+      />
+
+      {/* Step 2: final double-check before the delete actually happens */}
+      <ConfirmDialog
+        open={!!deleteTarget && deleteStep === 2}
+        onClose={closeDelete}
+        onConfirm={handleFinalConfirm}
+        title="Are you absolutely sure?"
+        description={`This is your final confirmation. ${deleteTarget?.name}'s account and all associated records will be permanently deleted right now.`}
+        confirmLabel="Yes, Delete Permanently"
       />
     </>
   );
