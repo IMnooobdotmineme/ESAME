@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ExamVolumeChart } from "@/components/organization/ExamVolumeChart";
-import { ChevronDown, ArrowRight } from "lucide-react";
+import { ChevronDown, ArrowRight, Check } from "lucide-react";
 
 // ---- Mock data ----
 
@@ -23,7 +23,19 @@ const LIVE_ACTIVITY = [
   { studentId: "#STU-5520", module: "Sensor Technology", progress: 63 },
 ];
 
+const DATE_RANGE_OPTIONS = [
+  "Last 7 Days",
+  "Last 30 Days",
+  "Last 90 Days",
+  "This Semester",
+  "This Year",
+  "All Time",
+];
+
 export default function AnalyticsPage() {
+  const [dateRange, setDateRange] = useState("All Time");
+  const [rangeOpen, setRangeOpen] = useState(false);
+
   return (
     <>
       <OrgTopbar
@@ -38,10 +50,36 @@ export default function AnalyticsPage() {
             <h2 className="text-lg font-semibold text-navy-900">System Analytics</h2>
           </div>
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 h-9 text-sm font-medium text-slate-600 hover:bg-slate-50">
-              Last 30 Days
-              <ChevronDown size={14} />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setRangeOpen((v) => !v)}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 h-9 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                {dateRange}
+                <ChevronDown size={14} className={rangeOpen ? "rotate-180 transition-transform" : "transition-transform"} />
+              </button>
+
+              {rangeOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setRangeOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white shadow-lg py-1.5 z-20">
+                    {DATE_RANGE_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          setDateRange(option);
+                          setRangeOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between gap-2 px-3.5 py-2 text-sm text-left text-slate-600 hover:bg-slate-50"
+                      >
+                        {option}
+                        {dateRange === option && <Check size={14} className="text-sky-600" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

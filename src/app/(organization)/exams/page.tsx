@@ -238,7 +238,7 @@ export default function ExamManagementPage() {
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <Link
-                      href={`/organization/exams/${exam.id}`}
+                      href={`/exams/${exam.id}`}
                       className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline"
                     >
                       View <Arrow size={13} />

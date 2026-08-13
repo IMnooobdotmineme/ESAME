@@ -147,7 +147,7 @@ export default function TeacherManagementPage() {
                 <tr key={teacher.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                   <td className="px-5 py-3.5">
                     <Link
-                      href={`/organization/teachers/${encodeURIComponent(teacher.name)}`}
+                      href={`/teachers/${encodeURIComponent(teacher.name)}`}
                       className="flex items-center gap-3 group"
                     >
                       <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
@@ -183,7 +183,7 @@ export default function TeacherManagementPage() {
                         <>
                           <DropdownItem
                             onClick={() =>
-                              router.push(`/organization/teachers/${encodeURIComponent(teacher.name)}`)
+                              router.push(`/teachers/${encodeURIComponent(teacher.name)}`)
                             }
                           >
                             <Eye size={15} /> View Profile

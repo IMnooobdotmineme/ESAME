@@ -51,7 +51,7 @@ export default function ExamDetailPage() {
             This exam doesn&apos;t exist or may have been removed.
             <div className="mt-4">
               <button
-                onClick={() => router.push("/organization/exams")}
+                onClick={() => router.push("/exams")}
                 className="text-sm font-medium text-sky-600 hover:underline"
               >
                 Back to Exams
@@ -71,7 +71,7 @@ export default function ExamDetailPage() {
         {/* Back link + status */}
         <div className="flex items-center justify-between">
           <button
-            onClick={() => router.push("/organization/exams")}
+            onClick={() => router.push("/exams")}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-navy-900"
           >
             <ArrowLeft size={15} />

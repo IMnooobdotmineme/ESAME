@@ -18,6 +18,7 @@ import {
   Plus,
   ArrowRight,
   ChevronLeft,
+  ChevronRight,
   Search,
   MoreVertical,
   Pencil,
@@ -84,9 +85,14 @@ function DepartmentModal({
   );
 }
 
+// Three-level drill-down, mirroring the Department -> Subjects flow:
+// departments -> subjects (within a department) -> teachers (within a subject).
+// The "teachers" level replaces the old popup modal with a full page view
+// so the breadcrumb naturally grows to "Department Inventory / <Dept> / <Subject>".
 type View =
   | { level: "departments" }
-  | { level: "subjects"; departmentId: string };
+  | { level: "subjects"; departmentId: string }
+  | { level: "teachers"; departmentId: string; subjectId: string };
 
 function SubjectModal({
   open,
@@ -142,52 +148,34 @@ function SubjectModal({
   );
 }
 
-function SubjectTeachersModal({
-  open,
-  onClose,
-  subject,
-}: {
-  open: boolean;
-  onClose: () => void;
-  subject?: DeptSubject;
-}) {
-  return (
-    <Dialog open={open} onClose={onClose}>
-      <DialogHeader
-        title={subject?.name ?? "Teachers"}
-        description={
-          subject
-            ? `${subject.teacherNames.length} teacher${subject.teacherNames.length !== 1 ? "s" : ""} assigned to this subject`
-            : undefined
-        }
-        onClose={onClose}
-      />
-      <div className="px-6 py-5 space-y-2 max-h-96 overflow-y-auto">
-        {subject?.teacherNames.map((t) => (
-          <Link
-            key={t}
-            href={`/organization/teachers/${encodeURIComponent(t)}`}
-            onClick={onClose}
-            className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:border-sky-200 hover:bg-sky-50/60 transition-colors group"
-          >
-            <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
-              {t.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-navy-900 truncate">{t}</p>
-              <p className="text-xs text-slate-400 group-hover:text-sky-600">View exam history</p>
-            </div>
-            <ArrowRight size={14} className="text-slate-300 group-hover:text-sky-500 shrink-0" />
-          </Link>
-        ))}
-        {subject && subject.teacherNames.length === 0 && (
-          <p className="text-sm text-slate-400 text-center py-6">
-            No teachers assigned to this subject yet.
-          </p>
-        )}
-      </div>
-    </Dialog>
-  );
+const TEACHER_ROW_GRID = "grid grid-cols-[1fr_200px_150px_140px_100px_70px] items-center gap-4";
+const ORG_NAME = "Kiririom Institute of Technology";
+
+// NOTE: teacher records currently only store a name (DeptSubject.teacherNames:
+// string[]), so email and join date aren't real data yet — these are
+// deterministic placeholders so the table renders correctly. Swap these
+// helpers out once teacher records carry real email/joinedAt fields.
+function mockTeacherEmail(name: string) {
+  const handle = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z\s]/g, "")
+    .trim()
+    .split(/\s+/)
+    .join(".");
+  return `${handle}@kit.edu.kh`;
+}
+
+const MOCK_JOIN_DATES = [
+  "Jan 12, 2022",
+  "Mar 03, 2023",
+  "Sep 21, 2021",
+  "Jun 18, 2024",
+  "Nov 05, 2022",
+  "Feb 27, 2023",
+];
+function mockTeacherJoinDate(index: number) {
+  return MOCK_JOIN_DATES[index % MOCK_JOIN_DATES.length];
 }
 
 export default function AcademicStructurePage() {
@@ -195,7 +183,6 @@ export default function AcademicStructurePage() {
   const [view, setView] = useState<View>({ level: "departments" });
   const [search, setSearch] = useState("");
   const [subjectSearch, setSubjectSearch] = useState("");
-  const [subjectTeachersModal, setSubjectTeachersModal] = useState<{ open: boolean; subject?: DeptSubject }>({ open: false });
   const [deptModal, setDeptModal] = useState<{ open: boolean; edit?: DepartmentCard }>({ open: false });
   const [subjectModal, setSubjectModal] = useState<{ open: boolean; edit?: DeptSubject }>({ open: false });
   const [deleteDeptTarget, setDeleteDeptTarget] = useState<DepartmentCard | null>(null);
@@ -207,6 +194,8 @@ export default function AcademicStructurePage() {
   const totalFaculty = departments.reduce((sum, d) => sum + d.faculty, 0);
 
   const activeDepartment = view.level !== "departments" ? departments.find((d) => d.id === view.departmentId) : undefined;
+  const activeSubject =
+    view.level === "teachers" ? activeDepartment?.subjects.find((s) => s.id === view.subjectId) : undefined;
 
   function saveDepartment(dept: DepartmentCard) {
     setDepartments((prev) => {
@@ -250,6 +239,9 @@ export default function AcademicStructurePage() {
       )
     );
     setDeleteSubjectTarget(null);
+    if (view.level === "teachers" && view.subjectId === deleteSubjectTarget.id) {
+      setView({ level: "subjects", departmentId: activeDepartment.id });
+    }
   }
 
   return (
@@ -393,7 +385,7 @@ export default function AcademicStructurePage() {
                 <Card
                   key={s.id}
                   className="p-5 cursor-pointer hover:border-sky-200 hover:shadow-md transition-all"
-                  onClick={() => setSubjectTeachersModal({ open: true, subject: s })}
+                  onClick={() => setView({ level: "teachers", departmentId: activeDepartment.id, subjectId: s.id })}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 text-sky-600">
@@ -441,13 +433,100 @@ export default function AcademicStructurePage() {
             </div>
           </>
         )}
+
+        {/* New level: replaces the old modal. Same breadcrumb pattern as
+            departments -> subjects, extended one step further. */}
+        {view.level === "teachers" && activeDepartment && activeSubject && (
+          <>
+            <Breadcrumb
+              items={[
+                { label: "Department Inventory", onClick: () => setView({ level: "departments" }) },
+                { label: activeDepartment.name, onClick: () => setView({ level: "subjects", departmentId: activeDepartment.id }) },
+                { label: activeSubject.name },
+              ]}
+            />
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-navy-900">{activeSubject.name}</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {activeSubject.teacherNames.length} teacher{activeSubject.teacherNames.length !== 1 ? "s" : ""} assigned to this subject
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setView({ level: "subjects", departmentId: activeDepartment.id })}
+              >
+                <ChevronLeft size={15} /> Back
+              </Button>
+            </div>
+
+            <Card className="overflow-hidden">
+              {activeSubject.teacherNames.length > 0 ? (
+                <div>
+                  <div className={`${TEACHER_ROW_GRID} px-6 py-3 bg-slate-50/60 border-b border-slate-100`}>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Teacher</span>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Email</span>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Joined</span>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Subject</span>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Status</span>
+                    <span />
+                  </div>
+
+                  {activeSubject.teacherNames.map((t, i) => (
+                    <Link
+                      key={t}
+                      href={`/teachers/${encodeURIComponent(t)}`}
+                      className={`${TEACHER_ROW_GRID} px-6 py-3.5 hover:bg-sky-50/40 transition-colors group ${
+                        i !== activeSubject.teacherNames.length - 1 ? "border-b border-slate-50" : ""
+                      }`}
+                    >
+                      <div className="min-w-0 flex items-center gap-3">
+                        <div className="h-8 w-8 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
+                          {t.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-navy-900 truncate">{t}</p>
+                          <p className="text-xs text-slate-400 truncate">{ORG_NAME}</p>
+                        </div>
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-600 truncate">{mockTeacherEmail(t)}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-600">{mockTeacherJoinDate(i)}</p>
+                      </div>
+
+                      <div>
+                        <span className="inline-flex items-center rounded-full bg-sky-50 text-sky-700 text-xs font-medium px-2.5 py-1">
+                          {activeSubject.name}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1">
+                          Active
+                        </span>
+                      </div>
+
+                      <span className="inline-flex items-center gap-1 text-sm font-medium text-sky-600 justify-self-end">
+                        View
+                        <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-10">
+                  No teachers assigned to this subject yet.
+                </p>
+              )}
+            </Card>
+          </>
+        )}
       </main>
 
-      <SubjectTeachersModal
-        open={subjectTeachersModal.open}
-        subject={subjectTeachersModal.subject}
-        onClose={() => setSubjectTeachersModal({ open: false })}
-      />
       <DepartmentModal
         open={deptModal.open}
         initial={deptModal.edit}
