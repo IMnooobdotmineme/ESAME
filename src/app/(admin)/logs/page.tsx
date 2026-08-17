@@ -529,7 +529,7 @@ export default function AdminLogsPage() {
         onConfirm={confirmDeleteLog}
         title="Delete log entry?"
         description={`This will permanently delete this log entry. This action cannot be undone.`}
-        confirmLabel="Delete Permanently"
+        confirmLabel="Delete"
       />
     </>
   );

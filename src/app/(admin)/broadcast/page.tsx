@@ -110,6 +110,7 @@ const INITIAL_HISTORY: BroadcastHistoryEntry[] = [
 export default function AdminBroadcastPage() {
   const [audience, setAudience] = useState<Audience>("all_users");
   const [orgId, setOrgId] = useState(ORG_DIRECTORY[0]?.id ?? "");
+  const [orgSearch, setOrgSearch] = useState("");
   const [teacherId, setTeacherId] = useState(TEACHER_DIRECTORY[0]?.id ?? "");
   const [teacherSearch, setTeacherSearch] = useState("");
   const [subject, setSubject] = useState("");
@@ -123,6 +124,16 @@ export default function AdminBroadcastPage() {
 
   const selectedOrg = ORG_DIRECTORY.find((o) => o.id === orgId);
   const selectedTeacher = TEACHER_DIRECTORY.find((t) => t.id === teacherId);
+
+  const filteredOrgs = useMemo(
+    () =>
+      ORG_DIRECTORY.filter(
+        (o) =>
+          o.name.toLowerCase().includes(orgSearch.toLowerCase()) ||
+          o.code.toLowerCase().includes(orgSearch.toLowerCase())
+      ),
+    [orgSearch]
+  );
 
   const filteredTeachers = useMemo(
     () =>
@@ -257,21 +268,46 @@ export default function AdminBroadcastPage() {
               </div>
 
               {audience === "specific_organization" && (
-                <div className="pt-1">
-                  <label className="text-xs font-medium text-slate-500 mb-1.5 block">
+                <div className="pt-1 space-y-2">
+                  <label className="text-xs font-medium text-slate-500 block">
                     Choose organization
                   </label>
-                  <select
-                    value={orgId}
-                    onChange={(e) => setOrgId(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                  >
-                    {ORG_DIRECTORY.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name} ({o.code})
-                      </option>
+                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 h-9">
+                    <Search size={14} className="text-slate-400" />
+                    <input
+                      value={orgSearch}
+                      onChange={(e) => setOrgSearch(e.target.value)}
+                      placeholder="Search organization or code..."
+                      className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="h-44 overflow-y-auto space-y-1.5 pr-1">
+                    {filteredOrgs.map((o) => (
+                      <button
+                        type="button"
+                        key={o.id}
+                        onClick={() => setOrgId(o.id)}
+                        className={cn(
+                          "w-full text-left flex items-center gap-3 rounded-xl border px-3 py-2 transition-colors",
+                          orgId === o.id
+                            ? "border-sky-400 bg-sky-50/70"
+                            : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
+                        )}
+                      >
+                        <div className="h-8 w-8 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
+                          {o.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-navy-900 truncate">{o.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{o.code}</p>
+                        </div>
+                        {orgId === o.id && <Check size={15} className="text-sky-600 shrink-0" />}
+                      </button>
                     ))}
-                  </select>
+                    {filteredOrgs.length === 0 && (
+                      <p className="text-xs text-slate-400 text-center py-4">No organizations matched.</p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -289,7 +325,7 @@ export default function AdminBroadcastPage() {
                       className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
                     />
                   </div>
-                  <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                  <div className="h-44 overflow-y-auto space-y-1.5 pr-1">
                     {filteredTeachers.map((t) => (
                       <button
                         type="button"
@@ -448,7 +484,7 @@ export default function AdminBroadcastPage() {
             </button>
           </div>
           {!showArchivedHistory && (
-            <div className="px-5 pb-4 -mt-1">
+            <div className="px-5 pt-3 pb-4 border-b border-slate-100">
               <button
                 onClick={() => setArchiveAllConfirm(true)}
                 disabled={visibleHistory.length === 0}
@@ -496,7 +532,7 @@ export default function AdminBroadcastPage() {
                       {h.archived && (
                         <button
                           onClick={() => setDeleteTarget(h)}
-                          title="Delete permanently"
+                          title="Delete"
                           className="h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-red-50 text-slate-400 hover:text-red-600"
                         >
                           <Trash2 size={15} />
@@ -559,7 +595,7 @@ export default function AdminBroadcastPage() {
         onConfirm={confirmDeleteBroadcast}
         title="Delete broadcast?"
         description={`This will permanently delete "${deleteTarget?.subject}" from your broadcast history. This action cannot be undone.`}
-        confirmLabel="Delete Permanently"
+        confirmLabel="Delete"
       />
     </>
   );

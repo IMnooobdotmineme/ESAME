@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,12 @@ function DepartmentModal({
   initial?: DepartmentCard;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
+
+  useEffect(() => {
+    if (open) {
+      setName(initial?.name ?? "");
+    }
+  }, [open, initial]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -85,10 +91,6 @@ function DepartmentModal({
   );
 }
 
-// Three-level drill-down, mirroring the Department -> Subjects flow:
-// departments -> subjects (within a department) -> teachers (within a subject).
-// The "teachers" level replaces the old popup modal with a full page view
-// so the breadcrumb naturally grows to "Department Inventory / <Dept> / <Subject>".
 type View =
   | { level: "departments" }
   | { level: "subjects"; departmentId: string }
@@ -108,6 +110,12 @@ function SubjectModal({
   initial?: DeptSubject;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
+
+  useEffect(() => {
+    if (open) {
+      setName(initial?.name ?? "");
+    }
+  }, [open, initial]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
