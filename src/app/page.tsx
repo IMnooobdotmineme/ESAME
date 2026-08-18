@@ -145,7 +145,7 @@ export default function Home() {
           <div className="bg-[#f8fbff] rounded-2xl p-8 border border-slate-100 shadow-sm flex flex-col items-start min-h-[250px]">
             <div className="w-10 h-10 bg-[#a6c8f0] text-black rounded-lg flex items-center justify-center text-lg font-bold mb-6">1</div>
             <h3 className="text-lg font-bold text-black mb-3">Frictionless Student Access</h3>
-            <p className="text-[0.85rem] text-slate-500 leading-relaxed">Students don't need persistent user records or signups. They provide their name and institutional identification code to request immediate entry parameters.</p>
+            <p className="text-[0.85rem] text-slate-500 leading-relaxed">Students don&apos;t need persistent user records or signups. They provide their name and institutional identification code to request immediate entry parameters.</p>
           </div>
 
           <div className="bg-[#f8fbff] rounded-2xl p-8 border border-slate-100 shadow-sm flex flex-col items-start min-h-[250px]">
@@ -254,7 +254,7 @@ export default function Home() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
             </div>
             <h3 className="font-bold text-[1.1rem] text-black mb-3">Lock & Resume Flow</h3>
-            <p className="text-[0.8rem] text-slate-500 leading-relaxed">Automatically freezes a student's session upon reaching maximum warning</p>
+            <p className="text-[0.8rem] text-slate-500 leading-relaxed">Automatically freezes a student&apos;s session upon reaching maximum warning</p>
           </div>
 
           <div className="bg-white p-6 rounded-[20px] shadow-lg border border-slate-100 flex flex-col items-start min-h-[260px]">
