@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DEPARTMENTS as INITIAL_DEPARTMENTS, DepartmentCard, DeptSubject } from "@/lib/academic-structure-data";
+import { AcademicTeacher, DepartmentCard, DeptSubject } from "@/lib/academic-structure-data";
 import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import {
   Building2,
@@ -48,7 +48,7 @@ function DepartmentModal({
     e.preventDefault();
     if (!name) return;
     onSave({
-      id: initial?.id ?? crypto.randomUUID(),
+      id: initial?.id ?? "",
       name,
       courses: initial?.courses ?? 0,
       students: initial?.students ?? 0,
@@ -120,7 +120,12 @@ function SubjectModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
-    onSave({ id: initial?.id ?? crypto.randomUUID(), name, teacherNames: initial?.teacherNames ?? [] });
+    onSave({
+      id: initial?.id ?? "",
+      name,
+      teacherNames: initial?.teacherNames ?? [],
+      teachers: initial?.teachers ?? [],
+    });
     setName("");
     onClose();
   }
@@ -157,37 +162,13 @@ function SubjectModal({
 }
 
 const TEACHER_ROW_GRID = "grid grid-cols-[1fr_200px_150px_140px_100px_70px] items-center gap-4";
-const ORG_NAME = "Kiririom Institute of Technology";
 
-// NOTE: teacher records currently only store a name (DeptSubject.teacherNames:
-// string[]), so email and join date aren't real data yet — these are
-// deterministic placeholders so the table renders correctly. Swap these
-// helpers out once teacher records carry real email/joinedAt fields.
-function mockTeacherEmail(name: string) {
-  const handle = name
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z\s]/g, "")
-    .trim()
-    .split(/\s+/)
-    .join(".");
-  return `${handle}@kit.edu.kh`;
-}
-
-const MOCK_JOIN_DATES = [
-  "Jan 12, 2022",
-  "Mar 03, 2023",
-  "Sep 21, 2021",
-  "Jun 18, 2024",
-  "Nov 05, 2022",
-  "Feb 27, 2023",
-];
-function mockTeacherJoinDate(index: number) {
-  return MOCK_JOIN_DATES[index % MOCK_JOIN_DATES.length];
-}
+type AcademicStructureResponse = {
+  departments?: DepartmentCard[];
+};
 
 export default function AcademicStructurePage() {
-  const [departments, setDepartments] = useState<DepartmentCard[]>(INITIAL_DEPARTMENTS);
+  const [departments, setDepartments] = useState<DepartmentCard[]>([]);
   const [view, setView] = useState<View>({ level: "departments" });
   const [search, setSearch] = useState("");
   const [subjectSearch, setSubjectSearch] = useState("");
@@ -195,6 +176,57 @@ export default function AcademicStructurePage() {
   const [subjectModal, setSubjectModal] = useState<{ open: boolean; edit?: DeptSubject }>({ open: false });
   const [deleteDeptTarget, setDeleteDeptTarget] = useState<DepartmentCard | null>(null);
   const [deleteSubjectTarget, setDeleteSubjectTarget] = useState<DeptSubject | null>(null);
+
+  const loadDepartments = useCallback(async () => {
+    try {
+      const response = await fetch("/api/org/academic-structure", { cache: "no-store" });
+      const payload = (await response.json()) as AcademicStructureResponse;
+      if (!response.ok || !Array.isArray(payload.departments)) {
+        setDepartments([]);
+        return;
+      }
+
+      const mapped = payload.departments.map((department) => ({
+        id: department.id,
+        name: department.name,
+        courses: Number(department.courses ?? 0),
+        students: Number(department.students ?? 0),
+        faculty: Number(department.faculty ?? 0),
+        metricLabel: typeof department.metricLabel === "string" ? department.metricLabel : "Exam Completion Rate",
+        metricValue: Number(department.metricValue ?? 0),
+        subjects: Array.isArray(department.subjects)
+          ? department.subjects.map((subject) => ({
+              id: subject.id,
+              name: subject.name,
+              teacherNames: Array.isArray(subject.teacherNames) ? subject.teacherNames : [],
+              teachers: Array.isArray(subject.teachers) ? subject.teachers : [],
+            }))
+          : [],
+      }));
+
+      setDepartments(mapped);
+      setView((currentView) => {
+        if (currentView.level === "departments") return currentView;
+        const nextActiveDepartment = mapped.find((department: { id: string }) => department.id === currentView.departmentId);
+        if (!nextActiveDepartment) {
+          return { level: "departments" };
+        }
+        if (
+          currentView.level === "teachers" &&
+          !nextActiveDepartment.subjects.some((subject) => subject.id === currentView.subjectId)
+        ) {
+          return { level: "subjects", departmentId: currentView.departmentId };
+        }
+        return currentView;
+      });
+    } catch {
+      setDepartments([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDepartments();
+  }, [loadDepartments]);
 
   const totalDepartments = departments.length;
   const totalStudents = departments.reduce((sum, d) => sum + d.students, 0);
@@ -205,51 +237,113 @@ export default function AcademicStructurePage() {
   const activeSubject =
     view.level === "teachers" ? activeDepartment?.subjects.find((s) => s.id === view.subjectId) : undefined;
 
-  function saveDepartment(dept: DepartmentCard) {
-    setDepartments((prev) => {
-      const exists = prev.some((d) => d.id === dept.id);
-      return exists ? prev.map((d) => (d.id === dept.id ? dept : d)) : [...prev, dept];
-    });
-  }
-
-  function saveSubject(subject: DeptSubject) {
-    if (!activeDepartment) return;
-    setDepartments((prev) =>
-      prev.map((d) => {
-        if (d.id !== activeDepartment.id) return d;
-        const exists = d.subjects.some((s) => s.id === subject.id);
-        return {
-          ...d,
-          subjects: exists
-            ? d.subjects.map((s) => (s.id === subject.id ? subject : s))
-            : [...d.subjects, subject],
-        };
-      })
-    );
-  }
-
-  function confirmDeleteDepartment() {
-    if (!deleteDeptTarget) return;
-    setDepartments((prev) => prev.filter((d) => d.id !== deleteDeptTarget.id));
-    setDeleteDeptTarget(null);
-    if (view.level !== "departments" && view.departmentId === deleteDeptTarget.id) {
+  async function saveDepartment(dept: DepartmentCard) {
+    try {
+      const method = dept.id ? "PATCH" : "POST";
+      const response = await fetch("/api/org/academic-structure", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(method === "PATCH" ? { id: dept.id } : {}),
+          type: "department",
+          name: dept.name,
+          courses: dept.courses,
+          students: dept.students,
+          faculty: dept.faculty,
+          metricLabel: dept.metricLabel,
+          metricValue: dept.metricValue,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        window.alert(payload?.error || "Failed to save department.");
+        return;
+      }
       setView({ level: "departments" });
+      await loadDepartments();
+    } catch {
+      window.alert("Failed to save department.");
     }
   }
 
-  function confirmDeleteSubject() {
-    if (!deleteSubjectTarget || !activeDepartment) return;
-    setDepartments((prev) =>
-      prev.map((d) =>
-        d.id === activeDepartment.id
-          ? { ...d, subjects: d.subjects.filter((s) => s.id !== deleteSubjectTarget.id) }
-          : d
-      )
-    );
-    setDeleteSubjectTarget(null);
-    if (view.level === "teachers" && view.subjectId === deleteSubjectTarget.id) {
+  async function saveSubject(subject: DeptSubject) {
+    if (!activeDepartment) return;
+
+    try {
+      const method = subject.id ? "PATCH" : "POST";
+      const response = await fetch("/api/org/academic-structure", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(method === "PATCH" ? { id: subject.id } : { departmentId: activeDepartment.id }),
+          type: "subject",
+          name: subject.name,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        window.alert(payload?.error || "Failed to save subject.");
+        return;
+      }
       setView({ level: "subjects", departmentId: activeDepartment.id });
+      await loadDepartments();
+    } catch {
+      window.alert("Failed to save subject.");
     }
+  }
+
+  async function confirmDeleteDepartment() {
+    if (!deleteDeptTarget) return;
+    try {
+      const response = await fetch("/api/org/academic-structure", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "department", id: deleteDeptTarget.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        window.alert(payload?.error || "Failed to delete department.");
+        return;
+      }
+      setDeleteDeptTarget(null);
+      if (view.level !== "departments" && view.departmentId === deleteDeptTarget.id) {
+        setView({ level: "departments" });
+      }
+      await loadDepartments();
+    } catch {
+      window.alert("Failed to delete department.");
+    }
+  }
+
+  async function confirmDeleteSubject() {
+    if (!deleteSubjectTarget || !activeDepartment) return;
+    try {
+      const response = await fetch("/api/org/academic-structure", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "subject", id: deleteSubjectTarget.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        window.alert(payload?.error || "Failed to delete subject.");
+        return;
+      }
+      setDeleteSubjectTarget(null);
+      if (view.level === "teachers" && view.subjectId === deleteSubjectTarget.id) {
+        setView({ level: "subjects", departmentId: activeDepartment.id });
+      }
+      await loadDepartments();
+    } catch {
+      window.alert("Failed to delete subject.");
+    }
+  }
+
+  function handleAddDepartment() {
+    setDeptModal({ open: true });
+  }
+
+  function handleAddSubject() {
+    setSubjectModal({ open: true });
   }
 
   return (
@@ -338,7 +432,7 @@ export default function AcademicStructurePage() {
               ))}
 
               {/* Add new */}
-              <button type="button" onClick={() => setDeptModal({ open: true })} className="text-left">
+              <button type="button" onClick={handleAddDepartment} className="text-left">
                 <Card className="flex flex-col items-center justify-center text-center p-8 border-dashed h-full hover:bg-slate-50 hover:border-sky-300 transition-colors cursor-pointer">
                   <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                     <Plus size={20} className="text-slate-400" />
@@ -367,7 +461,7 @@ export default function AcademicStructurePage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Button onClick={() => setSubjectModal({ open: true })}>
+                <Button onClick={handleAddSubject}>
                   <Plus size={15} /> Add Subject
                 </Button>
                 <Button variant="outline" onClick={() => setView({ level: "departments" })}>
@@ -429,7 +523,7 @@ export default function AcademicStructurePage() {
               ))}
 
               {/* Add subject */}
-              <button type="button" onClick={() => setSubjectModal({ open: true })} className="text-left">
+              <button type="button" onClick={handleAddSubject} className="text-left">
                 <Card className="flex flex-col items-center justify-center text-center p-8 border-dashed h-full hover:bg-slate-50 hover:border-sky-300 transition-colors cursor-pointer">
                   <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                     <Plus size={20} className="text-slate-400" />
@@ -469,7 +563,7 @@ export default function AcademicStructurePage() {
             </div>
 
             <Card className="overflow-hidden">
-              {activeSubject.teacherNames.length > 0 ? (
+              {(activeSubject.teachers ?? []).length > 0 ? (
                 <div>
                   <div className={`${TEACHER_ROW_GRID} px-6 py-3 bg-slate-50/60 border-b border-slate-100`}>
                     <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Teacher</span>
@@ -480,30 +574,30 @@ export default function AcademicStructurePage() {
                     <span />
                   </div>
 
-                  {activeSubject.teacherNames.map((t, i) => (
+                  {(activeSubject.teachers ?? []).map((teacher: AcademicTeacher, i: number) => (
                     <Link
-                      key={t}
-                      href={`/teachers/${encodeURIComponent(t)}`}
+                      key={teacher.id}
+                      href={`/teachers/${encodeURIComponent(teacher.id)}`}
                       className={`${TEACHER_ROW_GRID} px-6 py-3.5 hover:bg-sky-50/40 transition-colors group ${
-                        i !== activeSubject.teacherNames.length - 1 ? "border-b border-slate-50" : ""
+                        i !== (activeSubject.teachers ?? []).length - 1 ? "border-b border-slate-50" : ""
                       }`}
                     >
                       <div className="min-w-0 flex items-center gap-3">
                         <div className="h-8 w-8 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
-                          {t.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                          {teacher.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-navy-900 truncate">{t}</p>
-                          <p className="text-xs text-slate-400 truncate">{ORG_NAME}</p>
+                          <p className="text-sm font-medium text-navy-900 truncate">{teacher.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{teacher.email}</p>
                         </div>
                       </div>
 
                       <div className="min-w-0">
-                        <p className="text-sm text-slate-600 truncate">{mockTeacherEmail(t)}</p>
+                        <p className="text-sm text-slate-600 truncate">{teacher.email}</p>
                       </div>
 
                       <div>
-                        <p className="text-sm text-slate-600">{mockTeacherJoinDate(i)}</p>
+                        <p className="text-sm text-slate-600">{teacher.joined || "-"}</p>
                       </div>
 
                       <div>
@@ -513,8 +607,8 @@ export default function AcademicStructurePage() {
                       </div>
 
                       <div>
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1">
-                          Active
+                        <span className={statusClass(teacher.status)}>
+                          {teacher.status}
                         </span>
                       </div>
 
@@ -610,6 +704,14 @@ function MiniMetric({ label, value }: { label: string; value: string | number })
       <p className="text-sm font-semibold text-navy-900 mt-0.5">{value}</p>
     </div>
   );
+}
+
+function statusClass(status: AcademicTeacher["status"]) {
+  const base =
+    "inline-flex items-center rounded-full text-xs font-semibold uppercase tracking-wide px-2.5 py-1";
+  if (status === "Active") return `${base} bg-emerald-50 text-emerald-700`;
+  if (status === "Suspended") return `${base} bg-rose-50 text-rose-700`;
+  return `${base} bg-amber-50 text-amber-700`;
 }
 
 function Breadcrumb({ items }: { items: { label: string; onClick?: () => void }[] }) {

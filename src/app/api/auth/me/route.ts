@@ -17,6 +17,7 @@ export async function GET() {
         name: organizations.name,
         email: organizations.email,
         status: organizations.status,
+        avatarUrl: organizations.avatarUrl,
       })
       .from(organizations)
       .where(eq(organizations.id, session.userId));

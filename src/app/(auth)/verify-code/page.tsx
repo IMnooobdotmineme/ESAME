@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation"; // Imported useRouter
+import React, { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
 const CODE_LENGTH = 6;
 const RESEND_SECONDS = 60;
 
-export default function VerifyCode() {
+function VerifyCodeForm() {
   const searchParams = useSearchParams();
-  const router = useRouter(); // Initialized the router
+  const router = useRouter();
   const email = searchParams.get("email") || "";
   
   // Get the 'from' parameter from the URL (e.g., /verify-code?email=abc@test.com&from=login)
@@ -243,5 +243,13 @@ export default function VerifyCode() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function VerifyCode() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#f5f7fb] text-[#395886] font-medium">Loading verification...</div>}>
+      <VerifyCodeForm />
+    </Suspense>
   );
 }

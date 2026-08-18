@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { teachers, passwordHistory } from "@/db/schema";
+import { assertDb } from "@/db";
+import { notifications, teachers, passwordHistory } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../../../../lib/password";
+
+const db = assertDb();
 
 export async function POST(req: Request) {
   try {
@@ -60,6 +62,15 @@ export async function POST(req: Request) {
       userType: "teacher",
       userId: teacher.id,
       passwordHash,
+    });
+
+    await db.insert(notifications).values({
+      orgId: teacher.orgId,
+      title: "Invitation Accepted",
+      message: `${teacher.name || teacher.email} accepted the invitation and completed account setup.`,
+      type: "teacher_invite_accepted",
+      relatedEntityId: teacher.id,
+      relatedEntityType: "teacher",
     });
 
     return NextResponse.json({ ok: true, redirect: "/login" });

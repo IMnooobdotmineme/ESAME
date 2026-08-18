@@ -1,20 +1,28 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getTeacherByName, uniqueDepartments, uniqueSubjects } from "@/lib/teachers-data";
-import { EXAMS } from "@/lib/exam-data";
+import type { Teacher } from "@/lib/teachers-data";
 import { ChevronDown, ChevronLeft, FileText, Mail, Building2, BookOpen, CalendarDays } from "lucide-react";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "danger" | "neutral"> = {
   Active: "success",
   Pending: "warning",
   Suspended: "danger",
+};
+
+type TeacherExamSummary = {
+  id: string;
+  examCode: string;
+  title: string;
+  date: string;
+  status: "Scheduled" | "In Progress" | "Completed" | "Locked";
+  totalStudents: number;
 };
 
 /** First value shown inline; hovering the chevron reveals the rest. */
@@ -24,7 +32,7 @@ function MultiValueList({ values }: { values: string[] }) {
 
   return (
     <div className="relative inline-flex items-center gap-1 group/cell cursor-default">
-      <span className="text-sm font-medium text-navy-900">{primary}</span>
+      <span className="text-sm font-medium text-navy-900">{primary || "—"}</span>
       {hasMore && (
         <span className="inline-flex items-center gap-0.5 text-slate-400">
           <ChevronDown size={12} className="transition-transform group-hover/cell:rotate-180" />
@@ -34,7 +42,7 @@ function MultiValueList({ values }: { values: string[] }) {
       {hasMore && (
         <div
           className="invisible opacity-0 translate-y-1 group-hover/cell:visible group-hover/cell:opacity-100 group-hover/cell:translate-y-0
-                     transition-all duration-150 absolute left-0 top-full mt-1.5 z-20 min-w-[180px]
+                     transition-all duration-150 absolute left-0 top-full mt-1.5 z-20 min-w-45
                      rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
         >
           {values.map((v) => (
@@ -51,31 +59,69 @@ function MultiValueList({ values }: { values: string[] }) {
 export default function TeacherProfilePage() {
   const params = useParams<{ name: string }>();
   const router = useRouter();
-  const teacherName = decodeURIComponent(params.name);
-  const teacher = getTeacherByName(teacherName);
+  const profileKey = decodeURIComponent(params.name);
+  const [teacher, setTeacher] = useState<Teacher | null>(null);
+  const [teacherExams, setTeacherExams] = useState<TeacherExamSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const departments = teacher ? uniqueDepartments(teacher) : [];
-  const subjects = teacher ? uniqueSubjects(teacher) : [];
+  useEffect(() => {
+    async function loadTeacher() {
+      try {
+        const looksLikeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(profileKey);
+        const teacherQuery = looksLikeId
+          ? `id=${encodeURIComponent(profileKey)}`
+          : `name=${encodeURIComponent(profileKey)}`;
+        const teacherResponse = await fetch(`/api/org/teachers?${teacherQuery}`, { cache: "no-store" });
 
-  const teacherExams = useMemo(
-    () => EXAMS.filter((e) => e.teacher === teacherName),
-    [teacherName]
-  );
+        const teacherPayload = await teacherResponse.json();
+        if (teacherResponse.ok && teacherPayload.teacher) {
+          setTeacher(teacherPayload.teacher);
+
+          const examsResponse = await fetch(`/api/org/exams?teacherId=${encodeURIComponent(teacherPayload.teacher.id)}`, {
+            cache: "no-store",
+          });
+          const examsPayload = await examsResponse.json();
+          if (examsResponse.ok && Array.isArray(examsPayload.exams)) {
+            setTeacherExams(examsPayload.exams);
+          } else {
+            setTeacherExams([]);
+          }
+        } else {
+          setTeacher(null);
+          setTeacherExams([]);
+        }
+      } catch (error) {
+        console.error("Failed to load teacher profile", error);
+        setTeacher(null);
+        setTeacherExams([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadTeacher();
+  }, [profileKey]);
+
+  const departments = teacher ? Array.from(new Set(teacher.assignments.map((a) => a.department))) : [];
+  const subjects = teacher ? Array.from(new Set(teacher.assignments.map((a) => a.subject))) : [];
 
   const completedCount = teacherExams.filter((e) => e.status === "Completed").length;
   const totalStudentsTaught = teacherExams.reduce((sum, e) => sum + e.totalStudents, 0);
 
   const description = teacher
-    ? `${subjects[0]}${subjects.length > 1 ? ` +${subjects.length - 1} more` : ""} · ${departments[0]}${
+    ? `${subjects[0] || "No subjects"}${subjects.length > 1 ? ` +${subjects.length - 1} more` : ""} · ${departments[0] || "No departments"}${
         departments.length > 1 ? ` +${departments.length - 1} more` : ""
       }`
     : "Teacher profile";
+  const displayName = teacher?.name || teacher?.email || profileKey;
 
   return (
     <>
-      <OrgTopbar title={teacher?.name ?? teacherName} description={description} />
+      <OrgTopbar title={displayName} description={description} />
 
       <main className="p-6 space-y-5">
+        {loading && <Card className="p-10 text-center text-slate-400">Loading teacher profile...</Card>}
+
         <Button variant="outline" onClick={() => router.back()}>
           <ChevronLeft size={15} /> Back
         </Button>
@@ -85,10 +131,10 @@ export default function TeacherProfilePage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
             <div className="flex items-center gap-4">
               <div className="h-14 w-14 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-lg font-semibold">
-                {teacherName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                {displayName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-navy-900">{teacherName}</h2>
+                <h2 className="text-lg font-semibold text-navy-900">{displayName}</h2>
                 {teacher && (
                   <p className="text-sm text-slate-400 flex items-center gap-1.5 mt-0.5">
                     <Mail size={13} /> {teacher.email}

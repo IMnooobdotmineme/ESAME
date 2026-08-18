@@ -5,8 +5,8 @@ import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { EXAMS, ExamStatus } from "@/lib/exam-data";
-import { Search, ListFilter, Calendar, ChevronLeft, ChevronRight, ChevronRight as Arrow, X, Check, ArrowUpDown } from "lucide-react";
+import type { ExamRecord, ExamStatus } from "@/lib/exam-data";
+import { Search, Calendar, ChevronLeft, ChevronRight, ChevronRight as Arrow, X, Check, ArrowUpDown } from "lucide-react";
 
 const STATUS_VARIANT: Record<ExamStatus, "info" | "success" | "warning" | "danger"> = {
   "In Progress": "info",
@@ -29,6 +29,8 @@ const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
 const PAGE_SIZE = 5;
 
 export default function ExamManagementPage() {
+  const [exams, setExams] = useState<ExamRecord[]>([]);
+  const [totals, setTotals] = useState({ active: 0, scheduled: 0, totalSubmissions: 0 });
   const [filter, setFilter] = useState<"All" | ExamStatus>("All");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -37,6 +39,31 @@ export default function ExamManagementPage() {
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    async function loadExams() {
+      try {
+        const response = await fetch("/api/org/exams", { cache: "no-store" });
+        const payload = await response.json();
+        if (response.ok && Array.isArray(payload.exams)) {
+          setExams(payload.exams as ExamRecord[]);
+          setTotals({
+            active: Number(payload.totals?.active ?? 0),
+            scheduled: Number(payload.totals?.scheduled ?? 0),
+            totalSubmissions: Number(payload.totals?.totalSubmissions ?? 0),
+          });
+        } else {
+          setExams([]);
+          setTotals({ active: 0, scheduled: 0, totalSubmissions: 0 });
+        }
+      } catch {
+        setExams([]);
+        setTotals({ active: 0, scheduled: 0, totalSubmissions: 0 });
+      }
+    }
+
+    loadExams();
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -48,12 +75,12 @@ export default function ExamManagementPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const activeCount = EXAMS.filter((e) => e.status === "In Progress").length;
-  const scheduledCount = EXAMS.filter((e) => e.status === "Scheduled").length;
-  const totalSubmissions = EXAMS.reduce((sum, e) => sum + e.results.length, 0);
+  const activeCount = totals.active;
+  const scheduledCount = totals.scheduled;
+  const totalSubmissions = totals.totalSubmissions;
 
   const filtered = useMemo(() => {
-    const result = EXAMS.filter((e) => {
+    const result = exams.filter((e) => {
       const matchesStatus = filter === "All" || e.status === filter;
       const q = search.toLowerCase();
       const matchesSearch =
@@ -74,7 +101,7 @@ export default function ExamManagementPage() {
     }
 
     return result;
-  }, [filter, search, sortOrder]);
+  }, [exams, filter, search, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

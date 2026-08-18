@@ -10,7 +10,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const DATA = [
+type ChartPoint = { month: string; participants: number; passRate: number };
+
+const DEFAULT_DATA: ChartPoint[] = [
   { month: "Feb", participants: 180, passRate: 72 },
   { month: "Mar", participants: 240, passRate: 75 },
   { month: "Apr", participants: 210, passRate: 70 },
@@ -19,11 +21,11 @@ const DATA = [
   { month: "Jul", participants: 340, passRate: 78 },
 ];
 
-export function ExamParticipationChart() {
+export function ExamParticipationChart({ data = DEFAULT_DATA }: { data?: ChartPoint[] }) {
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <AreaChart data={data.length ? data : DEFAULT_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="participantsFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#4fc3f7" stopOpacity={0.35} />

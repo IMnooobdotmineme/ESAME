@@ -1,31 +1,179 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { organizations, teachers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { departments, notifications, organizations, subjects, teachers } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import { requireOrgSession } from "../../../../lib/session";
-import { sendInviteEmail } from "../../../../lib/email";
+import { sendInviteEmail, sendTeacherAssignmentEmail, sendTeacherStatusEmail } from "../../../../lib/email";
+import {
+  formatJoinedDate,
+  normalizeAssignments,
+  normalizeTeacherStatus,
+} from "@/lib/org-utils";
 
-const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export async function GET() {
+type AssignmentDepartmentRow = {
+  id: string;
+  name: string;
+};
+
+type AssignmentSubjectRow = {
+  id: string;
+  departmentId: string;
+  name: string;
+};
+
+type TeacherListRow = {
+  id: string;
+  name: string | null;
+  email: string;
+  status: "invited" | "active" | "suspended";
+  assignments: unknown;
+  createdAt: Date;
+};
+
+function normalizeTeacher(row: typeof teachers.$inferSelect) {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    email: row.email,
+    status: normalizeTeacherStatus(row.status),
+    assignments: normalizeAssignments(row.assignments),
+    joined: formatJoinedDate(row.createdAt),
+    createdAt: row.createdAt,
+  };
+}
+
+async function createOrgNotification({
+  orgId,
+  title,
+  message,
+  type,
+  relatedEntityId,
+  relatedEntityType,
+}: {
+  orgId: string;
+  title: string;
+  message: string;
+  type: string;
+  relatedEntityId?: string;
+  relatedEntityType?: string;
+}) {
+  await db.insert(notifications).values({
+    orgId,
+    title,
+    message,
+    type,
+    relatedEntityId,
+    relatedEntityType,
+  });
+}
+
+async function resolveAssignments(orgId: string, raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+
+  const [departmentRows, subjectRows] = await Promise.all([
+    db.select().from(departments).where(eq(departments.orgId, orgId)),
+    db.select().from(subjects).where(eq(subjects.orgId, orgId)),
+  ]) as [AssignmentDepartmentRow[], AssignmentSubjectRow[]];
+
+  const departmentById = new Map(departmentRows.map((department) => [department.id, department]));
+  const departmentByName = new Map(
+    departmentRows.map((department) => [department.name.trim().toLowerCase(), department])
+  );
+  const subjectById = new Map(subjectRows.map((subject) => [subject.id, subject]));
+  const seen = new Set<string>();
+  const resolved: Array<{ department: string; subject: string }> = [];
+
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = entry as Record<string, unknown>;
+    const departmentId = typeof item.departmentId === "string" ? item.departmentId.trim() : "";
+    const subjectId = typeof item.subjectId === "string" ? item.subjectId.trim() : "";
+
+    let department: AssignmentDepartmentRow | undefined;
+    let subject: AssignmentSubjectRow | undefined;
+
+    if (departmentId && subjectId) {
+      department = departmentById.get(departmentId);
+      subject = subjectById.get(subjectId);
+      if (!department || !subject || subject.departmentId !== department.id) continue;
+    } else {
+      const departmentName =
+        typeof item.department === "string" ? item.department.trim().toLowerCase() : "";
+      const subjectName = typeof item.subject === "string" ? item.subject.trim().toLowerCase() : "";
+      department = departmentByName.get(departmentName);
+      subject = subjectRows.find(
+        (candidate) =>
+          candidate.departmentId === department?.id &&
+          candidate.name.trim().toLowerCase() === subjectName
+      );
+      if (!department || !subject) continue;
+    }
+
+    const key = `${department.id}::${subject.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    resolved.push({ department: department.name, subject: subject.name });
+  }
+
+  return resolved;
+}
+
+export async function GET(req: Request) {
   const session = await requireOrgSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const list = await db
+  const { searchParams } = new URL(req.url);
+  const teacherId = searchParams.get("id")?.trim();
+  const teacherName = searchParams.get("name")?.trim();
+
+  if (teacherId || teacherName) {
+    const nameLower = teacherName?.toLowerCase() ?? "";
+    const list = (await db
+      .select({
+        id: teachers.id,
+        name: teachers.name,
+        email: teachers.email,
+        status: teachers.status,
+        assignments: teachers.assignments,
+        createdAt: teachers.createdAt,
+      })
+      .from(teachers)
+      .where(eq(teachers.orgId, session.userId))) as TeacherListRow[];
+
+    const teacher = teacherId
+      ? list.find((entry) => entry.id === teacherId)
+      : list.find(
+          (entry) =>
+            (entry.name ?? "").toLowerCase() === nameLower ||
+            entry.email.toLowerCase() === nameLower
+        );
+    if (!teacher) {
+      return NextResponse.json({ error: "Teacher not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ teacher: normalizeTeacher(teacher as typeof teachers.$inferSelect) });
+  }
+
+  const list = (await db
     .select({
       id: teachers.id,
       name: teachers.name,
       email: teachers.email,
       status: teachers.status,
+      assignments: teachers.assignments,
       createdAt: teachers.createdAt,
     })
     .from(teachers)
-    .where(eq(teachers.orgId, session.userId));
+    .where(eq(teachers.orgId, session.userId))) as TeacherListRow[];
 
-  return NextResponse.json({ teachers: list });
+  return NextResponse.json({
+    teachers: list.map((teacher) => normalizeTeacher(teacher as typeof teachers.$inferSelect)),
+  });
 }
 
 export async function POST(req: Request) {
@@ -35,20 +183,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { email, name } = await req.json();
+    const body = await req.json();
+    const name = String(body.name ?? "").trim();
+    const email = String(body.email ?? "").trim().toLowerCase();
+    const rawAssignments = Array.isArray(body.assignments) ? body.assignments : [];
+
     if (!email) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
-    const emailLower = String(email).toLowerCase().trim();
+
+    const normalizedAssignments = await resolveAssignments(session.userId, rawAssignments);
+    if (normalizedAssignments.length === 0) {
+      return NextResponse.json({ error: "At least one department and subject is required." }, { status: 400 });
+    }
 
     const [existingOrg] = await db
       .select()
       .from(organizations)
-      .where(eq(organizations.email, emailLower));
+      .where(eq(organizations.email, email));
     const [existingTeacher] = await db
       .select()
       .from(teachers)
-      .where(eq(teachers.email, emailLower));
+      .where(eq(teachers.email, email));
 
     if (existingOrg || existingTeacher) {
       return NextResponse.json(
@@ -68,26 +224,189 @@ export async function POST(req: Request) {
       .insert(teachers)
       .values({
         orgId: session.userId,
-        email: emailLower,
+        email,
         name: name || null,
         status: "invited",
+        assignments: normalizedAssignments,
         inviteToken,
         inviteTokenExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
       })
       .returning();
 
-    const link = `${process.env.APP_URL}/accept-invite?token=${inviteToken}`;
-    await sendInviteEmail(emailLower, link, org?.name || "your organization");
+    const link = `${process.env.APP_URL || "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
+    try {
+      await sendInviteEmail(email, link, org?.name || "your organization", normalizedAssignments);
+    } catch (mailError) {
+      await db.delete(teachers).where(eq(teachers.id, teacher.id));
+      console.error("send invite email error", mailError);
+      return NextResponse.json(
+        { error: "Invitation email could not be sent. Please check email settings and try again." },
+        { status: 502 }
+      );
+    }
+
+    await createOrgNotification({
+      orgId: session.userId,
+      title: "Teacher Invitation Sent",
+      message: `${name || email} was invited to join ${org?.name || "your organization"} as a teacher.`,
+      type: "teacher_invite_sent",
+      relatedEntityId: teacher.id,
+      relatedEntityType: "teacher",
+    });
 
     return NextResponse.json({
       ok: true,
-      teacher: { id: teacher.id, email: teacher.email, status: teacher.status },
+      teacher: {
+        id: teacher.id,
+        email: teacher.email,
+        status: normalizeTeacherStatus(teacher.status),
+        assignments: normalizeAssignments(teacher.assignments),
+      },
     });
-  } catch (err) {
-    console.error("invite teacher error", err);
-    return NextResponse.json(
-      { error: "Something went wrong. Please try again." },
-      { status: 500 }
-    );
+  } catch (error) {
+    console.error("invite teacher error", error);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await requireOrgSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const teacherId = String(body.teacherId ?? "");
+    if (!teacherId) {
+      return NextResponse.json({ error: "Teacher is required." }, { status: 400 });
+    }
+
+    const [teacher] = await db
+      .select({
+        id: teachers.id,
+        email: teachers.email,
+        status: teachers.status,
+        assignments: teachers.assignments,
+        name: teachers.name,
+        orgId: teachers.orgId,
+      })
+      .from(teachers)
+      .where(eq(teachers.id, teacherId));
+
+    if (!teacher || teacher.orgId !== session.userId) {
+      return NextResponse.json({ error: "Teacher not found." }, { status: 404 });
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    let orgName = "your organization";
+    const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, session.userId));
+    if (org) orgName = org.name;
+
+    if (typeof body.status === "string") {
+      const nextStatus = body.status === "Active" ? "active" : body.status === "Suspended" ? "suspended" : "invited";
+      updates.status = nextStatus;
+    }
+
+    if (Array.isArray(body.assignments)) {
+      const nextAssignments = await resolveAssignments(session.userId, body.assignments);
+      if (nextAssignments.length === 0) {
+        return NextResponse.json({ error: "At least one department and subject is required." }, { status: 400 });
+      }
+      updates.assignments = nextAssignments;
+    }
+
+    const [updatedTeacher] = await db
+      .update(teachers)
+      .set(updates)
+      .where(and(eq(teachers.id, teacherId), eq(teachers.orgId, session.userId)))
+      .returning();
+
+    if (typeof body.status === "string") {
+      const nextStatus = updatedTeacher.status;
+      if (nextStatus === "active" || nextStatus === "suspended") {
+        sendTeacherStatusEmail(teacher.email, orgName, nextStatus).catch((error) => {
+          console.error("send teacher status email error", error);
+        });
+      }
+      await createOrgNotification({
+        orgId: session.userId,
+        title: nextStatus === "active" ? "Teacher Activated" : "Teacher Suspended",
+        message: `${teacher.name || teacher.email} was ${nextStatus === "active" ? "activated" : "suspended"}.`,
+        type: nextStatus === "active" ? "teacher_activated" : "teacher_suspended",
+        relatedEntityId: teacher.id,
+        relatedEntityType: "teacher",
+      });
+    }
+
+    if (Array.isArray(body.assignments)) {
+      sendTeacherAssignmentEmail(
+        teacher.email,
+        orgName,
+        normalizeAssignments(updatedTeacher.assignments),
+        normalizeAssignments(teacher.assignments)
+      ).catch((error) => {
+        console.error("send teacher assignment email error", error);
+      });
+      await createOrgNotification({
+        orgId: session.userId,
+        title: "Teacher Assignments Updated",
+        message: `${teacher.name || teacher.email}'s department and subject assignments were updated.`,
+        type: "teacher_assignments_updated",
+        relatedEntityId: teacher.id,
+        relatedEntityType: "teacher",
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      teacher: {
+        id: updatedTeacher.id,
+        email: updatedTeacher.email,
+        status: normalizeTeacherStatus(updatedTeacher.status),
+        assignments: normalizeAssignments(updatedTeacher.assignments),
+      },
+    });
+  } catch (error) {
+    console.error("update teacher error", error);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const session = await requireOrgSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { teacherId } = await req.json();
+    if (!teacherId) {
+      return NextResponse.json({ error: "Teacher is required." }, { status: 400 });
+    }
+
+    const [teacher] = await db
+      .select({ id: teachers.id, orgId: teachers.orgId })
+      .from(teachers)
+      .where(eq(teachers.id, teacherId));
+
+    if (!teacher || teacher.orgId !== session.userId) {
+      return NextResponse.json({ error: "Teacher not found." }, { status: 404 });
+    }
+
+    await db.delete(teachers).where(eq(teachers.id, teacherId));
+    await createOrgNotification({
+      orgId: session.userId,
+      title: "Teacher Removed",
+      message: "A teacher account was removed from your organization.",
+      type: "teacher_removed",
+      relatedEntityId: teacherId,
+      relatedEntityType: "teacher",
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("delete teacher error", error);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

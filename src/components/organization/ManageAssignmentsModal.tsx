@@ -3,9 +3,14 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { DEPARTMENTS } from "@/lib/academic-structure-data";
 import { TeacherAssignment } from "@/lib/teachers-data";
 import { Plus, Trash2 } from "lucide-react";
+
+interface DepartmentOption {
+  id: string;
+  name: string;
+  subjects: Array<{ id: string; name: string; teacherNames?: string[] }>;
+}
 
 interface Row {
   departmentId: string;
@@ -20,21 +25,21 @@ interface ManageAssignmentsModalProps {
   onSave: (assignments: TeacherAssignment[]) => void;
 }
 
-function subjectsFor(departmentId: string) {
-  return DEPARTMENTS.find((d) => d.id === departmentId)?.subjects ?? [];
-}
-
-function toRows(assignments: TeacherAssignment[]): Row[] {
+function toRows(assignments: TeacherAssignment[], departmentOptions: DepartmentOption[]): Row[] {
   const rows = assignments
     .map((a) => {
-      const dept = DEPARTMENTS.find((d) => d.name === a.department);
+      const dept = departmentOptions.find((d) => d.name === a.department);
       const subject = dept?.subjects.find((s) => s.name === a.subject);
       return dept && subject ? { departmentId: dept.id, subjectId: subject.id } : null;
     })
     .filter((r): r is Row => r !== null);
+
+  const fallbackDepartment = departmentOptions[0];
   return rows.length > 0
     ? rows
-    : [{ departmentId: DEPARTMENTS[0]?.id ?? "", subjectId: DEPARTMENTS[0]?.subjects[0]?.id ?? "" }];
+    : fallbackDepartment
+      ? [{ departmentId: fallbackDepartment.id, subjectId: fallbackDepartment.subjects[0]?.id ?? "" }]
+      : [];
 }
 
 export function ManageAssignmentsModal({
@@ -44,13 +49,47 @@ export function ManageAssignmentsModal({
   initialAssignments,
   onSave,
 }: ManageAssignmentsModalProps) {
-  const [rows, setRows] = useState<Row[]>(() => toRows(initialAssignments));
+  const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
 
-  // Re-sync whenever a different teacher's assignments are opened.
   useEffect(() => {
-    if (open) setRows(toRows(initialAssignments));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, teacherName]);
+    async function loadDepartments() {
+      try {
+        const response = await fetch("/api/org/academic-structure", { cache: "no-store" });
+        const payload = (await response.json()) as { departments?: DepartmentOption[] };
+        if (response.ok && Array.isArray(payload.departments)) {
+          const mapped = payload.departments.map((department) => ({
+            id: department.id,
+            name: department.name,
+            subjects: Array.isArray(department.subjects) ? department.subjects.map((subject) => ({
+              id: subject.id,
+              name: subject.name,
+              teacherNames: subject.teacherNames ?? [],
+            })) : [],
+          }));
+          setDepartmentOptions(mapped);
+          if (open) setRows(toRows(initialAssignments, mapped));
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load departments", error);
+      }
+
+      setDepartmentOptions([]);
+      if (open) setRows([]);
+    }
+
+    if (open) {
+      loadDepartments();
+    }
+  }, [open, initialAssignments]);
+
+  const departments = departmentOptions;
+  const hasAssignableSubject = departments.some((department) => department.subjects.length > 0);
+
+  function subjectsFor(departmentId: string) {
+    return departments.find((d) => d.id === departmentId)?.subjects ?? [];
+  }
 
   function updateRow(index: number, patch: Partial<Row>) {
     setRows((prev) =>
@@ -66,9 +105,14 @@ export function ManageAssignmentsModal({
   }
 
   function addRow() {
+    const fallbackDepartment = departments.find((department) => department.subjects.length > 0) ?? departments[0];
+    if (!fallbackDepartment) return;
     setRows((prev) => [
       ...prev,
-      { departmentId: DEPARTMENTS[0]?.id ?? "", subjectId: DEPARTMENTS[0]?.subjects[0]?.id ?? "" },
+      {
+        departmentId: fallbackDepartment.id,
+        subjectId: fallbackDepartment?.subjects[0]?.id ?? "",
+      },
     ]);
   }
 
@@ -81,7 +125,7 @@ export function ManageAssignmentsModal({
     const assignments: TeacherAssignment[] = rows
       .filter((r) => r.departmentId && r.subjectId)
       .map((r) => {
-        const dept = DEPARTMENTS.find((d) => d.id === r.departmentId)!;
+        const dept = departments.find((d) => d.id === r.departmentId)!;
         const subject = subjectsFor(r.departmentId).find((s) => s.id === r.subjectId)!;
         return { department: dept.name, subject: subject.name };
       });
@@ -106,11 +150,18 @@ export function ManageAssignmentsModal({
             <button
               type="button"
               onClick={addRow}
-              className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline"
+              disabled={!hasAssignableSubject}
+              className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300 disabled:no-underline"
             >
               <Plus size={13} /> Add another
             </button>
           </div>
+
+          {!hasAssignableSubject && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              Create at least one department and subject before assigning teachers.
+            </p>
+          )}
 
           {rows.map((r, i) => {
             const subjects = subjectsFor(r.departmentId);
@@ -136,7 +187,7 @@ export function ManageAssignmentsModal({
                       className={inputClass}
                       required
                     >
-                      {DEPARTMENTS.map((d) => (
+                      {departments.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.name}
                         </option>
@@ -170,7 +221,9 @@ export function ManageAssignmentsModal({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit">Save Changes</Button>
+          <Button type="submit" disabled={!hasAssignableSubject || rows.length === 0}>
+            Save Changes
+          </Button>
         </DialogFooter>
       </form>
     </Dialog>

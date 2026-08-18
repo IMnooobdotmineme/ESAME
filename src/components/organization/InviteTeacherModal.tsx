@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { DEPARTMENTS } from "@/lib/academic-structure-data";
 import { Plus, Trash2 } from "lucide-react";
+
+interface DepartmentOption {
+  id: string;
+  name: string;
+  subjects: Array<{ id: string; name: string; teacherNames?: string[] }>;
+}
 
 export interface InviteAssignment {
   departmentId: string;
@@ -23,20 +28,61 @@ interface InviteTeacherModalProps {
   onInvite: (data: InviteFormData) => void;
 }
 
-function emptyAssignment(): InviteAssignment {
-  return {
-    departmentId: DEPARTMENTS[0]?.id ?? "",
-    subjectId: DEPARTMENTS[0]?.subjects[0]?.id ?? "",
-  };
-}
-
 export function InviteTeacherModal({ open, onClose, onInvite }: InviteTeacherModalProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [assignments, setAssignments] = useState<InviteAssignment[]>([emptyAssignment()]);
+  const [assignments, setAssignments] = useState<InviteAssignment[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
+
+  useEffect(() => {
+    async function loadDepartments() {
+      try {
+        const response = await fetch("/api/org/academic-structure", { cache: "no-store" });
+        const payload = (await response.json()) as { departments?: DepartmentOption[] };
+        if (response.ok && Array.isArray(payload.departments)) {
+          const mapped = payload.departments.map((department) => ({
+            id: department.id,
+            name: department.name,
+            subjects: Array.isArray(department.subjects) ? department.subjects.map((subject) => ({
+              id: subject.id,
+              name: subject.name,
+              teacherNames: subject.teacherNames ?? [],
+            })) : [],
+          }));
+          setDepartmentOptions(mapped);
+          const firstAssignable = mapped.find((department) => department.subjects.length > 0) ?? mapped[0];
+          if (firstAssignable) {
+            setAssignments((prev) =>
+              prev.length
+                ? prev
+                : [{ departmentId: firstAssignable.id, subjectId: firstAssignable.subjects[0]?.id ?? "" }]
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load departments:", error);
+        setDepartmentOptions([]);
+      }
+    }
+
+    if (open) {
+      loadDepartments();
+    }
+  }, [open]);
+
+  const departments = departmentOptions;
+  const hasAssignableSubject = departments.some((department) => department.subjects.length > 0);
+
+  function emptyAssignment(): InviteAssignment {
+    const firstDepartment = departments.find((department) => department.subjects.length > 0) ?? departments[0];
+    return {
+      departmentId: firstDepartment?.id ?? "",
+      subjectId: firstDepartment?.subjects[0]?.id ?? "",
+    };
+  }
 
   function subjectsFor(departmentId: string) {
-    return DEPARTMENTS.find((d) => d.id === departmentId)?.subjects ?? [];
+    return departments.find((d) => d.id === departmentId)?.subjects ?? [];
   }
 
   function updateAssignment(index: number, patch: Partial<InviteAssignment>) {
@@ -63,7 +109,8 @@ export function InviteTeacherModal({ open, onClose, onInvite }: InviteTeacherMod
   function resetForm() {
     setName("");
     setEmail("");
-    setAssignments([emptyAssignment()]);
+    const first = emptyAssignment();
+    setAssignments(first.departmentId ? [first] : []);
   }
 
   function handleClose() {
@@ -116,7 +163,8 @@ export function InviteTeacherModal({ open, onClose, onInvite }: InviteTeacherMod
               <button
                 type="button"
                 onClick={addAssignment}
-                className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline"
+                disabled={!hasAssignableSubject}
+                className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300 disabled:no-underline"
               >
                 <Plus size={13} /> Add another
               </button>
@@ -124,6 +172,12 @@ export function InviteTeacherModal({ open, onClose, onInvite }: InviteTeacherMod
             <p className="text-xs text-slate-400 mb-3">
               A teacher can be assigned to more than one department and subject. At least one is required.
             </p>
+
+            {!hasAssignableSubject && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Create at least one department and subject in Academic Structure before sending invitations.
+              </p>
+            )}
 
             <div className="space-y-3">
               {assignments.map((a, i) => {
@@ -150,7 +204,7 @@ export function InviteTeacherModal({ open, onClose, onInvite }: InviteTeacherMod
                           className={inputClass}
                           required
                         >
-                          {DEPARTMENTS.map((d) => (
+                          {departments.map((d) => (
                             <option key={d.id} value={d.id}>
                               {d.name}
                             </option>
@@ -186,7 +240,9 @@ export function InviteTeacherModal({ open, onClose, onInvite }: InviteTeacherMod
           <Button type="button" variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button type="submit">Send Invitation</Button>
+          <Button type="submit" disabled={!hasAssignableSubject}>
+            Send Invitation
+          </Button>
         </DialogFooter>
       </form>
     </Dialog>

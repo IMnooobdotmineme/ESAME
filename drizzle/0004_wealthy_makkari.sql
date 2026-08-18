@@ -1,0 +1,1 @@
+ALTER TABLE "teachers" ADD COLUMN "assignments" jsonb DEFAULT '[]'::jsonb NOT NULL;

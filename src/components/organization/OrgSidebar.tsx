@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -29,9 +29,32 @@ export function OrgSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [orgName, setOrgName] = useState("Organization");
 
-  function handleLogout() {
-    // TODO: clear real auth session/token here once backend auth is wired up
+  useEffect(() => {
+    async function loadOrg() {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        const payload = await res.json();
+        if (res.ok && payload?.user?.name) {
+          setOrgName(payload.user.name);
+        }
+      } catch {
+        // no-op
+      }
+    }
+
+    loadOrg();
+    window.addEventListener("org-profile-updated", loadOrg);
+    return () => window.removeEventListener("org-profile-updated", loadOrg);
+  }, []);
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+    } catch {
+      // no-op: still redirect to login even if the request fails
+    }
     router.push("/login");
   }
 
@@ -45,7 +68,7 @@ export function OrgSidebar() {
       {/* Org context badge */}
       <div className="px-6 pt-5 pb-2">
         <p className="text-xs uppercase tracking-wide text-white/40">Organization</p>
-        <p className="text-sm font-medium truncate">Kiririom Institute of Technology</p>
+        <p className="text-sm font-medium truncate">{orgName}</p>
       </div>
 
       {/* Nav */}

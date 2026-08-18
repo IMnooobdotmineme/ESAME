@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
@@ -12,9 +12,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InviteTeacherModal, InviteFormData } from "@/components/organization/InviteTeacherModal";
 import { InvitationSentDialog } from "@/components/organization/InvitationSentDialog";
 import { ManageAssignmentsModal } from "@/components/organization/ManageAssignmentsModal";
-import { DEPARTMENTS } from "@/lib/academic-structure-data";
 import {
-  INITIAL_TEACHERS,
   Teacher,
   TeacherAssignment,
   TeacherStatus as Status,
@@ -71,7 +69,7 @@ function MultiValuePopover({
       {hasMore && (
         <div
           className="invisible opacity-0 translate-y-1 group-hover/cell:visible group-hover/cell:opacity-100 group-hover/cell:translate-y-0
-                     transition-all duration-150 absolute left-0 top-full mt-1.5 z-20 min-w-[180px]
+                     transition-all duration-150 absolute left-0 top-full mt-1.5 z-20 min-w-45
                      rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
         >
           <p className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
@@ -90,7 +88,7 @@ function MultiValuePopover({
 
 export default function TeacherManagementPage() {
   const router = useRouter();
-  const [teachers, setTeachers] = useState<Teacher[]>(INITIAL_TEACHERS);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"All" | Status>("All");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -100,6 +98,25 @@ export default function TeacherManagementPage() {
     email: "",
   });
   const [assignmentsTarget, setAssignmentsTarget] = useState<Teacher | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadTeachers() {
+      try {
+        const response = await fetch("/api/org/teachers", { cache: "no-store" });
+        const payload = await response.json();
+        if (response.ok && Array.isArray(payload.teachers)) {
+          setTeachers(payload.teachers as Teacher[]);
+        }
+      } catch (error) {
+        console.error("Failed to load teachers", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadTeachers();
+  }, []);
 
   // Remove is a two-step confirmation: step 1 asks to confirm, step 2 is the
   // final "are you absolutely sure" check before anything is removed.
@@ -114,12 +131,46 @@ export default function TeacherManagementPage() {
     return matchesSearch && matchesFilter;
   });
 
-  function updateStatus(id: string, status: Status) {
-    setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+  async function updateStatus(id: string, status: Status) {
+    try {
+      const response = await fetch("/api/org/teachers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherId: id, status }),
+      });
+      const payload = await response.json();
+      if (response.status === 401) {
+        router.push("/login?error=Please log in as an organization first.");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to update teacher status");
+      }
+      setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, status: payload.teacher.status } : t)));
+    } catch (error) {
+      console.error(error);
+    }
   }
 
-  function saveAssignments(id: string, assignments: TeacherAssignment[]) {
-    setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, assignments } : t)));
+  async function saveAssignments(id: string, assignments: TeacherAssignment[]) {
+    try {
+      const response = await fetch("/api/org/teachers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherId: id, assignments }),
+      });
+      const payload = await response.json();
+      if (response.status === 401) {
+        router.push("/login?error=Please log in as an organization first.");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to update teacher assignments");
+      }
+      setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, assignments: payload.teacher.assignments } : t)));
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   function startRemove(teacher: Teacher) {
@@ -136,39 +187,61 @@ export default function TeacherManagementPage() {
     setRemoveStep(2);
   }
 
-  function handleFinalConfirm() {
+  async function handleFinalConfirm() {
     if (!removeTarget) return;
-    setTeachers((prev) => prev.filter((t) => t.id !== removeTarget.id));
-    closeRemove();
+    try {
+      const response = await fetch("/api/org/teachers", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherId: removeTarget.id }),
+      });
+      if (response.status === 401) {
+        router.push("/login?error=Please log in as an organization first.");
+        return;
+      }
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload?.error || "Failed to remove teacher");
+      }
+      setTeachers((prev) => prev.filter((t) => t.id !== removeTarget.id));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      closeRemove();
+    }
   }
 
-  function handleInvite(data: InviteFormData) {
-    const assignments: TeacherAssignment[] = data.assignments
-      .map((a) => {
-        const department = DEPARTMENTS.find((d) => d.id === a.departmentId);
-        const subject = department?.subjects.find((s) => s.id === a.subjectId);
-        return department && subject ? { department: department.name, subject: subject.name } : null;
-      })
-      .filter((a): a is TeacherAssignment => a !== null);
-
-    setTeachers((prev) => [
-      {
-        id: crypto.randomUUID(),
-        name: data.name,
-        email: data.email,
-        assignments,
-        status: "Pending",
-        joined: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      },
-      ...prev,
-    ]);
-
-    setInviteOpen(false);
-    setSentDialog({
-      open: true,
-      name: data.name,
-      email: data.email,
-    });
+  async function handleInvite(data: InviteFormData) {
+    try {
+      const response = await fetch("/api/org/teachers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: data.name, email: data.email, assignments: data.assignments }),
+      });
+      const payload = await response.json();
+      if (response.status === 401) {
+        router.push("/login?error=Please log in as an organization first.");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(payload?.error || "Invitation failed");
+      }
+      setTeachers((prev) => [
+        {
+          id: payload.teacher.id,
+          name: data.name,
+          email: data.email,
+          assignments: payload.teacher.assignments ?? [],
+          status: "Pending",
+          joined: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        },
+        ...prev,
+      ]);
+      setInviteOpen(false);
+      setSentDialog({ open: true, name: data.name, email: data.email });
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   const counts = {
@@ -230,33 +303,47 @@ export default function TeacherManagementPage() {
             <tbody>
               {filtered.map((teacher) => (
                 <tr key={teacher.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                  {(() => {
+                    const departments = uniqueDepartments(teacher);
+                    const subjects = uniqueSubjects(teacher);
+                    const profileName = teacher.name || teacher.email;
+                    return (
+                      <>
                   <td className="px-5 py-3.5">
                     <Link
-                      href={`/teachers/${encodeURIComponent(teacher.name)}`}
+                      href={`/teachers/${encodeURIComponent(teacher.id)}`}
                       className="flex items-center gap-3 group"
                     >
                       <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
-                        {teacher.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        {profileName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                       </div>
                       <div>
-                        <p className="font-medium text-navy-900 group-hover:underline">{teacher.name}</p>
+                        <p className="font-medium text-navy-900 group-hover:underline">{profileName}</p>
                         <p className="text-xs text-slate-400">{teacher.email}</p>
                       </div>
                     </Link>
                   </td>
                   <td className="px-5 py-3.5">
-                    <MultiValuePopover
-                      values={uniqueDepartments(teacher)}
-                      label="departments"
-                      trigger={<Badge variant="info">{uniqueDepartments(teacher)[0]}</Badge>}
-                    />
+                    {departments.length > 0 ? (
+                      <MultiValuePopover
+                        values={departments}
+                        label="departments"
+                        trigger={<Badge variant="info">{departments[0]}</Badge>}
+                      />
+                    ) : (
+                      <span className="text-slate-400">Unassigned</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-slate-600">
-                    <MultiValuePopover
-                      values={uniqueSubjects(teacher)}
-                      label="subjects"
-                      trigger={<span>{uniqueSubjects(teacher)[0]}</span>}
-                    />
+                    {subjects.length > 0 ? (
+                      <MultiValuePopover
+                        values={subjects}
+                        label="subjects"
+                        trigger={<span>{subjects[0]}</span>}
+                      />
+                    ) : (
+                      <span className="text-slate-400">Unassigned</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge variant={STATUS_VARIANT[teacher.status]}>{teacher.status}</Badge>
@@ -278,7 +365,7 @@ export default function TeacherManagementPage() {
                         <>
                           <DropdownItem
                             onClick={() =>
-                              router.push(`/teachers/${encodeURIComponent(teacher.name)}`)
+                              router.push(`/teachers/${encodeURIComponent(teacher.id)}`)
                             }
                           >
                             <Eye size={15} /> View Profile
@@ -303,12 +390,15 @@ export default function TeacherManagementPage() {
                       )}
                     </DropdownMenu>
                   </td>
+                      </>
+                    );
+                  })()}
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-5 py-10 text-center text-slate-400 text-sm">
-                    No teachers match your search.
+                    {loading ? "Loading teachers..." : "No teachers match your search."}
                   </td>
                 </tr>
               )}

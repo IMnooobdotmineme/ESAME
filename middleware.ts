@@ -8,8 +8,21 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const sessionToken = req.cookies.get("session_token")?.value;
 
-  const protectedPrefixes = ["/organization", "/teacher"];
-  if (protectedPrefixes.some((p) => pathname.startsWith(p)) && !sessionToken) {
+  const protectedPrefixes = [
+    "/organization",
+    "/teacher",
+    "/dashboard",
+    "/teachers",
+    "/academic-structure",
+    "/analytics",
+    "/notifications",
+    "/settings",
+    "/profile",
+    "/exams",
+    "/logs",
+  ];
+
+  if (protectedPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !sessionToken) {
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
   }
@@ -18,5 +31,17 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/organization/:path*", "/teacher/:path*"],
+  matcher: [
+    "/organization/:path*",
+    "/teacher/:path*",
+    "/dashboard/:path*",
+    "/teachers/:path*",
+    "/academic-structure/:path*",
+    "/analytics/:path*",
+    "/notifications/:path*",
+    "/settings/:path*",
+    "/profile/:path*",
+    "/exams/:path*",
+    "/logs/:path*",
+  ],
 };

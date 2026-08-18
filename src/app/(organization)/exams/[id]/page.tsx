@@ -1,18 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { getExamById, ExamStatus } from "@/lib/exam-data";
+import type { ExamStatus } from "@/lib/exam-data";
 import {
   ArrowLeft,
   Search,
   Users,
   FileText,
   Clock,
-  Calendar,
   GraduationCap,
 } from "lucide-react";
 
@@ -26,21 +25,86 @@ const STATUS_VARIANT: Record<ExamStatus, "info" | "success" | "warning" | "dange
 const TABS = ["Overview", "Question Paper", "Student Results"] as const;
 type Tab = (typeof TABS)[number];
 
+type ExamQuestionItem = {
+  id: string;
+  text: string;
+  type: string;
+  points: number;
+};
+
+type ExamResultItem = {
+  studentName: string;
+  studentId: string;
+  autoPoints: number;
+  manualPoints: number;
+  maxPoints: number;
+  status: string;
+};
+
+type ExamDetailData = {
+  id: string;
+  examCode: string;
+  title: string;
+  department: string;
+  subject: string;
+  teacher: string;
+  academicYear: string;
+  semester: string;
+  date: string;
+  time: string;
+  duration: string;
+  status: ExamStatus;
+  totalQuestions: number;
+  totalStudents: number;
+  results: ExamResultItem[];
+  questions: ExamQuestionItem[];
+};
+
 export default function ExamDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const exam = getExamById(params.id);
+  const [exam, setExam] = useState<ExamDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadExam() {
+      try {
+        const response = await fetch(`/api/org/exams?id=${encodeURIComponent(params.id)}`, { cache: "no-store" });
+        const payload = await response.json();
+        setExam(response.ok && payload.exam ? payload.exam : null);
+      } catch {
+        setExam(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (params.id) {
+      loadExam();
+    }
+  }, [params.id]);
 
   const [tab, setTab] = useState<Tab>("Overview");
   const [search, setSearch] = useState("");
 
   const filteredResults = useMemo(() => {
-    if (!exam) return [];
+    if (!exam) return [] as ExamResultItem[];
     const q = search.toLowerCase();
     return exam.results.filter(
-      (r) => !q || r.studentName.toLowerCase().includes(q) || r.studentId.toLowerCase().includes(q)
+      (r: ExamResultItem) => !q || r.studentName.toLowerCase().includes(q) || r.studentId.toLowerCase().includes(q)
     );
   }, [exam, search]);
+
+  if (loading) {
+    return (
+      <>
+        <OrgTopbar title="Loading Exam" />
+        <main className="p-6">
+          <Card className="p-10 text-center text-slate-400">Loading exam details...</Card>
+        </main>
+      </>
+    );
+  }
 
   if (!exam) {
     return (
@@ -134,7 +198,7 @@ export default function ExamDetailPage() {
               <span className="text-xs text-slate-400">Read-only — organization cannot edit exam content</span>
             </div>
             <ul className="divide-y divide-slate-50">
-              {exam.questions.map((q, i) => (
+              {exam.questions.map((q: ExamQuestionItem, i: number) => (
                 <li key={q.id} className="px-5 py-4 flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm text-navy-900">
@@ -176,7 +240,7 @@ export default function ExamDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredResults.map((r) => {
+                {filteredResults.map((r: ExamResultItem) => {
                   const total = r.autoPoints + r.manualPoints;
                   const pct = Math.round((total / r.maxPoints) * 100);
                   const passed = pct >= 50;

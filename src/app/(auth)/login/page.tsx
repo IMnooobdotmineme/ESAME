@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation"; // Added useSearchParams
+import React, { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Login() {
-  const router = useRouter(); // Initialized router
+function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [formData, setFormData] = useState({
@@ -218,5 +218,13 @@ export default function Login() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function Login() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#f5f7fb] text-[#395886] font-medium">Loading login...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

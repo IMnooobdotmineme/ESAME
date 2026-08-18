@@ -1,7 +1,16 @@
+export interface AcademicTeacher {
+  id: string;
+  name: string;
+  email: string;
+  status: "Active" | "Pending" | "Suspended";
+  joined: string;
+}
+
 export interface DeptSubject {
   id: string;
   name: string;
   teacherNames: string[];
+  teachers?: AcademicTeacher[];
 }
 
 export interface DepartmentCard {

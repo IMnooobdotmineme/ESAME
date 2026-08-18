@@ -1,27 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ExamVolumeChart } from "@/components/organization/ExamVolumeChart";
 import { ChevronDown, ArrowRight, Check } from "lucide-react";
-
-// ---- Mock data ----
-
-const TOP_DEPARTMENTS = [
-  { code: "CS", name: "Computer Science", percent: 88 },
-  { code: "IOT", name: "Internet of Things", percent: 82 },
-  { code: "IT", name: "Information Technology", percent: 76 },
-  { code: "SE", name: "Software Engineering", percent: 91 },
-];
-
-const LIVE_ACTIVITY = [
-  { studentId: "#STU-2934", module: "Data Structures & Algos", progress: 85 },
-  { studentId: "#STU-1102", module: "Advanced Physics II", progress: 42 },
-  { studentId: "#STU-8941", module: "European History", progress: 100 },
-  { studentId: "#STU-5520", module: "Sensor Technology", progress: 63 },
-];
 
 const DATE_RANGE_OPTIONS = [
   "Last 7 Days",
@@ -32,9 +15,44 @@ const DATE_RANGE_OPTIONS = [
   "All Time",
 ];
 
+type AnalyticsResponse = {
+  volume: Array<{ day: string; volume: number; type: string }>;
+  topDepartments: Array<{ code: string; name: string; percent: number }>;
+  liveActivity: Array<{ studentId: string; module: string; progress: number }>;
+};
+
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState("All Time");
   const [rangeOpen, setRangeOpen] = useState(false);
+  const [data, setData] = useState<AnalyticsResponse>({
+    volume: [],
+    topDepartments: [],
+    liveActivity: [],
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAnalytics() {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/org/analytics?range=${encodeURIComponent(dateRange)}`, { cache: "no-store" });
+        const payload = await response.json();
+        if (response.ok) {
+          setData({
+            volume: Array.isArray(payload.volume) ? payload.volume : [],
+            topDepartments: Array.isArray(payload.topDepartments) ? payload.topDepartments : [],
+            liveActivity: Array.isArray(payload.liveActivity) ? payload.liveActivity : [],
+          });
+        }
+      } catch {
+        setData({ volume: [], topDepartments: [], liveActivity: [] });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadAnalytics();
+  }, [dateRange]);
 
   return (
     <>
@@ -97,13 +115,13 @@ export default function AnalyticsPage() {
                 </span>
               </div>
             </div>
-            <ExamVolumeChart />
+            <ExamVolumeChart data={data.volume} />
           </Card>
 
           <Card className="p-5">
             <h3 className="text-sm font-semibold text-navy-900 mb-4">Top Departments</h3>
             <div className="space-y-4">
-              {TOP_DEPARTMENTS.map((d) => (
+              {data.topDepartments.map((d) => (
                 <div key={d.code}>
                   <div className="flex items-center justify-between text-sm mb-1">
                     <span className="font-medium text-navy-900">{d.code}</span>
@@ -114,6 +132,9 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
               ))}
+              {data.topDepartments.length === 0 && (
+                <p className="text-sm text-slate-400">{loading ? "Loading departments..." : "No department activity yet."}</p>
+              )}
             </div>
             <button className="mt-4 flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline">
               View All Departments <ArrowRight size={12} />
@@ -140,7 +161,7 @@ export default function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {LIVE_ACTIVITY.map((row) => (
+                {data.liveActivity.map((row) => (
                   <tr key={row.studentId} className="border-b border-slate-50 last:border-0">
                     <td className="px-5 py-3 text-slate-500">{row.studentId}</td>
                     <td className="px-5 py-3 font-medium text-navy-900">{row.module}</td>
@@ -157,6 +178,13 @@ export default function AnalyticsPage() {
                     </td>
                   </tr>
                 ))}
+                {data.liveActivity.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-5 py-10 text-center text-slate-400 text-sm">
+                      {loading ? "Loading live activity..." : "No live exam activity right now."}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </Card>
