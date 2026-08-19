@@ -166,8 +166,8 @@ function ExamBuilderContent() {
       setExamData({
         title: editingExam.title,
         description: "",
-        department: editingExam.courseCode,
-        subject: "",
+        department: editingExam.department,
+        subject: editingExam.subject,
         duration: editingExam.durationMinutes,
         startDate: editingExam.startDate || "",
       });
@@ -345,7 +345,8 @@ function ExamBuilderContent() {
     if (editId) {
       const result = updateExam(editId, {
         title: examData.title || "Untitled Examination",
-        courseCode: examData.department,
+        department: examData.department,
+        subject: examData.subject,
         durationMinutes: examData.duration,
         parts,
         questionCount: totalQCount,
@@ -361,7 +362,8 @@ function ExamBuilderContent() {
 
     const { roomCode } = createExam({
       title: examData.title || "Untitled Examination",
-      courseCode: examData.department,
+      department: examData.department,
+      subject: examData.subject,
       durationMinutes: examData.duration,
       parts,
       questionCount: totalQCount,

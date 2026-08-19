@@ -143,6 +143,9 @@ export default function GradingPage() {
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase">
                           {exam.courseCode || "—"}
                         </span>
+                        {exam.subject && (
+                          <span className="text-xs text-slate-500">{exam.subject}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-slate-600">{formatExamDate(exam.createdAt)}</td>

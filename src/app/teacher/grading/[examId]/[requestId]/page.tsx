@@ -6,8 +6,9 @@ import { ArrowLeft, Check, Download } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useExamStore, GradedAnswer } from "@/store/useExamStore";
-import { scoreSummary } from "@/lib/grading-utils";
+import { useExamStore, GradedAnswer, GradingStatus } from "@/store/useExamStore";
+import { scoreSummary, effectiveGradingStatus } from "@/lib/grading-utils";
+import { GradingStatusDropdown } from "@/components/teacher/GradingStatusDropdown";
 
 type Html2PdfInstance = {
   set: (options: Record<string, unknown>) => {
@@ -24,13 +25,14 @@ export default function GradeStudentPage() {
 
   const exams = useExamStore((s) => s.exams);
   const saveManualGrades = useExamStore((s) => s.saveManualGrades);
+  const setGradingStatus = useExamStore((s) => s.setGradingStatus);
   const currentExam = exams.find((e) => e.id === examId) || null;
   const request = currentExam?.requests.find((r) => r.id === requestId) || null;
 
   const [manualScores, setManualScores] = useState<Record<string, number | "">>(() => {
     const scores: Record<string, number | ""> = {};
     request?.answers?.forEach((a) => {
-      scores[a.id] = a.manualScore ?? (a.type === "mcq" ? "" : 0);
+      scores[a.id] = a.manualScore ?? "";
     });
     return scores;
   });
@@ -56,6 +58,11 @@ export default function GradeStudentPage() {
   }
 
   const s = scoreSummary(request);
+  const gradingStatus = effectiveGradingStatus(request);
+  const totalCount = (request.answers || []).length;
+  const gradedCount = (request.answers || []).filter(
+    (a) => a.autoScore !== undefined || a.manualScore !== undefined
+  ).length;
 
   function handleSaveGrades() {
     if (!currentExam || !request) return;
@@ -106,7 +113,7 @@ export default function GradeStudentPage() {
           <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;">
             <div style="font-size:10px;color:#64748b;font-weight:bold;">RESULT</div>
             <div style="font-size:18px;font-weight:800;margin-top:2px;color:${s.pass ? "#059669" : "#dc2626"};">${
-        s.fullyGraded ? (s.pass ? "PASS" : "FAIL") : "PENDING"
+        gradingStatus === "complete" ? (s.pass ? "PASS" : "FAIL") : "PENDING"
       }</div>
           </div>
         </div>
@@ -143,7 +150,11 @@ export default function GradeStudentPage() {
     <>
       <TeacherTopbar
         title={`${request.name} (${request.studentId})`}
-        description={`Submitted ${request.submittedAt || "-"} · ${s.total} / ${s.max} pts (${s.percentage}%)`}
+        description={
+          gradingStatus === "complete"
+            ? `Submitted ${request.submittedAt || "-"} · ${s.total} / ${s.max} pts (${s.percentage}%)`
+            : `Submitted ${request.submittedAt || "-"} · ${gradedCount} of ${totalCount} questions scored — mark Complete once finished`
+        }
       />
 
       <main className="p-6 space-y-5 max-w-3xl mx-auto">
@@ -154,10 +165,16 @@ export default function GradeStudentPage() {
           >
             <ArrowLeft size={15} /> Back to roster
           </button>
-          <Button variant="outline" size="sm" disabled={isExporting} onClick={handleDownloadPDF}>
-            <Download size={13} />
-            {isExporting ? "Exporting..." : "Download PDF"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <GradingStatusDropdown
+              status={gradingStatus}
+              onChange={(status: GradingStatus) => setGradingStatus(examId, requestId, status)}
+            />
+            <Button variant="outline" size="sm" disabled={isExporting} onClick={handleDownloadPDF}>
+              <Download size={13} />
+              {isExporting ? "Exporting..." : "Download PDF"}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -202,6 +219,7 @@ export default function GradeStudentPage() {
                       </label>
                       <input
                         type="number"
+                        placeholder="Not graded yet"
                         min={0}
                         max={q.maxPoints}
                         value={manualScores[q.id] ?? ""}

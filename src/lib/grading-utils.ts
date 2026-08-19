@@ -1,11 +1,30 @@
-import type { Exam, StudentRequest } from "@/store/useExamStore";
+import type { Exam, StudentRequest, GradingStatus } from "@/store/useExamStore";
 
 export const PASS_THRESHOLD = 50; // percent
+
+/**
+ * The grading status to treat a submission as, even if the teacher hasn't
+ * explicitly set one yet: submissions with nothing left needing manual
+ * grading default to "complete", everything else defaults to "in-progress".
+ * An explicit teacher-set status always wins.
+ */
+export function effectiveGradingStatus(req: StudentRequest): GradingStatus {
+  if (req.gradingStatus) return req.gradingStatus;
+  const needsReview = (req.answers || []).some((a) => a.needsManualGrading);
+  return needsReview ? "in-progress" : "complete";
+}
+
+export function gradingStatusMeta(
+  status: GradingStatus
+): { label: string; variant: "success" | "info" } {
+  if (status === "complete") return { label: "Complete", variant: "success" };
+  return { label: "In Progress", variant: "info" };
+}
 
 export function examStats(exam: Exam) {
   const submitted = exam.requests.filter((r) => r.isSubmitted);
   const forced = exam.requests.filter((r) => r.isForcedSubmit);
-  const pending = submitted.filter((r) => r.answers?.some((a) => a.needsManualGrading));
+  const pending = submitted.filter((r) => effectiveGradingStatus(r) !== "complete");
   return {
     examinees: exam.requests.filter((r) => r.status === "approved").length,
     submitted: submitted.length,

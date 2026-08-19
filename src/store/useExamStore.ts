@@ -1,4 +1,7 @@
 import { create } from "zustand";
+import { getDepartmentCode } from "@/lib/department-utils";
+
+export type GradingStatus = "in-progress" | "complete";
 
 export interface GradedAnswer {
   id: string;
@@ -32,11 +35,17 @@ export interface StudentRequest {
   submittedAt?: string;
   totalMaxPoints?: number;
   answers?: GradedAnswer[];
+  /** Teacher-set grading status for this submission. Defaults to "in-progress" once submitted. */
+  gradingStatus?: GradingStatus;
 }
 
 export interface Exam {
   id: string;
   courseCode: string;
+  /** Full department name, e.g. "Computer Science". courseCode is the short badge derived from this. */
+  department: string;
+  /** Full subject name, e.g. "Data Structures & Algorithms". */
+  subject: string;
   title: string;
   durationMinutes: number;
   questionCount: number;
@@ -59,7 +68,8 @@ export interface Exam {
 
 export interface CreateExamInput {
   title: string;
-  courseCode: string;
+  department: string;
+  subject: string;
   durationMinutes: number;
   parts: unknown[];
   questionCount: number;
@@ -95,6 +105,7 @@ interface ExamStore {
     requestId: string,
     grades: { questionId: string; score: number }[]
   ) => void;
+  setGradingStatus: (examId: string, requestId: string, status: GradingStatus) => void;
 }
 
 function generateRoomCode(existingCodes: string[]): string {
@@ -113,7 +124,9 @@ export const useExamStore = create<ExamStore>((set, get) => ({
   exams: [
     {
       id: "1",
-      courseCode: "DEMO",
+      courseCode: "CS",
+      department: "Computer Science",
+      subject: "Orientation Demo Session",
       title: "Demo Exam Session",
       durationMinutes: 60,
       questionCount: 5,
@@ -197,7 +210,9 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     },
     {
       id: "2",
-      courseCode: "CS101",
+      courseCode: "CS",
+      department: "Computer Science",
+      subject: "Data Structures & Algorithms",
       title: "Introduction to Computer Science (Midterm)",
       durationMinutes: 60,
       questionCount: 10,
@@ -420,7 +435,9 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     },
     {
       id: "3",
-      courseCode: "CHEM210",
+      courseCode: "CHEM",
+      department: "Chemistry",
+      subject: "Organic Chemistry",
       title: "Organic Chemistry Quiz 3",
       durationMinutes: 45,
       questionCount: 8,
@@ -658,7 +675,9 @@ export const useExamStore = create<ExamStore>((set, get) => ({
 
     const newExam: Exam = {
       id,
-      courseCode: input.courseCode,
+      courseCode: getDepartmentCode(input.department),
+      department: input.department,
+      subject: input.subject,
       title: input.title,
       durationMinutes: input.durationMinutes,
       questionCount: input.questionCount,
@@ -690,7 +709,11 @@ export const useExamStore = create<ExamStore>((set, get) => ({
           ? {
               ...exam,
               ...(input.title !== undefined && { title: input.title }),
-              ...(input.courseCode !== undefined && { courseCode: input.courseCode }),
+              ...(input.department !== undefined && {
+                department: input.department,
+                courseCode: getDepartmentCode(input.department),
+              }),
+              ...(input.subject !== undefined && { subject: input.subject }),
               ...(input.durationMinutes !== undefined && { durationMinutes: input.durationMinutes }),
               ...(input.questionCount !== undefined && { questionCount: input.questionCount }),
               ...(input.parts !== undefined && { parts: input.parts }),
@@ -719,6 +742,20 @@ export const useExamStore = create<ExamStore>((set, get) => ({
               }),
             };
           }),
+        };
+      }),
+    }));
+  },
+
+  setGradingStatus: (examId, requestId, status) => {
+    set((state) => ({
+      exams: state.exams.map((exam) => {
+        if (exam.id !== examId) return exam;
+        return {
+          ...exam,
+          requests: exam.requests.map((req) =>
+            req.id === requestId ? { ...req, gradingStatus: status } : req
+          ),
         };
       }),
     }));

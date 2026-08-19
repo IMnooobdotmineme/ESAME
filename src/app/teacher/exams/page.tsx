@@ -12,6 +12,7 @@ import {
   HelpCircle,
   FileText,
   CalendarDays,
+  Search,
 } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
@@ -32,7 +33,9 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
   {
     id: "demo-1",
     title: "Introduction to Computer Science (Midterm)",
-    courseCode: "CS101",
+    courseCode: "CS",
+    department: "Computer Science",
+    subject: "Programming Fundamentals",
     roomCode: "CS101-MID",
     durationMinutes: 60,
     questionCount: 30,
@@ -42,7 +45,9 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
   {
     id: "demo-2",
     title: "Software Engineering & Architecture Principles",
-    courseCode: "SE302",
+    courseCode: "SE",
+    department: "Software Engineering",
+    subject: "Software Architecture & Design Patterns",
     roomCode: "ARCH-2026",
     durationMinutes: 90,
     questionCount: 25,
@@ -52,7 +57,9 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
   {
     id: "demo-3",
     title: "Database Systems & SQL Optimization Final",
-    courseCode: "DB201",
+    courseCode: "SE",
+    department: "Software Engineering",
+    subject: "Database Systems",
     roomCode: "DBSQL-88",
     durationMinutes: 120,
     questionCount: 40,
@@ -62,7 +69,9 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
   {
     id: "demo-4",
     title: "Cybersecurity Essentials Quiz 2",
-    courseCode: "CYB11",
+    courseCode: "CYB",
+    department: "Cybersecurity",
+    subject: "Cybersecurity Essentials",
     roomCode: "SEC-QUIZ",
     durationMinutes: 45,
     questionCount: 15,
@@ -72,7 +81,9 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
   {
     id: "demo-5",
     title: "Web Development Fundamentals - HTML/CSS",
-    courseCode: "WEB10",
+    courseCode: "WEB",
+    department: "Web Development",
+    subject: "Web Development Fundamentals",
     roomCode: "WEB-POP1",
     durationMinutes: 30,
     questionCount: 20,
@@ -82,7 +93,9 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
   {
     id: "demo-6",
     title: "Algorithms & Data Structures Pop Quiz",
-    courseCode: "CS201",
+    courseCode: "CS",
+    department: "Computer Science",
+    subject: "Data Structures & Algorithms",
     roomCode: "ALGO-PASSED",
     durationMinutes: 40,
     questionCount: 10,
@@ -94,7 +107,7 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
 // ----------------------------------------------------------------------
 // DYNAMIC STATUS RESOLVER
 // ----------------------------------------------------------------------
-function getExamStatus(exam: Partial<ExamCard>): "active" | "scheduled" | "completed" {
+function getExamStatus(exam: Exam & { status?: ExamCard["status"] }): "active" | "scheduled" | "completed" {
   if (exam.isEnded) return "completed";
   if (exam.status === "active" || exam.status === "scheduled" || exam.status === "completed") {
     return exam.status;
@@ -132,13 +145,24 @@ export default function MyExamsPage() {
 
   const [examPendingDelete, setExamPendingDelete] = useState<ExamCard | null>(null);
   const [activeTab, setActiveTab] = useState<"active" | "scheduled" | "completed">("active");
+  const [examSearch, setExamSearch] = useState("");
 
   const mappedExams: ExamCard[] = rawExams.map((exam) => ({
     ...exam,
     status: getExamStatus(exam),
   }));
 
-  const filteredExams = mappedExams.filter((exam) => exam.status === activeTab);
+  const filteredExams = mappedExams.filter((exam) => {
+    if (exam.status !== activeTab) return false;
+    const q = examSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      exam.title.toLowerCase().includes(q) ||
+      exam.department?.toLowerCase().includes(q) ||
+      exam.subject?.toLowerCase().includes(q) ||
+      exam.courseCode?.toLowerCase().includes(q)
+    );
+  });
 
   const counts = {
     active: mappedExams.filter((e) => e.status === "active").length,
@@ -160,7 +184,17 @@ export default function MyExamsPage() {
 
       <main className="p-6 space-y-6">
         {/* PAGE ACTION ROW */}
-        <div className="flex justify-end">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative max-w-sm w-full">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search exams by title, department, or subject..."
+              value={examSearch}
+              onChange={(e) => setExamSearch(e.target.value)}
+              className="w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400"
+            />
+          </div>
           <Button onClick={() => router.push("/teacher/exams/new")}>
             <Plus size={16} />
             Create New Exam
@@ -192,9 +226,11 @@ export default function MyExamsPage() {
                 <FileText className="w-6 h-6" />
               </div>
               <p className="text-sm font-medium text-slate-400">
-                No {activeTab} exams available in repository.
+                {examSearch.trim()
+                  ? `No ${activeTab} exams match "${examSearch}".`
+                  : `No ${activeTab} exams available in repository.`}
               </p>
-              {activeTab === "active" && (
+              {activeTab === "active" && !examSearch.trim() && (
                 <button
                   onClick={() => router.push("/teacher/exams/new")}
                   className="text-xs text-sky-600 font-semibold hover:text-sky-700 transition-colors inline-block cursor-pointer"
@@ -212,7 +248,10 @@ export default function MyExamsPage() {
                 {/* Exam Information */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase">
+                    <span
+                      title={exam.department || undefined}
+                      className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase cursor-default"
+                    >
                       {exam.courseCode || "EXAM"}
                     </span>
                     <Badge variant={exam.status === "active" && !exam.isStarted ? "warning" : STATUS_BADGE[exam.status]}>
@@ -225,6 +264,9 @@ export default function MyExamsPage() {
                   </div>
 
                   <h3 className="text-sm font-semibold text-navy-900">{exam.title}</h3>
+                  {exam.subject && (
+                    <p className="text-xs text-slate-500 font-medium">{exam.subject}</p>
+                  )}
 
                   <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                     <span className="flex items-center gap-1">

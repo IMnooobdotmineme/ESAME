@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useExamStore, StudentRequest, Exam } from "@/store/useExamStore";
-import { examStats, submissionStatus, scoreSummary } from "@/lib/grading-utils";
+import { examStats, submissionStatus, scoreSummary, effectiveGradingStatus, gradingStatusMeta } from "@/lib/grading-utils";
 
 type Html2PdfInstance = {
   set: (options: Record<string, unknown>) => {
@@ -108,7 +108,8 @@ export default function GradingDetailPage() {
         const s = scoreSummary(r);
         const rowNumber = 5 + idx;
         const row = sheet.getRow(rowNumber);
-        const resultLabel = !s.fullyGraded ? "Pending Review" : s.pass ? "Pass" : "Fail";
+        const resultLabel =
+          effectiveGradingStatus(r) !== "complete" ? "Pending Review" : s.pass ? "Pass" : "Fail";
 
         const values = [r.studentId, r.name, r.submittedAt || "—", `${s.total} / ${s.max}`, s.percentage / 100, resultLabel];
 
@@ -214,7 +215,7 @@ export default function GradingDetailPage() {
           <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;">
             <div style="font-size:10px;color:#64748b;font-weight:bold;">RESULT</div>
             <div style="font-size:18px;font-weight:800;margin-top:2px;color:${s.pass ? "#059669" : "#dc2626"};">${
-        s.fullyGraded ? (s.pass ? "PASS" : "FAIL") : "PENDING"
+        effectiveGradingStatus(req) === "complete" ? (s.pass ? "PASS" : "FAIL") : "PENDING"
       }</div>
           </div>
         </div>
@@ -351,8 +352,10 @@ export default function GradingDetailPage() {
                       <td className="px-5 py-3.5">
                         {!req.isSubmitted ? (
                           <span className="text-slate-300">—</span>
-                        ) : !s.fullyGraded ? (
-                          <Badge variant="warning">Pending Review</Badge>
+                        ) : effectiveGradingStatus(req) !== "complete" ? (
+                          <Badge variant={gradingStatusMeta(effectiveGradingStatus(req)).variant}>
+                            {gradingStatusMeta(effectiveGradingStatus(req)).label}
+                          </Badge>
                         ) : (
                           <Badge variant={s.pass ? "success" : "danger"}>{s.pass ? "Pass" : "Fail"}</Badge>
                         )}

@@ -92,17 +92,23 @@ export function DropdownItem({
   children,
   onClick,
   danger,
+  selected,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   danger?: boolean;
+  selected?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 px-4 py-2 text-sm text-left hover:bg-slate-50 transition-colors",
-        danger ? "text-red-600" : "text-navy-900"
+        "flex w-full items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors",
+        selected
+          ? "bg-sky-400/10 text-sky-600 font-semibold"
+          : danger
+          ? "text-red-600 hover:bg-slate-50"
+          : "text-navy-900 hover:bg-slate-50"
       )}
     >
       {children}
