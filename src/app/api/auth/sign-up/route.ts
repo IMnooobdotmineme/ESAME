@@ -45,9 +45,16 @@ export async function POST(req: Request) {
       .from(teachers)
       .where(eq(teachers.email, emailLower));
 
-    if (existingOrg || existingTeacher) {
+    if (existingOrg) {
       return NextResponse.json(
-        { error: "An account with this email already exists." },
+        { error: "An organization with this email address already exists. Please log in instead." },
+        { status: 409 }
+      );
+    }
+
+    if (existingTeacher) {
+      return NextResponse.json(
+        { error: "This email address is already registered as a teacher account." },
         { status: 409 }
       );
     }

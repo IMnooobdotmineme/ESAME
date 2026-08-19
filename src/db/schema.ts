@@ -20,6 +20,7 @@ export const teacherStatusEnum = pgEnum("teacher_status", [
   "invited",
   "active",
   "suspended",
+  "deleted",
 ]);
 
 export const userTypeEnum = pgEnum("user_type", ["org", "teacher"]);
@@ -108,6 +109,9 @@ export const teachers = pgTable("teachers", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash"), // null until invite is accepted
   status: teacherStatusEnum("status").notNull().default("invited"),
+  suspendedBy: text("suspended_by"), // "admin" | "org" | null
+  deletedBy: text("deleted_by"), // "admin" | "org" | null
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   assignments: jsonb("assignments").$type<Array<{ department: string; subject: string }>>().notNull().default([]),
   inviteToken: text("invite_token").unique(),
   inviteTokenExpiresAt: timestamp("invite_token_expires_at", { withTimezone: true }),
@@ -311,17 +315,15 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Activity Logs (audit trail for exams, submissions, grading) ----------
+// ---------- Activity Logs (audit trail for exams, submissions, grading, admin actions) ----------
 export const activityLogs = pgTable("activity_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
-  orgId: uuid("org_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull(), // can be org or teacher
-  userType: userTypeEnum("user_type").notNull(),
-  action: text("action").notNull(), // e.g., "exam_created", "student_submitted", "exam_graded"
-  entityType: text("entity_type").notNull(), // "exam", "question", "submission"
-  entityId: uuid("entity_id"), // examId, submissionId, etc.
+  orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+  userId: uuid("user_id"), // can be org, teacher, or admin
+  userType: text("user_type").notNull().default("system"), // "admin" | "org" | "teacher" | "system"
+  action: text("action").notNull(), // e.g., "exam_created", "student_submitted", "org_suspended", etc.
+  entityType: text("entity_type").notNull(), // "org", "teacher", "exam", "question", "submission", "system"
+  entityId: uuid("entity_id"), // examId, submissionId, teacherId, orgId, etc.
   details: jsonb("details"), // additional context
   ipAddress: text("ip_address"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -342,4 +344,20 @@ export const examAnalytics = pgTable("exam_analytics", {
   scoreDistribution: jsonb("score_distribution").$type<Record<string, number>>().notNull().default({}), // e.g., {"0-20": 5, "21-40": 10}
   questionStats: jsonb("question_stats").$type<Array<{ questionId: string; correctCount: number; totalAttempts: number }>>().notNull().default([]),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------- Broadcasts (admin system announcements) ----------
+export const broadcasts = pgTable("broadcasts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  subject: text("subject").notNull(),
+  message: text("message").notNull(),
+  audience: text("audience").notNull(), // "all_users" | "all_organizations" | "all_teachers" | "specific_organization" | "specific_teacher"
+  targetOrgId: uuid("target_org_id").references(() => organizations.id, { onDelete: "set null" }),
+  targetTeacherId: uuid("target_teacher_id").references(() => teachers.id, { onDelete: "set null" }),
+  audienceLabel: text("audience_label").notNull(),
+  recipientsCount: integer("recipients_count").notNull().default(0),
+  priority: text("priority").notNull().default("normal"), // "normal" | "urgent"
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

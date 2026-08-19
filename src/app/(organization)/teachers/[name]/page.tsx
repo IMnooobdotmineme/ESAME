@@ -131,7 +131,13 @@ export default function TeacherProfilePage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
             <div className="flex items-center gap-4">
               <div className="h-14 w-14 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-lg font-semibold">
-                {displayName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                {displayName
+                  .split(" ")
+                  .map((n) => n[0])
+                  .filter(Boolean)
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-navy-900">{displayName}</h2>

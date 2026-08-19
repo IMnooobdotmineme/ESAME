@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { notifications } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { requireOrgSession } from "@/lib/session";
 
 type NotificationRow = typeof notifications.$inferSelect;
@@ -29,6 +29,7 @@ function formatRelativeTime(date: Date) {
 }
 
 function categoryFromType(type: string) {
+  if (type.includes("broadcast") || type.includes("announcement")) return "Platform Announcement";
   if (type.includes("teacher")) return "Teacher Management";
   if (type.includes("exam")) return "Exam Management";
   if (type.includes("submission") || type.includes("grade")) return "Student Results";
@@ -51,7 +52,17 @@ export async function GET() {
   const rows = (await db
     .select()
     .from(notifications)
-    .where(eq(notifications.orgId, session.userId))
+    .where(
+      and(
+        eq(notifications.orgId, session.userId),
+        or(
+          isNull(notifications.teacherId),
+          eq(notifications.type, "teacher_suspended_by_admin"),
+          eq(notifications.type, "teacher_activated_by_admin"),
+          eq(notifications.type, "teacher_deleted_by_admin")
+        )
+      )
+    )
     .orderBy(desc(notifications.createdAt))) as NotificationRow[];
 
   const payload = rows.map((notification) => ({
@@ -60,7 +71,7 @@ export async function GET() {
     description: notification.message,
     detail: notification.message,
     category: categoryFromType(notification.type),
-    actor: "System",
+    actor: notification.type.includes("admin") || notification.type.includes("broadcast") ? "System Admin" : "System",
     timestamp: formatTime(notification.createdAt),
     time: formatRelativeTime(notification.createdAt),
     type: notification.type,

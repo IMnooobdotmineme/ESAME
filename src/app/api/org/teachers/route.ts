@@ -4,7 +4,12 @@ import { db } from "@/db";
 import { departments, notifications, organizations, subjects, teachers } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireOrgSession } from "../../../../lib/session";
-import { sendInviteEmail, sendTeacherAssignmentEmail, sendTeacherStatusEmail } from "../../../../lib/email";
+import {
+  sendInviteEmail,
+  sendTeacherAssignmentEmail,
+  sendTeacherStatusEmail,
+  sendOrgTeacherDeletedEmail,
+} from "../../../../lib/email";
 import {
   formatJoinedDate,
   normalizeAssignments,
@@ -28,7 +33,10 @@ type TeacherListRow = {
   id: string;
   name: string | null;
   email: string;
-  status: "invited" | "active" | "suspended";
+  status: "invited" | "active" | "suspended" | "deleted";
+  suspendedBy: string | null;
+  deletedBy: string | null;
+  deletedAt: Date | null;
   assignments: unknown;
   createdAt: Date;
 };
@@ -39,6 +47,9 @@ function normalizeTeacher(row: typeof teachers.$inferSelect) {
     name: row.name ?? "",
     email: row.email,
     status: normalizeTeacherStatus(row.status),
+    suspendedBy: (row.suspendedBy as "admin" | "org" | null) ?? null,
+    deletedBy: (row.deletedBy as "admin" | "org" | null) ?? null,
+    deletedAt: row.deletedAt ? new Date(row.deletedAt).toISOString() : null,
     assignments: normalizeAssignments(row.assignments),
     joined: formatJoinedDate(row.createdAt),
     createdAt: row.createdAt,
@@ -139,6 +150,9 @@ export async function GET(req: Request) {
         name: teachers.name,
         email: teachers.email,
         status: teachers.status,
+        suspendedBy: teachers.suspendedBy,
+        deletedBy: teachers.deletedBy,
+        deletedAt: teachers.deletedAt,
         assignments: teachers.assignments,
         createdAt: teachers.createdAt,
       })
@@ -165,6 +179,9 @@ export async function GET(req: Request) {
       name: teachers.name,
       email: teachers.email,
       status: teachers.status,
+      suspendedBy: teachers.suspendedBy,
+      deletedBy: teachers.deletedBy,
+      deletedAt: teachers.deletedAt,
       assignments: teachers.assignments,
       createdAt: teachers.createdAt,
     })
@@ -198,25 +215,87 @@ export async function POST(req: Request) {
     }
 
     const [existingOrg] = await db
-      .select()
+      .select({ id: organizations.id, name: organizations.name })
       .from(organizations)
       .where(eq(organizations.email, email));
+
+    if (existingOrg) {
+      return NextResponse.json(
+        { error: "This email is registered as an organization account and cannot be invited as a teacher." },
+        { status: 409 }
+      );
+    }
+
     const [existingTeacher] = await db
       .select()
       .from(teachers)
       .where(eq(teachers.email, email));
 
-    if (existingOrg || existingTeacher) {
-      return NextResponse.json(
-        { error: "An account with this email already exists." },
-        { status: 409 }
-      );
-    }
-
     const [org] = await db
       .select()
       .from(organizations)
       .where(eq(organizations.id, session.userId));
+
+    if (existingTeacher) {
+      if (existingTeacher.orgId !== session.userId) {
+        return NextResponse.json(
+          {
+            error:
+              "This email is already associated with another organization. Each teacher account can belong to only one organization.",
+          },
+          { status: 409 }
+        );
+      }
+      if (existingTeacher.status !== "deleted") {
+        return NextResponse.json(
+          { error: "A teacher with this email already exists in your organization." },
+          { status: 409 }
+        );
+      }
+
+      // If previously deleted within this organization, allow re-inviting
+      const inviteToken = crypto.randomBytes(32).toString("hex");
+      const [updated] = await db
+        .update(teachers)
+        .set({
+          name: name || existingTeacher.name,
+          status: "invited",
+          suspendedBy: null,
+          deletedBy: null,
+          deletedAt: null,
+          assignments: normalizedAssignments,
+          inviteToken,
+          inviteTokenExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
+          updatedAt: new Date(),
+        })
+        .where(eq(teachers.id, existingTeacher.id))
+        .returning();
+
+      const link = `${process.env.APP_URL || "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
+      try {
+        await sendInviteEmail(email, link, org?.name || "your organization", normalizedAssignments);
+      } catch (mailError) {
+        console.error("send invite email error", mailError);
+        return NextResponse.json(
+          { error: "Invitation email could not be sent. Please check email settings and try again." },
+          { status: 502 }
+        );
+      }
+
+      await createOrgNotification({
+        orgId: session.userId,
+        title: "Teacher Invitation Sent",
+        message: `${name || email} was invited to join ${org?.name || "your organization"} as a teacher.`,
+        type: "teacher_invite_sent",
+        relatedEntityId: updated.id,
+        relatedEntityType: "teacher",
+      });
+
+      return NextResponse.json({
+        ok: true,
+        teacher: normalizeTeacher(updated),
+      });
+    }
 
     const inviteToken = crypto.randomBytes(32).toString("hex");
 
@@ -287,6 +366,7 @@ export async function PATCH(req: Request) {
         id: teachers.id,
         email: teachers.email,
         status: teachers.status,
+        suspendedBy: teachers.suspendedBy,
         assignments: teachers.assignments,
         name: teachers.name,
         orgId: teachers.orgId,
@@ -304,8 +384,24 @@ export async function PATCH(req: Request) {
     if (org) orgName = org.name;
 
     if (typeof body.status === "string") {
-      const nextStatus = body.status === "Active" ? "active" : body.status === "Suspended" ? "suspended" : "invited";
-      updates.status = nextStatus;
+      if (body.status === "Active") {
+        if (teacher.status === "suspended" && teacher.suspendedBy === "admin") {
+          return NextResponse.json(
+            {
+              error:
+                "This teacher account was suspended by the platform administrator and can only be reactivated by an administrator.",
+            },
+            { status: 403 }
+          );
+        }
+        updates.status = "active";
+        updates.suspendedBy = null;
+      } else if (body.status === "Suspended") {
+        updates.status = "suspended";
+        updates.suspendedBy = "org";
+      } else {
+        updates.status = "invited";
+      }
     }
 
     if (Array.isArray(body.assignments)) {
@@ -386,7 +482,7 @@ export async function DELETE(req: Request) {
     }
 
     const [teacher] = await db
-      .select({ id: teachers.id, orgId: teachers.orgId })
+      .select({ id: teachers.id, orgId: teachers.orgId, email: teachers.email, name: teachers.name })
       .from(teachers)
       .where(eq(teachers.id, teacherId));
 
@@ -394,11 +490,29 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Teacher not found." }, { status: 404 });
     }
 
-    await db.delete(teachers).where(eq(teachers.id, teacherId));
+    let orgName = "your organization";
+    const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, session.userId));
+    if (org) orgName = org.name;
+
+    // Soft-delete teacher account so questions, exams and student results remain preserved!
+    await db
+      .update(teachers)
+      .set({
+        status: "deleted",
+        deletedBy: "org",
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(teachers.id, teacherId));
+
+    sendOrgTeacherDeletedEmail(teacher.email, orgName).catch((error) => {
+      console.error("send teacher deleted email error", error);
+    });
+
     await createOrgNotification({
       orgId: session.userId,
       title: "Teacher Removed",
-      message: "A teacher account was removed from your organization.",
+      message: `${teacher.name || teacher.email} was removed from your active teacher roster.`,
       type: "teacher_removed",
       relatedEntityId: teacherId,
       relatedEntityType: "teacher",

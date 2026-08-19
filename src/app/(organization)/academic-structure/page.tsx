@@ -584,10 +584,16 @@ export default function AcademicStructurePage() {
                     >
                       <div className="min-w-0 flex items-center gap-3">
                         <div className="h-8 w-8 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
-                          {teacher.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                          {(teacher.name || teacher.email || "T")
+                            .split(" ")
+                            .map((n) => n[0])
+                            .filter(Boolean)
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-navy-900 truncate">{teacher.name}</p>
+                          <p className="text-sm font-medium text-navy-900 truncate">{teacher.name || teacher.email}</p>
                           <p className="text-xs text-slate-400 truncate">{teacher.email}</p>
                         </div>
                       </div>

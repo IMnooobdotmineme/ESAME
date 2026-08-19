@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     if (org) {
       if (org.status === "suspended") {
         return NextResponse.json(
-          { error: "This account has been suspended." },
+          { error: "This organization account has been suspended by the platform administrator." },
           { status: 403 }
         );
       }
@@ -73,6 +73,12 @@ export async function POST(req: Request) {
       .where(eq(teachers.email, emailLower));
 
     if (teacher) {
+      if (teacher.status === "deleted") {
+        return NextResponse.json(
+          { error: "This teacher account has been deleted." },
+          { status: 403 }
+        );
+      }
       if (teacher.status === "invited" || !teacher.passwordHash) {
         return NextResponse.json(
           {
@@ -84,7 +90,17 @@ export async function POST(req: Request) {
       }
       if (teacher.status === "suspended") {
         return NextResponse.json(
-          { error: "This account has been suspended." },
+          { error: "This teacher account has been suspended." },
+          { status: 403 }
+        );
+      }
+      const [parentOrg] = await db
+        .select({ status: organizations.status })
+        .from(organizations)
+        .where(eq(organizations.id, teacher.orgId));
+      if (parentOrg && parentOrg.status === "suspended") {
+        return NextResponse.json(
+          { error: "Your organization has been suspended by the platform administrator." },
           { status: 403 }
         );
       }

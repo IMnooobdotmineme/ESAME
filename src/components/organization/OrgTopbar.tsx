@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Bell } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import Image from "next/image";
 
 interface OrgTopbarProps {
@@ -10,10 +10,44 @@ interface OrgTopbarProps {
   description?: string;
 }
 
+const ORG_CACHE_KEY = "org-chrome-cache";
+
+type CachedOrg = { name: string; avatarUrl: string | null };
+
+function readCache(): CachedOrg | null {
+  try {
+    const raw = window.localStorage.getItem(ORG_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as CachedOrg) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(data: CachedOrg) {
+  try {
+    window.localStorage.setItem(ORG_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // storage full or unavailable — ignore, cache is a nice-to-have
+  }
+}
+
 export function OrgTopbar({ title, description }: OrgTopbarProps) {
+  // Server-safe defaults — must match what's rendered on the server exactly.
   const [orgName, setOrgName] = useState("Org Admin");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Client-only, pre-paint: pull from cache so there's effectively no
+  // visible flash, without ever mismatching the server-rendered HTML.
+  useLayoutEffect(() => {
+    const cached = readCache();
+    if (cached) {
+      setOrgName(cached.name);
+      setAvatarUrl(cached.avatarUrl);
+      setHasLoadedOnce(true);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadOrg() {
@@ -21,11 +55,16 @@ export function OrgTopbar({ title, description }: OrgTopbarProps) {
         const res = await fetch("/api/auth/me", { cache: "no-store" });
         const payload = await res.json();
         if (res.ok && payload?.user?.name) {
-          setOrgName(payload.user.name);
-          setAvatarUrl(payload.user.avatarUrl ?? null);
+          const nextName = payload.user.name as string;
+          const nextAvatar = (payload.user.avatarUrl ?? null) as string | null;
+          setOrgName(nextName);
+          setAvatarUrl(nextAvatar);
+          writeCache({ name: nextName, avatarUrl: nextAvatar });
         }
       } catch {
-        // no-op: keep default label if the session is unavailable
+        // no-op: keep cached/default label if the session is unavailable
+      } finally {
+        setHasLoadedOnce(true);
       }
     }
 
@@ -78,7 +117,9 @@ export function OrgTopbar({ title, description }: OrgTopbarProps) {
           className="flex items-center gap-2 pl-2 border-l border-slate-200 rounded-full hover:bg-slate-50 transition-colors pr-2 -mr-2 py-1"
         >
           <div className="relative h-9 w-9 rounded-full bg-navy-900 text-white flex items-center justify-center text-sm font-medium shrink-0 overflow-hidden">
-            {avatarUrl ? (
+            {!hasLoadedOnce ? (
+              <div className="h-full w-full animate-pulse bg-white/20" />
+            ) : avatarUrl ? (
               <Image src={avatarUrl} alt={orgName} fill className="object-cover" />
             ) : (
               orgName.slice(0, 2).toUpperCase() || "OA"

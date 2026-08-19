@@ -28,7 +28,7 @@ export function ConfirmDialog({
   const Icon = isLogout ? LogOut : AlertTriangle;
 
   return (
-    <Dialog open={open} onClose={onClose} className="max-w-sm">
+    <Dialog open={open} onClose={onClose} className="max-w-md">
       <div className="px-6 pt-8 pb-6 text-center">
         <div
           className={
@@ -41,16 +41,16 @@ export function ConfirmDialog({
         </div>
 
         <h2 className="mt-4 text-lg font-semibold text-navy-900">{title}</h2>
-        <p className="mt-1.5 text-sm text-slate-500 leading-relaxed">{description}</p>
+        <p className="mt-1.5 text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">{description}</p>
 
-        <div className="mt-6 flex items-center gap-3">
-          <Button variant="outline" onClick={onClose} className="flex-1">
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <Button variant="outline" onClick={onClose} className="flex-1 max-w-[140px]">
             Cancel
           </Button>
           <Button
             variant={isLogout ? "primary" : "danger"}
             onClick={onConfirm}
-            className="flex-1"
+            className="flex-1 max-w-[180px] whitespace-nowrap px-4"
           >
             {confirmLabel}
           </Button>

@@ -31,13 +31,35 @@ import {
   ChevronDown,
 } from "lucide-react";
 
-const STATUS_VARIANT: Record<Status, "success" | "warning" | "danger" | "neutral"> = {
-  Active: "success",
-  Pending: "warning",
-  Suspended: "danger",
-};
+const FILTERS: ("All" | Status)[] = ["All", "Active", "Pending", "Suspended", "Deleted"];
 
-const FILTERS: ("All" | Status)[] = ["All", "Active", "Pending", "Suspended"];
+function renderTeacherStatusBadge(teacher: Teacher) {
+  if (teacher.status === "Active") {
+    return <Badge variant="success">Active</Badge>;
+  }
+  if (teacher.status === "Pending") {
+    return <Badge variant="warning">Pending</Badge>;
+  }
+  if (teacher.status === "Suspended") {
+    if (teacher.suspendedBy === "admin") {
+      return <Badge variant="danger">Suspended (Admin)</Badge>;
+    }
+    if (teacher.suspendedBy === "org") {
+      return <Badge variant="warning">Suspended (Org)</Badge>;
+    }
+    return <Badge variant="danger">Suspended</Badge>;
+  }
+  if (teacher.status === "Deleted") {
+    if (teacher.deletedBy === "admin") {
+      return <Badge variant="neutral">Deleted (Admin)</Badge>;
+    }
+    if (teacher.deletedBy === "org") {
+      return <Badge variant="neutral">Deleted (Org)</Badge>;
+    }
+    return <Badge variant="neutral">Deleted</Badge>;
+  }
+  return <Badge variant="neutral">Pending</Badge>;
+}
 
 /**
  * Small "+N" chevron trigger + hover popover shared by the department and
@@ -100,21 +122,21 @@ export default function TeacherManagementPage() {
   const [assignmentsTarget, setAssignmentsTarget] = useState<Teacher | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadTeachers() {
-      try {
-        const response = await fetch("/api/org/teachers", { cache: "no-store" });
-        const payload = await response.json();
-        if (response.ok && Array.isArray(payload.teachers)) {
-          setTeachers(payload.teachers as Teacher[]);
-        }
-      } catch (error) {
-        console.error("Failed to load teachers", error);
-      } finally {
-        setLoading(false);
+  async function loadTeachers() {
+    try {
+      const response = await fetch("/api/org/teachers", { cache: "no-store" });
+      const payload = await response.json();
+      if (response.ok && Array.isArray(payload.teachers)) {
+        setTeachers(payload.teachers as Teacher[]);
       }
+    } catch (error) {
+      console.error("Failed to load teachers", error);
+    } finally {
+      setLoading(false);
     }
+  }
 
+  useEffect(() => {
     loadTeachers();
   }, []);
 
@@ -127,7 +149,14 @@ export default function TeacherManagementPage() {
     const matchesSearch =
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.email.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === "All" || t.status === filter;
+
+    let matchesFilter = false;
+    if (filter === "All") {
+      matchesFilter = t.status !== "Deleted";
+    } else {
+      matchesFilter = t.status === filter;
+    }
+
     return matchesSearch && matchesFilter;
   });
 
@@ -144,11 +173,23 @@ export default function TeacherManagementPage() {
         return;
       }
       if (!response.ok) {
-        throw new Error(payload?.error || "Failed to update teacher status");
+        alert(payload?.error || "Failed to update teacher status");
+        return;
       }
-      setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, status: payload.teacher.status } : t)));
+      setTeachers((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                status: payload.teacher.status,
+                suspendedBy: payload.teacher.status === "Suspended" ? "org" : null,
+              }
+            : t
+        )
+      );
     } catch (error) {
       console.error(error);
+      alert("Network error updating teacher status.");
     }
   }
 
@@ -189,11 +230,12 @@ export default function TeacherManagementPage() {
 
   async function handleFinalConfirm() {
     if (!removeTarget) return;
+    const targetId = removeTarget.id;
     try {
       const response = await fetch("/api/org/teachers", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherId: removeTarget.id }),
+        body: JSON.stringify({ teacherId: targetId }),
       });
       if (response.status === 401) {
         router.push("/login?error=Please log in as an organization first.");
@@ -203,7 +245,18 @@ export default function TeacherManagementPage() {
         const payload = await response.json();
         throw new Error(payload?.error || "Failed to remove teacher");
       }
-      setTeachers((prev) => prev.filter((t) => t.id !== removeTarget.id));
+      setTeachers((prev) =>
+        prev.map((t) =>
+          t.id === targetId
+            ? {
+                ...t,
+                status: "Deleted",
+                deletedBy: "org",
+                deletedAt: new Date().toISOString(),
+              }
+            : t
+        )
+      );
     } catch (error) {
       console.error(error);
     } finally {
@@ -218,76 +271,88 @@ export default function TeacherManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: data.name, email: data.email, assignments: data.assignments }),
       });
-      const payload = await response.json();
+
       if (response.status === 401) {
         router.push("/login?error=Please log in as an organization first.");
         return;
       }
+
+      const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.error || "Invitation failed");
+        throw new Error(payload?.error || "Failed to invite teacher");
       }
+
       setTeachers((prev) => [
         {
           id: payload.teacher.id,
-          name: data.name,
-          email: data.email,
-          assignments: payload.teacher.assignments ?? [],
-          status: "Pending",
-          joined: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          name: payload.teacher.name,
+          email: payload.teacher.email,
+          assignments: payload.teacher.assignments,
+          status: payload.teacher.status,
+          joined: payload.teacher.joined,
         },
         ...prev,
       ]);
       setInviteOpen(false);
-      setSentDialog({ open: true, name: data.name, email: data.email });
+      setSentDialog({
+        open: true,
+        name: data.name,
+        email: data.email,
+      });
     } catch (error) {
       console.error(error);
+      throw error;
     }
   }
 
-  const counts = {
-    All: teachers.length,
-    Active: teachers.filter((t) => t.status === "Active").length,
-    Pending: teachers.filter((t) => t.status === "Pending").length,
-    Suspended: teachers.filter((t) => t.status === "Suspended").length,
-  };
-
   return (
     <>
-      <OrgTopbar title="Teacher Management" description="Invite, manage, and monitor teacher accounts" />
+      <OrgTopbar
+        title="Teacher Management"
+        description="Invite, organize, and manage teacher permissions and subject assignments."
+      />
 
-      <main className="p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 w-full sm:w-80">
-            <Search size={16} className="text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or email..."
-              className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
-            />
+      <main className="p-6 space-y-6">
+        {/* Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          {/* Status filters */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`h-8 px-4 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
+                  filter === f
+                    ? "bg-navy-900 border-navy-900 text-white"
+                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
           </div>
-          <Button onClick={() => setInviteOpen(true)}>
-            <UserPlus size={16} />
-            Invite Teacher
-          </Button>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={
-                filter === f
-                  ? "rounded-full px-4 py-1.5 text-sm font-medium bg-navy-900 text-white"
-                  : "rounded-full px-4 py-1.5 text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-              }
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 h-10 w-full sm:w-72">
+              <Search size={16} className="text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search teachers..."
+                className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
+              />
+            </div>
+            <Button
+              onClick={() => setInviteOpen(true)}
+              className="gap-2 shrink-0 bg-navy-900 hover:bg-navy-800 text-white"
             >
-              {f} <span className="opacity-60">({counts[f]})</span>
-            </button>
-          ))}
+              <UserPlus size={16} />
+              Invite Teacher
+            </Button>
+          </div>
         </div>
 
+        {/* Table */}
         <Card className="overflow-visible">
           <table className="w-full text-sm">
             <thead>
@@ -315,7 +380,13 @@ export default function TeacherManagementPage() {
                       className="flex items-center gap-3 group"
                     >
                       <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
-                        {profileName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        {profileName
+                          .split(" ")
+                          .map((n) => n[0])
+                          .filter(Boolean)
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
                       </div>
                       <div>
                         <p className="font-medium text-navy-900 group-hover:underline">{profileName}</p>
@@ -346,49 +417,75 @@ export default function TeacherManagementPage() {
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <Badge variant={STATUS_VARIANT[teacher.status]}>{teacher.status}</Badge>
+                    {renderTeacherStatusBadge(teacher)}
                   </td>
                   <td className="px-5 py-3.5 text-slate-500">{teacher.joined}</td>
                   <td className="px-5 py-3.5 text-right">
-                    <DropdownMenu
-                      trigger={
-                        <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 ml-auto">
-                          <MoreVertical size={16} />
-                        </button>
-                      }
-                    >
-                      {teacher.status === "Pending" ? (
-                        <DropdownItem danger onClick={() => startRemove(teacher)}>
-                          <Trash2 size={15} /> Remove
+                    {teacher.status === "Deleted" ? (
+                      <DropdownMenu
+                        trigger={
+                          <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 ml-auto">
+                            <MoreVertical size={16} />
+                          </button>
+                        }
+                      >
+                        <DropdownItem
+                          onClick={() =>
+                            router.push(`/teachers/${encodeURIComponent(teacher.id)}`)
+                          }
+                        >
+                          <Eye size={15} /> View Profile
                         </DropdownItem>
-                      ) : (
-                        <>
-                          <DropdownItem
-                            onClick={() =>
-                              router.push(`/teachers/${encodeURIComponent(teacher.id)}`)
-                            }
-                          >
-                            <Eye size={15} /> View Profile
-                          </DropdownItem>
-                          <DropdownItem onClick={() => setAssignmentsTarget(teacher)}>
-                            <Layers size={15} /> Manage Departments &amp; Subjects
-                          </DropdownItem>
-                          {teacher.status !== "Active" && (
-                            <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
-                              <CheckCircle2 size={15} /> Activate
-                            </DropdownItem>
-                          )}
-                          {teacher.status === "Active" && (
-                            <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
-                              <Ban size={15} /> Suspend
-                            </DropdownItem>
-                          )}
+                      </DropdownMenu>
+                    ) : (
+                      <DropdownMenu
+                        trigger={
+                          <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 ml-auto">
+                            <MoreVertical size={16} />
+                          </button>
+                        }
+                      >
+                        {teacher.status === "Pending" ? (
                           <DropdownItem danger onClick={() => startRemove(teacher)}>
                             <Trash2 size={15} /> Remove
                           </DropdownItem>
-                        </>
-                      )}
-                    </DropdownMenu>
+                        ) : (
+                          <>
+                            <DropdownItem
+                              onClick={() =>
+                                router.push(`/teachers/${encodeURIComponent(teacher.id)}`)
+                              }
+                            >
+                              <Eye size={15} /> View Profile
+                            </DropdownItem>
+                            <DropdownItem onClick={() => setAssignmentsTarget(teacher)}>
+                              <Layers size={15} /> Manage Departments &amp; Subjects
+                            </DropdownItem>
+                            {teacher.status === "Suspended" && teacher.suspendedBy === "admin" ? (
+                              <DropdownItem
+                                disabled
+                                className="opacity-50 cursor-not-allowed text-xs text-slate-400"
+                                title="Suspended by Admin. Only Admin can reactivate."
+                              >
+                                <Ban size={15} /> Suspended by Admin
+                              </DropdownItem>
+                            ) : teacher.status !== "Active" ? (
+                              <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
+                                <CheckCircle2 size={15} /> Activate
+                              </DropdownItem>
+                            ) : null}
+                            {teacher.status === "Active" && (
+                              <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
+                                <Ban size={15} /> Suspend
+                              </DropdownItem>
+                            )}
+                            <DropdownItem danger onClick={() => startRemove(teacher)}>
+                              <Trash2 size={15} /> Remove
+                            </DropdownItem>
+                          </>
+                        )}
+                      </DropdownMenu>
+                    )}
                   </td>
                       </>
                     );
@@ -435,7 +532,7 @@ export default function TeacherManagementPage() {
         onClose={closeRemove}
         onConfirm={handleFirstConfirm}
         title="Remove this teacher?"
-        description={`This will remove ${removeTarget?.name} (${removeTarget?.email}) from the platform. This action cannot be undone.`}
+        description={`This will remove ${removeTarget?.name || removeTarget?.email} (${removeTarget?.email}) from your active roster. Past examination questions and results will remain preserved.`}
         confirmLabel="Continue"
       />
 
@@ -445,8 +542,8 @@ export default function TeacherManagementPage() {
         onClose={closeRemove}
         onConfirm={handleFinalConfirm}
         title="Are you absolutely sure?"
-        description={`This is your final confirmation. ${removeTarget?.name}'s account and all associated records will be permanently removed right now.`}
-        confirmLabel="Yes, Remove Permanently"
+        description={`This is your final confirmation. ${removeTarget?.name || removeTarget?.email}'s account will be removed from your active teacher list.`}
+        confirmLabel="Yes, Remove"
       />
     </>
   );

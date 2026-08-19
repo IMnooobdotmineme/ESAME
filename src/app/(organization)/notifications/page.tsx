@@ -18,6 +18,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowRight,
+  Megaphone,
 } from "lucide-react";
 
 interface NotificationItem {
@@ -39,6 +40,7 @@ interface NotificationItem {
 const FILTERS = ["All", "Unread", "Archived"] as const;
 
 function getNotificationIcon(type: string): { icon: React.ElementType; iconColor: string } {
+  if (type.includes("broadcast") || type.includes("announcement")) return { icon: Megaphone, iconColor: "text-sky-600 bg-sky-50" };
   if (type.includes("teacher_invite")) return { icon: UserPlus, iconColor: "text-sky-600 bg-sky-50" };
   if (type.includes("security") || type.includes("violation")) return { icon: AlertCircle, iconColor: "text-red-600 bg-red-50" };
   if (type.includes("scheduled") || type.includes("created")) return { icon: CalendarPlus, iconColor: "text-emerald-600 bg-emerald-50" };

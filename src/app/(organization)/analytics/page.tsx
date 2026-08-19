@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Card } from "@/components/ui/card";
 import { ExamVolumeChart } from "@/components/organization/ExamVolumeChart";
@@ -122,9 +123,9 @@ export default function AnalyticsPage() {
             <h3 className="text-sm font-semibold text-navy-900 mb-4">Top Departments</h3>
             <div className="space-y-4">
               {data.topDepartments.map((d) => (
-                <div key={d.code}>
+                <div key={d.name || d.code}>
                   <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="font-medium text-navy-900">{d.code}</span>
+                    <span className="font-medium text-navy-900">{d.name || d.code}</span>
                     <span className="text-slate-500">{d.percent}%</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
@@ -136,9 +137,12 @@ export default function AnalyticsPage() {
                 <p className="text-sm text-slate-400">{loading ? "Loading departments..." : "No department activity yet."}</p>
               )}
             </div>
-            <button className="mt-4 flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline">
+            <Link
+              href="/academic-structure"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:underline"
+            >
               View All Departments <ArrowRight size={12} />
-            </button>
+            </Link>
           </Card>
         </div>
 

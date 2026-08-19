@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -25,11 +25,31 @@ const NAV_ITEMS = [
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
+const ORG_CACHE_KEY = "org-chrome-cache";
+
+function readCachedName(): string | null {
+  try {
+    const raw = window.localStorage.getItem(ORG_CACHE_KEY);
+    if (!raw) return null;
+    return (JSON.parse(raw) as { name?: string })?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function OrgSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [logoutOpen, setLogoutOpen] = useState(false);
+  // Must match the server-rendered default exactly — no localStorage read here.
   const [orgName, setOrgName] = useState("Organization");
+
+  // Runs on the client only, before paint — updates from cache without a
+  // visible flash and without touching what the server rendered.
+  useLayoutEffect(() => {
+    const cachedName = readCachedName();
+    if (cachedName) setOrgName(cachedName);
+  }, []);
 
   useEffect(() => {
     async function loadOrg() {
@@ -55,23 +75,25 @@ export function OrgSidebar() {
     } catch {
       // no-op: still redirect to login even if the request fails
     }
+    try {
+      window.localStorage.removeItem(ORG_CACHE_KEY);
+    } catch {
+      // ignore
+    }
     router.push("/login");
   }
 
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 h-screen sticky top-0 bg-navy-900 text-white">
-      {/* Logo strip - white background so the logo's own colors show correctly */}
       <div className="flex items-center px-6 h-16 bg-white border-b border-slate-100">
         <EsameLogo height={26} />
       </div>
 
-      {/* Org context badge */}
       <div className="px-6 pt-5 pb-2">
         <p className="text-xs uppercase tracking-wide text-white/40">Organization</p>
         <p className="text-sm font-medium truncate">{orgName}</p>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
           const active = pathname === href || pathname?.startsWith(href + "/");
@@ -93,7 +115,6 @@ export function OrgSidebar() {
         })}
       </nav>
 
-      {/* Footer / logout */}
       <div className="px-3 py-4 border-t border-white/10">
         <button
           onClick={() => setLogoutOpen(true)}

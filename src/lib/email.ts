@@ -226,3 +226,144 @@ export async function sendTeacherAssignmentEmail(
 
   await sendMail(to, `Your assignments were updated by ${orgName}`, html, text);
 }
+
+export async function sendOrgSuspendedEmail(to: string, orgName: string) {
+  const subject = `Your organization account has been suspended by Admin`;
+  const text = `Your organization account (${orgName}) has been suspended by the platform administrator. Access to your organization dashboard and associated teacher accounts has been temporarily frozen. Please contact system support for assistance.`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#b91c1c;">Organization Account Suspended</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your organization account <strong>${orgName}</strong> has been suspended by the platform administrator.
+    </p>
+    <div style="margin:0 0 20px 0; padding:14px 16px; background:#fef2f2; border:1px solid #fee2e2; border-radius:10px; color:#991b1b; font-size:13px; line-height:1.7;">
+      <strong>Account status: Frozen</strong><br />
+      During this suspension, organization administrators and all teachers belonging to <strong>${orgName}</strong> will not be able to log in or conduct examinations.
+    </div>
+    <p style="margin:0; font-size:13px; color:#9aa4b8;">If you believe this is an error, please contact platform support.</p>
+  `);
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendOrgActivatedEmail(to: string, orgName: string) {
+  const subject = `Your organization account has been activated by Admin`;
+  const text = `Your organization account (${orgName}) has been activated by the platform administrator. You and your teachers can now log in and manage assessments normally.`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#047857;">Organization Account Activated</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your organization account <strong>${orgName}</strong> has been activated by the platform administrator.
+    </p>
+    <div style="margin:0 0 20px 0; padding:14px 16px; background:#ecfdf5; border:1px solid #d1fae5; border-radius:10px; color:#065f46; font-size:13px; line-height:1.7;">
+      <strong>Account status: Active</strong><br />
+      Full access has been restored. You and your teachers can now sign in and access your portal normally.
+    </div>
+  `);
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendOrgDeletedEmail(to: string, orgName: string) {
+  const subject = `Your organization account has been permanently deleted by Admin`;
+  const text = `Your organization account (${orgName}) and all associated records have been permanently deleted by the platform administrator.`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#b91c1c;">Organization Account Deleted</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your organization account <strong>${orgName}</strong> and all associated teacher accounts and records have been permanently deleted from the platform.
+    </p>
+  `);
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendTeacherOrgSuspendedEmail(to: string, orgName: string) {
+  const subject = `Access Suspended: ${orgName} has been suspended by Admin`;
+  const text = `Your organization (${orgName}) has been suspended by the platform administrator. Your teacher account access has been temporarily frozen. Please contact your organization administrator for more details.`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#b91c1c;">Account Access Frozen</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your organization <strong>${orgName}</strong> has been suspended by the platform administrator.
+    </p>
+    <div style="margin:0 0 20px 0; padding:14px 16px; background:#fef2f2; border:1px solid #fee2e2; border-radius:10px; color:#991b1b; font-size:13px; line-height:1.7;">
+      As a result of this organization suspension, your teacher account is temporarily frozen and you will not be able to log in until the organization is reactivated.
+    </div>
+    <p style="margin:0; font-size:13px; color:#9aa4b8;">Please reach out to your organization administrator for further information.</p>
+  `);
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendTeacherOrgActivatedEmail(to: string, orgName: string) {
+  const subject = `Access Restored: ${orgName} has been activated by Admin`;
+  const text = `Your organization (${orgName}) has been activated by the platform administrator. Your teacher account access has been restored and you can now log in normally.`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#047857;">Account Access Restored</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your organization <strong>${orgName}</strong> has been reactivated by the platform administrator.
+    </p>
+    <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:#1F2A44;">
+      You can now sign in to your teacher portal and continue your assessments normally.
+    </p>
+  `);
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendTeacherOrgDeletedEmail(to: string, orgName: string) {
+  const subject = `Your teacher account has been deleted`;
+  const text = `Your teacher account has been deleted as your organization (${orgName}) was permanently removed by the platform administrator.`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#b91c1c;">Account Deleted</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your teacher account associated with <strong>${orgName}</strong> has been deleted because the organization was removed by the platform administrator.
+    </p>
+  `);
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendAdminTeacherStatusEmail(
+  to: string,
+  orgName: string,
+  status: "active" | "suspended"
+) {
+  const isActive = status === "active";
+  const subject = isActive
+    ? `Your teacher account has been activated by Admin`
+    : `Your teacher account has been suspended by Admin`;
+
+  const text = isActive
+    ? `Your teacher account at ${orgName} has been activated by the platform administrator. You can now log in normally.`
+    : `Your teacher account at ${orgName} has been suspended by the platform administrator. You are currently unable to log in until an administrator reactivates your account.`;
+
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:${isActive ? "#047857" : "#b91c1c"};">
+      ${isActive ? "Teacher Account Activated by Admin" : "Teacher Account Suspended by Admin"}
+    </h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      ${text}
+    </p>
+    <p style="margin:0; font-size:13px; color:#9aa4b8;">
+      Organization: <strong>${orgName}</strong>
+    </p>
+  `);
+
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendAdminTeacherDeletedEmail(to: string, orgName: string) {
+  const subject = `Your teacher account has been deleted by Admin`;
+  const text = `Your teacher account at ${orgName} has been deleted by the platform administrator.`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#b91c1c;">Account Deleted by Admin</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your teacher account at <strong>${orgName}</strong> has been deleted by the platform administrator.
+    </p>
+  `);
+  await sendMail(to, subject, html, text);
+}
+
+export async function sendOrgTeacherDeletedEmail(to: string, orgName: string) {
+  const subject = `Your teacher account has been deleted by ${orgName}`;
+  const text = `Your teacher account has been deleted by your organization (${orgName}).`;
+  const html = layout(`
+    <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#b91c1c;">Account Deleted</h2>
+    <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#4b5468;">
+      Your teacher account has been deleted by your organization <strong>${orgName}</strong>.
+    </p>
+  `);
+  await sendMail(to, subject, html, text);
+}

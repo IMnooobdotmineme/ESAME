@@ -92,17 +92,27 @@ export function DropdownItem({
   children,
   onClick,
   danger,
+  disabled,
+  className,
+  title,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   danger?: boolean;
+  disabled?: boolean;
+  className?: string;
+  title?: string;
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={title}
       className={cn(
         "flex w-full items-center gap-2 px-4 py-2 text-sm text-left hover:bg-slate-50 transition-colors",
-        danger ? "text-red-600" : "text-navy-900"
+        danger ? "text-red-600" : "text-navy-900",
+        disabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
+        className
       )}
     >
       {children}

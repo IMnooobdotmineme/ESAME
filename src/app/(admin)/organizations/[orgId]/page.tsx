@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -22,8 +22,8 @@ import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
-type UserStatus = "Active" | "Suspended";
-type StatusFilter = "All" | UserStatus;
+type UserStatus = "Active" | "Suspended" | "Pending" | "Deleted";
+type StatusFilter = "All" | "Active" | "Suspended" | "Deleted";
 
 interface TeacherRecord {
   id: string;
@@ -32,52 +32,46 @@ interface TeacherRecord {
   departments: string[];
   subjects: string[];
   status: UserStatus;
+  suspendedBy?: "admin" | "org" | null;
+  deletedBy?: "admin" | "org" | null;
+  deletedAt?: string | null;
   joinedDate: string;
 }
 
 interface OrgMeta {
+  id: string;
   name: string;
-  /** Guest examiners currently inside a live exam session for this org.
-   *  Examiners have no account (guest mode) — this is a live headcount
-   *  only, and returns to 0 once the exam ends. */
   liveExaminers: number;
   liveExams: number;
+  totalTeachers: number;
 }
 
-const ORG_META: Record<string, OrgMeta> = {
-  "org-01": { name: "Faculty of Computer Science & Engineering", liveExaminers: 42, liveExams: 2 },
-  "org-02": { name: "School of Software Development", liveExaminers: 0, liveExams: 0 },
-  "org-03": { name: "Institute of Technology & Science", liveExaminers: 51, liveExams: 1 },
-  "org-04": { name: "National School of Engineering", liveExaminers: 0, liveExams: 0 },
-};
+const STATUS_TABS: StatusFilter[] = ["All", "Active", "Suspended", "Deleted"];
 
-const INITIAL_TEACHERS: TeacherRecord[] = [
-  {
-    id: "USR-101",
-    name: "Professor Julian Vance",
-    email: "j.vance@university.edu",
-    departments: ["Computer Science", "Data Science"],
-    subjects: ["Algorithms", "Data Structures", "Machine Learning"],
-    status: "Active",
-    joinedDate: "Sep 2024",
-  },
-  {
-    id: "USR-102",
-    name: "Dr. Aris Thorne",
-    email: "a.thorne@university.edu",
-    departments: ["Software Engineering"],
-    subjects: ["Web Development"],
-    status: "Active",
-    joinedDate: "Jan 2025",
-  },
-];
-
-const STATUS_VARIANT: Record<UserStatus, "success" | "warning" | "danger" | "neutral"> = {
-  Active: "success",
-  Suspended: "danger",
-};
-
-const STATUS_TABS: StatusFilter[] = ["All", "Active", "Suspended"];
+function renderStatusBadge(teacher: TeacherRecord) {
+  if (teacher.status === "Active") {
+    return <Badge variant="success">Active</Badge>;
+  }
+  if (teacher.status === "Suspended") {
+    if (teacher.suspendedBy === "admin") {
+      return <Badge variant="danger">Suspended (Admin)</Badge>;
+    }
+    if (teacher.suspendedBy === "org") {
+      return <Badge variant="warning">Suspended (Org)</Badge>;
+    }
+    return <Badge variant="danger">Suspended</Badge>;
+  }
+  if (teacher.status === "Deleted") {
+    if (teacher.deletedBy === "admin") {
+      return <Badge variant="neutral">Deleted (Admin)</Badge>;
+    }
+    if (teacher.deletedBy === "org") {
+      return <Badge variant="neutral">Deleted (Org)</Badge>;
+    }
+    return <Badge variant="neutral">Deleted</Badge>;
+  }
+  return <Badge variant="neutral">Pending</Badge>;
+}
 
 /**
  * Shows the first value in a list inline. When there's more than one value,
@@ -92,7 +86,7 @@ function MultiValueCell({ values, label }: { values: string[]; label: string }) 
   return (
     <div className="relative inline-block group/cell">
       <div className="inline-flex items-center gap-1 cursor-default">
-        <span>{primary}</span>
+        <span>{primary || "—"}</span>
         {hasMore && (
           <span className="inline-flex items-center gap-0.5 text-slate-400">
             <ChevronDown
@@ -126,10 +120,11 @@ function MultiValueCell({ values, label }: { values: string[]; label: string }) 
 
 export default function AdminOrgRosterPage() {
   const params = useParams<{ orgId: string }>();
-  const orgId = params?.orgId ?? "org-01";
-  const orgMeta = ORG_META[orgId] ?? { name: "Organization", liveExaminers: 0, liveExams: 0 };
+  const orgId = params?.orgId ?? "";
 
-  const [teachers, setTeachers] = useState<TeacherRecord[]>(INITIAL_TEACHERS);
+  const [orgMeta, setOrgMeta] = useState<OrgMeta | null>(null);
+  const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
 
@@ -137,6 +132,27 @@ export default function AdminOrgRosterPage() {
   // final "are you absolutely sure" check before anything is removed.
   const [deleteTarget, setDeleteTarget] = useState<TeacherRecord | null>(null);
   const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  async function loadData() {
+    if (!orgId) return;
+    try {
+      const res = await fetch(`/api/admin/organizations/${orgId}/teachers`);
+      if (res.ok) {
+        const json = await res.json();
+        setOrgMeta(json.org);
+        setTeachers(json.teachers || []);
+      }
+    } catch (err) {
+      console.error("Failed to load org roster:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, [orgId]);
 
   const filteredTeachers = teachers.filter((t) => {
     const query = searchTerm.toLowerCase();
@@ -145,12 +161,47 @@ export default function AdminOrgRosterPage() {
       t.email.toLowerCase().includes(query) ||
       t.departments.some((d) => d.toLowerCase().includes(query)) ||
       t.subjects.some((s) => s.toLowerCase().includes(query));
-    const matchesStatus = statusFilter === "All" || t.status === statusFilter;
+
+    let matchesStatus = false;
+    if (statusFilter === "All") {
+      matchesStatus = t.status !== "Deleted";
+    } else {
+      matchesStatus = t.status === statusFilter;
+    }
+
     return matchesSearch && matchesStatus;
   });
 
-  function updateStatus(id: string, status: UserStatus) {
-    setTeachers((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+  async function updateStatus(id: string, nextStatus: "Active" | "Suspended") {
+    const previous = [...teachers];
+    setTeachers((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              status: nextStatus,
+              suspendedBy: nextStatus === "Suspended" ? "admin" : null,
+            }
+          : t
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/admin/organizations/${orgId}/teachers`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherId: id, status: nextStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTeachers(previous);
+        alert(data?.error || "Failed to update teacher status.");
+      }
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      setTeachers(previous);
+      alert("Network error.");
+    }
   }
 
   function startDelete(teacher: TeacherRecord) {
@@ -167,15 +218,52 @@ export default function AdminOrgRosterPage() {
     setDeleteStep(2);
   }
 
-  function handleFinalConfirm() {
+  async function handleFinalConfirm() {
     if (!deleteTarget) return;
-    setTeachers((prev) => prev.filter((t) => t.id !== deleteTarget.id));
-    closeDelete();
+    const targetId = deleteTarget.id;
+    setActionLoading(true);
+
+    try {
+      const res = await fetch(`/api/admin/organizations/${orgId}/teachers`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherId: targetId }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setTeachers((prev) =>
+          prev.map((t) =>
+            t.id === targetId
+              ? {
+                  ...t,
+                  status: "Deleted",
+                  deletedBy: "admin",
+                  deletedAt: new Date().toISOString(),
+                }
+              : t
+          )
+        );
+        closeDelete();
+      } else {
+        alert(data?.error || "Failed to delete teacher account.");
+      }
+    } catch (err) {
+      console.error("Error deleting teacher:", err);
+      alert("Network error deleting teacher account.");
+    } finally {
+      setActionLoading(false);
+    }
   }
+
+  const activeTeachersCount = teachers.filter((t) => t.status !== "Deleted").length;
 
   return (
     <>
-      <AdminTopbar title={orgMeta.name} description="View and manage teacher accounts for this organization." />
+      <AdminTopbar
+        title={orgMeta?.name || "Organization Roster"}
+        description="View and manage teacher accounts for this organization."
+      />
 
       <main className="p-6 space-y-6">
         <Link
@@ -191,7 +279,9 @@ export default function AdminOrgRosterPage() {
           <Card className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Teachers</p>
-              <p className="mt-1 text-2xl font-semibold text-navy-900">{teachers.length}</p>
+              <p className="mt-1 text-2xl font-semibold text-navy-900">
+                {loading ? "..." : activeTeachersCount}
+              </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50">
               <School size={20} className="text-sky-600" />
@@ -201,7 +291,9 @@ export default function AdminOrgRosterPage() {
           <Card className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Live Examiners</p>
-              <p className="mt-1 text-2xl font-semibold text-navy-900">{orgMeta.liveExaminers}</p>
+              <p className="mt-1 text-2xl font-semibold text-navy-900">
+                {loading ? "..." : orgMeta?.liveExaminers ?? 0}
+              </p>
               <p className="text-[11px] text-slate-400 mt-0.5">Guest accounts, active session only</p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
@@ -214,15 +306,15 @@ export default function AdminOrgRosterPage() {
               <p className="text-xs text-slate-500">Exam Activity</p>
               <p
                 className={`mt-1 text-xl font-semibold inline-flex items-center gap-1.5 ${
-                  orgMeta.liveExams > 0 ? "text-emerald-600" : "text-slate-400"
+                  (orgMeta?.liveExams ?? 0) > 0 ? "text-emerald-600" : "text-slate-400"
                 }`}
               >
-                {orgMeta.liveExams > 0 ? (
+                {(orgMeta?.liveExams ?? 0) > 0 ? (
                   <Radio size={16} className="animate-pulse text-emerald-500" />
                 ) : (
                   <span className="h-2 w-2 rounded-full bg-slate-300" />
                 )}
-                {orgMeta.liveExams > 0 ? "Active" : "Inactive"}
+                {(orgMeta?.liveExams ?? 0) > 0 ? "Active" : "Inactive"}
               </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50">
@@ -274,7 +366,13 @@ export default function AdminOrgRosterPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredTeachers.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-slate-400 text-sm">
+                    Loading teacher roster...
+                  </td>
+                </tr>
+              ) : filteredTeachers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-10 text-center text-slate-400 text-sm">
                     No matching teacher accounts found.
@@ -286,7 +384,12 @@ export default function AdminOrgRosterPage() {
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 shrink-0 rounded-full bg-navy-900 text-white flex items-center justify-center text-xs font-semibold">
-                          {teacher.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                          {teacher.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .filter(Boolean)
+                            .join("")
+                            .slice(0, 2) || teacher.email.slice(0, 2).toUpperCase()}
                         </div>
                         <div>
                           <p className="font-medium text-navy-900">{teacher.name}</p>
@@ -301,31 +404,35 @@ export default function AdminOrgRosterPage() {
                       <MultiValueCell values={teacher.subjects} label="subjects" />
                     </td>
                     <td className="px-5 py-3.5">
-                      <Badge variant={STATUS_VARIANT[teacher.status]}>{teacher.status}</Badge>
+                      {renderStatusBadge(teacher)}
                     </td>
                     <td className="px-5 py-3.5 text-slate-500">{teacher.joinedDate}</td>
                     <td className="px-5 py-3.5 text-right">
-                      <DropdownMenu
-                        trigger={
-                          <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 ml-auto">
-                            <MoreVertical size={16} />
-                          </button>
-                        }
-                      >
-                        {teacher.status === "Suspended" && (
-                          <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
-                            <CheckCircle2 size={15} /> Activate
+                      {teacher.status === "Deleted" ? (
+                        <span className="text-xs text-slate-400 italic">Deleted</span>
+                      ) : (
+                        <DropdownMenu
+                          trigger={
+                            <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 ml-auto">
+                              <MoreVertical size={16} />
+                            </button>
+                          }
+                        >
+                          {teacher.status === "Suspended" && (
+                            <DropdownItem onClick={() => updateStatus(teacher.id, "Active")}>
+                              <CheckCircle2 size={15} /> Activate
+                            </DropdownItem>
+                          )}
+                          {teacher.status === "Active" && (
+                            <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
+                              <Ban size={15} /> Suspend
+                            </DropdownItem>
+                          )}
+                          <DropdownItem danger onClick={() => startDelete(teacher)}>
+                            <Trash2 size={15} /> Delete Teacher
                           </DropdownItem>
-                        )}
-                        {teacher.status === "Active" && (
-                          <DropdownItem onClick={() => updateStatus(teacher.id, "Suspended")}>
-                            <Ban size={15} /> Suspend
-                          </DropdownItem>
-                        )}
-                        <DropdownItem danger onClick={() => startDelete(teacher)}>
-                          <Trash2 size={15} /> Delete Teacher
-                        </DropdownItem>
-                      </DropdownMenu>
+                        </DropdownMenu>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -341,7 +448,7 @@ export default function AdminOrgRosterPage() {
         onClose={closeDelete}
         onConfirm={handleFirstConfirm}
         title="Delete teacher account?"
-        description={`This will permanently remove ${deleteTarget?.name} (${deleteTarget?.email}) from the platform. This action cannot be undone.`}
+        description={`This will remove ${deleteTarget?.name} (${deleteTarget?.email}) from active rosters while safely preserving past examination records.`}
         confirmLabel="Continue"
       />
 
@@ -351,8 +458,8 @@ export default function AdminOrgRosterPage() {
         onClose={closeDelete}
         onConfirm={handleFinalConfirm}
         title="Are you absolutely sure?"
-        description={`This is your final confirmation. ${deleteTarget?.name}'s account and all associated records will be permanently deleted right now.`}
-        confirmLabel="Yes, Delete Permanently"
+        description={`This is your final confirmation. ${deleteTarget?.name}'s teacher account will be deactivated and marked as deleted.`}
+        confirmLabel={actionLoading ? "Deleting..." : "Delete Account"}
       />
     </>
   );

@@ -6,6 +6,8 @@ export function normalizeTeacherStatus(status: string | null | undefined) {
       return "Active";
     case "suspended":
       return "Suspended";
+    case "deleted":
+      return "Deleted";
     default:
       return "Pending";
   }

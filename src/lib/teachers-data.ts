@@ -1,4 +1,4 @@
-export type TeacherStatus = "Active" | "Pending" | "Suspended";
+export type TeacherStatus = "Active" | "Pending" | "Suspended" | "Deleted";
 
 export interface TeacherAssignment {
   department: string;
@@ -12,6 +12,9 @@ export interface Teacher {
   /** A teacher can be assigned to more than one department/subject pair. */
   assignments: TeacherAssignment[];
   status: TeacherStatus;
+  suspendedBy?: "admin" | "org" | null;
+  deletedBy?: "admin" | "org" | null;
+  deletedAt?: string | null;
   joined: string;
 }
 

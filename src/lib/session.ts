@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { sessions } from "@/db/schema";
+import { organizations, sessions, teachers } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 
 export const SESSION_COOKIE = "session_token";
@@ -59,12 +59,41 @@ export async function getSessionFromCookie() {
 export async function requireOrgSession() {
   const session = await getSessionFromCookie();
   if (!session || session.userType !== "org") return null;
+
+  const [org] = await db
+    .select({ status: organizations.status })
+    .from(organizations)
+    .where(eq(organizations.id, session.userId));
+
+  if (!org || org.status === "suspended") {
+    return null;
+  }
+
   return session;
 }
 
 export async function requireTeacherSession() {
   const session = await getSessionFromCookie();
   if (!session || session.userType !== "teacher") return null;
+
+  const [teacher] = await db
+    .select({ status: teachers.status, orgId: teachers.orgId })
+    .from(teachers)
+    .where(eq(teachers.id, session.userId));
+
+  if (!teacher || teacher.status === "suspended" || teacher.status === "deleted") {
+    return null;
+  }
+
+  const [parentOrg] = await db
+    .select({ status: organizations.status })
+    .from(organizations)
+    .where(eq(organizations.id, teacher.orgId));
+
+  if (!parentOrg || parentOrg.status === "suspended") {
+    return null;
+  }
+
   return session;
 }
 

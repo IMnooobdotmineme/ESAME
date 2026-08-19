@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -24,12 +24,9 @@ type StatusFilter = "All" | OrgStatus;
 interface OrganizationSummary {
   id: string;
   name: string;
-  code: string;
+  email: string;
   status: OrgStatus;
   teachersCount: number;
-  /** Guest examiners currently inside a live exam session. Examiners have no
-   *  account (guest mode), so this is a live headcount, not a registry —
-   *  it drops back to 0 once the exam ends. */
   liveExaminers: number;
   liveExams: number;
 }
@@ -41,47 +38,9 @@ const STATUS_VARIANT: Record<OrgStatus, "success" | "warning" | "danger" | "neut
 
 const STATUS_TABS: StatusFilter[] = ["All", "Active", "Suspended"];
 
-const INITIAL_ORGS: OrganizationSummary[] = [
-  {
-    id: "org-01",
-    name: "Faculty of Computer Science & Engineering",
-    code: "FCSE-MAIN",
-    status: "Active",
-    teachersCount: 14,
-    liveExaminers: 42,
-    liveExams: 2,
-  },
-  {
-    id: "org-02",
-    name: "School of Software Development",
-    code: "SSD-CAMPUS",
-    status: "Active",
-    teachersCount: 8,
-    liveExaminers: 0,
-    liveExams: 0,
-  },
-  {
-    id: "org-03",
-    name: "Institute of Technology & Science",
-    code: "ITS-MAIN",
-    status: "Active",
-    teachersCount: 24,
-    liveExaminers: 51,
-    liveExams: 1,
-  },
-  {
-    id: "org-04",
-    name: "National School of Engineering",
-    code: "NSE-CAMPUS",
-    status: "Suspended",
-    teachersCount: 18,
-    liveExaminers: 0,
-    liveExams: 0,
-  },
-];
-
 export default function AdminOrganizationsPage() {
-  const [organizations, setOrganizations] = useState<OrganizationSummary[]>(INITIAL_ORGS);
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
 
@@ -89,17 +48,58 @@ export default function AdminOrganizationsPage() {
   // final "are you absolutely sure" check before anything is removed.
   const [deleteTarget, setDeleteTarget] = useState<OrganizationSummary | null>(null);
   const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  async function loadOrganizations() {
+    try {
+      const res = await fetch("/api/admin/organizations");
+      if (res.ok) {
+        const json = await res.json();
+        setOrganizations(json.organizations || []);
+      }
+    } catch (err) {
+      console.error("Failed to load organizations:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadOrganizations();
+  }, []);
 
   const filteredOrgs = organizations.filter((org) => {
+    const query = searchQuery.toLowerCase();
     const matchesSearch =
-      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      org.code.toLowerCase().includes(searchQuery.toLowerCase());
+      org.name.toLowerCase().includes(query) ||
+      (org.email && org.email.toLowerCase().includes(query));
     const matchesStatus = statusFilter === "All" || org.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  function updateStatus(id: string, status: OrgStatus) {
-    setOrganizations((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+  async function updateStatus(id: string, nextStatus: OrgStatus) {
+    const previous = [...organizations];
+    // Optimistic update
+    setOrganizations((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status: nextStatus } : o))
+    );
+
+    try {
+      const res = await fetch("/api/admin/organizations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: id, status: nextStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOrganizations(previous);
+        alert(data?.error || "Failed to update organization status. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error updating organization status:", err);
+      setOrganizations(previous);
+      alert("Network error updating status.");
+    }
   }
 
   function startDelete(org: OrganizationSummary) {
@@ -116,10 +116,31 @@ export default function AdminOrganizationsPage() {
     setDeleteStep(2);
   }
 
-  function handleFinalConfirm() {
+  async function handleFinalConfirm() {
     if (!deleteTarget) return;
-    setOrganizations((prev) => prev.filter((o) => o.id !== deleteTarget.id));
-    closeDelete();
+    const targetId = deleteTarget.id;
+    setActionLoading(true);
+
+    try {
+      const res = await fetch("/api/admin/organizations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: targetId }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setOrganizations((prev) => prev.filter((o) => o.id !== targetId));
+        closeDelete();
+      } else {
+        alert(data?.error || "Failed to delete organization.");
+      }
+    } catch (err) {
+      console.error("Error deleting organization:", err);
+      alert("Network error deleting organization.");
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   return (
@@ -153,7 +174,7 @@ export default function AdminOrganizationsPage() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search organization by name or code..."
+              placeholder="Search organization by name or email..."
               className="bg-transparent text-sm outline-none w-full placeholder:text-slate-400"
             />
           </div>
@@ -161,43 +182,47 @@ export default function AdminOrganizationsPage() {
 
         {/* Organization cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {filteredOrgs.length > 0 ? (
+          {loading ? (
+            <div className="col-span-2 py-12 text-center bg-white rounded-2xl border border-slate-200">
+              <p className="text-sm text-slate-400">Loading organizations...</p>
+            </div>
+          ) : filteredOrgs.length > 0 ? (
             filteredOrgs.map((org) => (
               <Card key={org.id} className="p-5 flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                      {org.code}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={STATUS_VARIANT[org.status]}>{org.status}</Badge>
-                      <DropdownMenu
-                        trigger={
-                          <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                            <MoreVertical size={16} />
-                          </button>
-                        }
-                      >
-                        {org.status === "Suspended" && (
-                          <DropdownItem onClick={() => updateStatus(org.id, "Active")}>
-                            <CheckCircle2 size={15} /> Activate
-                          </DropdownItem>
-                        )}
-                        {org.status === "Active" && (
-                          <DropdownItem onClick={() => updateStatus(org.id, "Suspended")}>
-                            <Ban size={15} /> Suspend
-                          </DropdownItem>
-                        )}
-                        <DropdownItem danger onClick={() => startDelete(org)}>
-                          <Trash2 size={15} /> Delete Organization
+                    <Badge variant={STATUS_VARIANT[org.status]}>{org.status}</Badge>
+                    <DropdownMenu
+                      trigger={
+                        <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                          <MoreVertical size={16} />
+                        </button>
+                      }
+                    >
+                      {org.status === "Suspended" && (
+                        <DropdownItem onClick={() => updateStatus(org.id, "Active")}>
+                          <CheckCircle2 size={15} /> Activate
                         </DropdownItem>
-                      </DropdownMenu>
-                    </div>
+                      )}
+                      {org.status === "Active" && (
+                        <DropdownItem onClick={() => updateStatus(org.id, "Suspended")}>
+                          <Ban size={15} /> Suspend
+                        </DropdownItem>
+                      )}
+                      <DropdownItem danger onClick={() => startDelete(org)}>
+                        <Trash2 size={15} /> Delete Organization
+                      </DropdownItem>
+                    </DropdownMenu>
                   </div>
 
-                  <h2 className="text-base font-semibold text-navy-900 leading-snug">
-                    {org.name}
-                  </h2>
+                  <div>
+                    <h2 className="text-base font-semibold text-navy-900 leading-snug">
+                      {org.name}
+                    </h2>
+                    {org.email && (
+                      <p className="text-xs text-slate-400 mt-0.5">{org.email}</p>
+                    )}
+                  </div>
 
                   <div className="grid grid-cols-3 gap-3 pt-1">
                     <div className="bg-slate-50 rounded-xl border border-slate-100 p-3 text-center">
@@ -264,7 +289,7 @@ export default function AdminOrganizationsPage() {
         onClose={closeDelete}
         onConfirm={handleFirstConfirm}
         title="Delete organization?"
-        description={`This will permanently remove "${deleteTarget?.name}" and all of its teacher and examiner accounts. This action cannot be undone.`}
+        description={`This will permanently remove "${deleteTarget?.name}" and all of its teacher accounts. This action cannot be undone.`}
         confirmLabel="Continue"
       />
 
@@ -274,8 +299,8 @@ export default function AdminOrganizationsPage() {
         onClose={closeDelete}
         onConfirm={handleFinalConfirm}
         title="Are you absolutely sure?"
-        description={`This is your final confirmation. "${deleteTarget?.name}" (${deleteTarget?.code}) and all associated teacher and examiner data will be permanently deleted right now.`}
-        confirmLabel="Yes, Delete Permanently"
+        description={`This is your final confirmation. "${deleteTarget?.name}" and all associated teacher accounts will be permanently deleted right now.`}
+        confirmLabel={actionLoading ? "Deleting..." : "Delete Permanently"}
       />
     </>
   );
