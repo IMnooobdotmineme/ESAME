@@ -113,6 +113,14 @@ export function DropdownItem({
         danger ? "text-red-600" : "text-navy-900",
         disabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
         className
+
+        "flex w-full items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors",
+        selected
+          ? "bg-sky-400/10 text-sky-600 font-semibold"
+          : danger
+          ? "text-red-600 hover:bg-slate-50"
+          : "text-navy-900 hover:bg-slate-50"
+
       )}
     >
       {children}

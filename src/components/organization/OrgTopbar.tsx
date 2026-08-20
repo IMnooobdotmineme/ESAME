@@ -1,5 +1,5 @@
-"use client";
 
+<<<<<<< HEAD
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
@@ -134,3 +134,5 @@ export function OrgTopbar({ title, description }: OrgTopbarProps) {
     </header>
   );
 }
+=======
+>>>>>>> origin/teacher-final
