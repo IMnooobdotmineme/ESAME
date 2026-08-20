@@ -186,6 +186,10 @@ export default function StudentExamPage() {
     }
   }
 
+  function handlePreviousSection() {
+    setSectionIndex((i) => Math.max(0, i - 1));
+  }
+
   function isSectionComplete(questions: typeof sectionQuestions) {
     return (
       questions.length > 0 &&
@@ -289,7 +293,7 @@ export default function StudentExamPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <span className="text-[10px] font-black uppercase text-sky-600 tracking-wider">
-            {currentExam.courseCode}
+            {currentExam.department}
           </span>
           <h1 className="text-base font-bold text-navy-900">{currentExam.title}</h1>
           <p className="text-xs text-slate-400">
@@ -345,7 +349,7 @@ export default function StudentExamPage() {
                     {sectionComplete ? (
                       <Check key={`${s.id}-check`} size={14} className="check-pop" />
                     ) : (
-                      `[${i + 1}]`
+                      i + 1
                     )}
                   </span>
                   <span className="text-sm font-semibold truncate">{s.title}</span>
@@ -372,7 +376,7 @@ export default function StudentExamPage() {
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
               <p className="text-xs text-slate-400 mb-1">Section</p>
               <p className="text-sm font-bold text-navy-900">
-                [{sectionIndex + 1}] of [{examContent.sections.length}]
+                {sectionIndex + 1} of {examContent.sections.length}
               </p>
             </div>
           </div>
@@ -391,6 +395,14 @@ export default function StudentExamPage() {
 
           {/* Bottom nav */}
           <div className="flex items-center justify-end pt-2">
+            {sectionIndex > 0 && (
+              <button
+                onClick={handlePreviousSection}
+                className="mr-3 px-6 py-2.5 rounded-full border border-slate-900 bg-white text-slate-900 text-sm font-semibold hover:bg-slate-50 transition"
+              >
+                Previous
+              </button>
+            )}
             <button
               onClick={handlePrimaryAction}
               className="px-6 py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition"

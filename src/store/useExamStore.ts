@@ -473,7 +473,8 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     }
 
     const targetExam = state.exams[examIndex];
-    if (targetExam.isStarted && !targetExam.isEnded) {
+    const isDemoExam = targetExam.roomCode.toUpperCase() === "DEMO123";
+    if (targetExam.isStarted && !targetExam.isEnded && !isDemoExam) {
       return { success: false, message: "This exam has already started. New students can no longer join." };
     }
     if (targetExam.isEnded) {

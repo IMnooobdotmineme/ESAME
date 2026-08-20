@@ -17,6 +17,7 @@ interface StudentSession {
 export default function WaitingRoomPage() {
   const router = useRouter();
   const exams = useExamStore((state) => state.exams);
+  const startExam = useExamStore((state) => state.startExam);
 
   const [session, setSession] = useState<StudentSession | null>(null);
   const [examContent] = useState(() => getMockExamContent());
@@ -33,6 +34,23 @@ export default function WaitingRoomPage() {
   const currentExam = exams.find(
     (e) => e.roomCode.toUpperCase() === session?.roomCode.toUpperCase()
   );
+
+  useEffect(() => {
+    if (
+      currentExam &&
+      currentExam.roomCode.toUpperCase() === "DEMO123" &&
+      !currentExam.isStarted &&
+      !currentExam.isEnded
+    ) {
+      startExam(currentExam.roomCode);
+    }
+  }, [currentExam, startExam]);
+
+  useEffect(() => {
+    if (session && currentExam?.isStarted && !currentExam.isEnded) {
+      router.replace(`/student/exam/${session.roomCode}`);
+    }
+  }, [currentExam, router, session]);
 
   if (!session || !currentExam) return null;
 
