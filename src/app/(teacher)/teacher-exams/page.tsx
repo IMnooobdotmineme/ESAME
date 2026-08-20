@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useExamStore, type Exam } from "@/store/useExamStore";
 import {
@@ -22,6 +22,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type ExamCard = Exam & {
   status: "active" | "scheduled" | "completed";
+  startDate?: string;
   endDate?: string;
   questions?: unknown[];
 };
@@ -107,11 +108,19 @@ const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
 // ----------------------------------------------------------------------
 // DYNAMIC STATUS RESOLVER
 // ----------------------------------------------------------------------
-function getExamStatus(exam: Exam & { status?: ExamCard["status"] }): "active" | "scheduled" | "completed" {
+function getExamStatus(
+  exam: Exam & { status?: ExamCard["status"] }
+): "active" | "scheduled" | "completed" {
   if (exam.isEnded) return "completed";
-  if (exam.status === "active" || exam.status === "scheduled" || exam.status === "completed") {
+
+  if (
+    exam.status === "active" ||
+    exam.status === "scheduled" ||
+    exam.status === "completed"
+  ) {
     return exam.status;
   }
+
   return exam.isLaunched ? "active" : "scheduled";
 }
 
@@ -119,18 +128,47 @@ function formatCreatedDate(iso?: string) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
+function formatStartDateTime(iso?: string) {
+  if (!iso) return "Not set";
 
+  const d = new Date(iso);
+
+  if (isNaN(d.getTime())) return "Not set";
+
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 const STATUS_BADGE: Record<ExamCard["status"], "info" | "warning" | "success"> = {
   active: "info",
   scheduled: "warning",
   completed: "success",
 };
 
+// Wording for the small status badge shown on each exam card
 const STATUS_LABEL: Record<ExamCard["status"], string> = {
   active: "Live",
-  scheduled: "Scheduled",
+  scheduled: "Upcoming",
+  completed: "Completed",
+};
+
+// Tab order: exams not yet run first, then active, then completed
+const TAB_ORDER = ["scheduled", "active", "completed"] as const;
+
+// Wording for the tab buttons themselves (renamed "scheduled" -> "Upcoming")
+const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
+  scheduled: "Upcoming",
+  active: "Active",
   completed: "Completed",
 };
 
@@ -144,7 +182,17 @@ export default function MyExamsPage() {
   const rawExams = storeExams.length > 0 ? storeExams : (DEMO_MOCK_EXAMS as Exam[]);
 
   const [examPendingDelete, setExamPendingDelete] = useState<ExamCard | null>(null);
-  const [activeTab, setActiveTab] = useState<"active" | "scheduled" | "completed">("active");
+  const [activeTab, setActiveTab] = useState<"active" | "scheduled" | "completed">("scheduled");
+  useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+
+  if (tab === "active" || tab === "scheduled" || tab === "completed") {
+    setActiveTab(tab);
+  } else {
+    setActiveTab("scheduled");
+  }
+}, []);
   const [examSearch, setExamSearch] = useState("");
 
   const mappedExams: ExamCard[] = rawExams.map((exam) => ({
@@ -154,8 +202,10 @@ export default function MyExamsPage() {
 
   const filteredExams = mappedExams.filter((exam) => {
     if (exam.status !== activeTab) return false;
+
     const q = examSearch.trim().toLowerCase();
     if (!q) return true;
+
     return (
       exam.title.toLowerCase().includes(q) ||
       exam.department?.toLowerCase().includes(q) ||
@@ -195,6 +245,7 @@ export default function MyExamsPage() {
               className="w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400"
             />
           </div>
+
           <Button onClick={() => router.push("/teacher-exams/new")}>
             <Plus size={16} />
             Create New Exam
@@ -203,7 +254,7 @@ export default function MyExamsPage() {
 
         {/* NAVIGATION TABS WITH LIVE COUNTS */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {(["active", "scheduled", "completed"] as const).map((tab) => (
+          {TAB_ORDER.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -213,7 +264,7 @@ export default function MyExamsPage() {
                   : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
             >
-              {tab} Exams ({counts[tab]})
+              {TAB_LABELS[tab]} Exams ({counts[tab]})
             </button>
           ))}
         </div>
@@ -225,11 +276,13 @@ export default function MyExamsPage() {
               <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center mx-auto mb-2 border border-slate-200">
                 <FileText className="w-6 h-6" />
               </div>
+
               <p className="text-sm font-medium text-slate-400">
                 {examSearch.trim()
-                  ? `No ${activeTab} exams match "${examSearch}".`
-                  : `No ${activeTab} exams available in repository.`}
+                  ? `No ${TAB_LABELS[activeTab]} exams match "${examSearch}".`
+                  : `No ${TAB_LABELS[activeTab]} exams available in repository.`}
               </p>
+
               {activeTab === "active" && !examSearch.trim() && (
                 <button
                   onClick={() => router.push("/teacher-exams/new")}
@@ -249,12 +302,19 @@ export default function MyExamsPage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
-                      title={exam.department || undefined}
+                      title={exam.courseCode || undefined}
                       className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase cursor-default"
                     >
-                      {exam.courseCode || "EXAM"}
+                      {exam.department || "EXAM"}
                     </span>
-                    <Badge variant={exam.status === "active" && !exam.isStarted ? "warning" : STATUS_BADGE[exam.status]}>
+
+                    <Badge
+                      variant={
+                        exam.status === "active" && !exam.isStarted
+                          ? "warning"
+                          : STATUS_BADGE[exam.status]
+                      }
+                    >
                       {exam.status === "active"
                         ? exam.isStarted
                           ? "Live"
@@ -264,6 +324,7 @@ export default function MyExamsPage() {
                   </div>
 
                   <h3 className="text-sm font-semibold text-navy-900">{exam.title}</h3>
+
                   {exam.subject && (
                     <p className="text-xs text-slate-500 font-medium">{exam.subject}</p>
                   )}
@@ -273,14 +334,21 @@ export default function MyExamsPage() {
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
                       {exam.durationMinutes} mins
                     </span>
+
                     <span className="flex items-center gap-1">
                       <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
                       {exam.questions?.length ?? exam.questionCount ?? 0} Questions
                     </span>
+
                     <span className="flex items-center gap-1">
-                      <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-                      Created {formatCreatedDate(exam.createdAt)}
-                    </span>
+  <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+  Created {formatCreatedDate(exam.createdAt)}
+</span>
+
+<span className="flex items-center gap-1">
+  <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+  Start: {exam.startDate ? formatStartDateTime(exam.startDate) : "Not set"}
+</span>
                   </div>
                 </div>
 
@@ -290,7 +358,9 @@ export default function MyExamsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/teacher-exams/new?edit=${exam.id}`)}
+                      onClick={() =>
+                        router.push(`/teacher-exams/new?edit=${exam.id}&tab=parameters`)
+                      }
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       Edit Exam
@@ -326,9 +396,7 @@ export default function MyExamsPage() {
                       size="sm"
                       onClick={() =>
                         router.push(
-                          exam.isStarted
-                            ? "/monitor"
-                            : `/teacher-exams/${exam.roomCode}`
+                          exam.isStarted ? "/monitor" : `/teacher-exams/${exam.roomCode}`
                         )
                       }
                     >

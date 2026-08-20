@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useExamStore } from "@/store/useExamStore";
 import { TEACHER_ASSIGNMENTS } from "@/lib/teacher-assignments-data";
@@ -17,6 +17,7 @@ import {
   Pencil,
   Trash2,
   ArrowRight,
+  AlertTriangle,
 } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Dialog, DialogHeader } from "@/components/ui/dialog";
@@ -50,7 +51,6 @@ interface Question {
   marks: number;
   mediaType: "none" | "image" | "audio" | "video";
   mediaUrl?: string;
-
   mcqOptions?: string[];
   mcqCorrect?: number;
   multiOptions?: string[];
@@ -111,6 +111,7 @@ function blankQuestion(type: QuestionType): Question {
 function ExamBuilderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const createExam = useExamStore((state) => state.createExam);
   const updateExam = useExamStore((state) => state.updateExam);
   const exams = useExamStore((state) => state.exams);
@@ -145,8 +146,22 @@ function ExamBuilderContent() {
   const [newPartTitle, setNewPartTitle] = useState("");
   const [newPartMarks, setNewPartMarks] = useState<string>("");
   const [newPartType, setNewPartType] = useState<QuestionType>("mcq");
-
   const [form, setForm] = useState<Question>(blankQuestion("mcq"));
+
+  const [cancelConfirm, setCancelConfirm] = useState<{
+    open: boolean;
+    target: "question" | "exam";
+  }>({
+    open: false,
+    target: "question",
+  });
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+  source: "staged" | "part";
+  questionId: string;
+  partId?: string;
+} | null>(null);
+  // Scroll target for the question builder — used to auto-scroll up when editing a question.
+  const formSectionRef = useRef<HTMLDivElement>(null);
 
   const activePart = parts.find((p) => p.id === activePartId);
   const currentFormat = activePart?.allowedType || "mcq";
@@ -163,6 +178,7 @@ function ExamBuilderContent() {
         router.push("/teacher-exams");
         return;
       }
+
       setExamData({
         title: editingExam.title,
         description: "",
@@ -171,6 +187,7 @@ function ExamBuilderContent() {
         duration: editingExam.durationMinutes,
         startDate: editingExam.startDate || "",
       });
+
       if (Array.isArray(editingExam.parts)) {
         setParts(editingExam.parts as ExamPart[]);
       }
@@ -178,7 +195,12 @@ function ExamBuilderContent() {
   }, [editingExam, router]);
 
   useEffect(() => {
-    if (editId || tabParam === "questions") {
+    if (editId) {
+      setStep(1);
+      return;
+    }
+
+    if (tabParam === "questions") {
       setStep(2);
     }
   }, [editId, tabParam]);
@@ -238,7 +260,12 @@ function ExamBuilderContent() {
       alert("Please enter the question text prompt before continuing!");
       return null;
     }
-    return { ...form, id: editingQuestionId || Date.now().toString(), type: currentFormat };
+
+    return {
+      ...form,
+      id: editingQuestionId || Date.now().toString(),
+      type: currentFormat,
+    };
   };
 
   // Stage the current form as a question and open a blank form for the next one
@@ -250,12 +277,19 @@ function ExamBuilderContent() {
       setParts((prev) =>
         prev.map((part) =>
           part.id === activePartId
-            ? { ...part, questions: part.questions.map((existing) => (existing.id === q.id ? q : existing)) }
+            ? {
+                ...part,
+                questions: part.questions.map((existing) =>
+                  existing.id === q.id ? q : existing
+                ),
+              }
             : part
         )
       );
     } else if (editingSource === "staged") {
-      setStagedQuestions((prev) => prev.map((existing) => (existing.id === q.id ? q : existing)));
+      setStagedQuestions((prev) =>
+        prev.map((existing) => (existing.id === q.id ? q : existing))
+      );
     } else {
       setStagedQuestions((prev) => [...prev, q]);
     }
@@ -271,19 +305,28 @@ function ExamBuilderContent() {
 
     // If there's an unfinished question sitting in the form, stage it first
     if (form.text.trim()) {
-      const q: Question = { ...form, id: editingQuestionId || Date.now().toString(), type: currentFormat };
+      const q: Question = {
+        ...form,
+        id: editingQuestionId || Date.now().toString(),
+        type: currentFormat,
+      };
+
       if (editingSource === "part" && activePartId) {
         setParts((prev) =>
           prev.map((part) =>
             part.id === activePartId
-              ? { ...part, questions: part.questions.map((e) => (e.id === q.id ? q : e)) }
+              ? {
+                  ...part,
+                  questions: part.questions.map((e) => (e.id === q.id ? q : e)),
+                }
               : part
           )
         );
       } else {
-        finalStaged = editingSource === "staged"
-          ? stagedQuestions.map((e) => (e.id === q.id ? q : e))
-          : [...stagedQuestions, q];
+        finalStaged =
+          editingSource === "staged"
+            ? stagedQuestions.map((e) => (e.id === q.id ? q : e))
+            : [...stagedQuestions, q];
       }
     }
 
@@ -313,6 +356,11 @@ function ExamBuilderContent() {
     setForm(q);
     setEditingQuestionId(q.id);
     setEditingSource(source);
+
+    // Auto-scroll up to the question builder so the person sees the loaded question.
+    requestAnimationFrame(() => {
+      formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const handleDeleteStaged = (id: string) => {
@@ -322,9 +370,70 @@ function ExamBuilderContent() {
   const handleDeleteQuestion = (partId: string, questionId: string) => {
     setParts((prev) =>
       prev.map((p) =>
-        p.id === partId ? { ...p, questions: p.questions.filter((q) => q.id !== questionId) } : p
+        p.id === partId
+          ? { ...p, questions: p.questions.filter((q) => q.id !== questionId) }
+          : p
       )
     );
+  };
+  const openDeleteConfirmation = (payload: {
+  source: "staged" | "part";
+  questionId: string;
+  partId?: string;
+}) => {
+  setDeleteConfirm(payload);
+};
+
+const closeDeleteConfirmation = () => {
+  setDeleteConfirm(null);
+};
+
+const handleConfirmDeleteQuestion = () => {
+  if (!deleteConfirm) return;
+
+  if (deleteConfirm.source === "staged") {
+    handleDeleteStaged(deleteConfirm.questionId);
+  } else if (deleteConfirm.partId) {
+    handleDeleteQuestion(deleteConfirm.partId, deleteConfirm.questionId);
+  }
+
+  if (editingQuestionId === deleteConfirm.questionId) {
+    setEditingQuestionId(null);
+    setEditingSource(null);
+    setForm(blankQuestion(currentFormat));
+  }
+
+  setDeleteConfirm(null);
+};
+  const openCancelConfirmation = (target: "question" | "exam") => {
+    setCancelConfirm({
+      open: true,
+      target,
+    });
+  };
+
+  const closeCancelConfirmation = () => {
+    setCancelConfirm((prev) => ({
+      ...prev,
+      open: false,
+    }));
+  };
+
+  const handleDiscardConfirmed = () => {
+    const target = cancelConfirm.target;
+
+    setCancelConfirm((prev) => ({
+      ...prev,
+      open: false,
+    }));
+
+    if (target === "question") {
+      setForm(blankQuestion(currentFormat));
+      setEditingQuestionId(null);
+      setEditingSource(null);
+    } else {
+      router.push("/teacher-exams?tab=scheduled");
+    }
   };
 
   const countTotalQuestions = () =>
@@ -337,6 +446,7 @@ function ExamBuilderContent() {
     }
 
     const totalQCount = parts.reduce((acc, part) => acc + part.questions.length, 0);
+
     if (totalQCount === 0) {
       alert("Please add at least one question to a section before saving.");
       return;
@@ -352,11 +462,13 @@ function ExamBuilderContent() {
         questionCount: totalQCount,
         startDate: examData.startDate || undefined,
       });
+
       if (!result.success) {
         alert(result.message || "This exam cannot be edited.");
         return;
       }
-      router.push("/teacher-exams");
+
+      router.push("/teacher-exams?tab=scheduled");
       return;
     }
 
@@ -398,6 +510,7 @@ function ExamBuilderContent() {
             >
               1. Parameters
             </button>
+
             <button
               type="button"
               disabled={!isSettingsFormComplete()}
@@ -511,7 +624,9 @@ function ExamBuilderContent() {
                       type="number"
                       min="1"
                       value={examData.duration}
-                      onChange={(e) => setExamData({ ...examData, duration: parseInt(e.target.value) || 0 })}
+                      onChange={(e) =>
+                        setExamData({ ...examData, duration: parseInt(e.target.value) || 0 })
+                      }
                       className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all"
                       required
                     />
@@ -535,9 +650,20 @@ function ExamBuilderContent() {
               </div>
 
               <div className="flex justify-end gap-2.5 pt-5 border-t border-slate-100">
-                <Button variant="outline" onClick={() => router.push("/teacher-exams")}>
-                  Cancel
-                </Button>
+                <Button
+  variant="outline"
+  onClick={() => {
+    if (editId) {
+      openCancelConfirmation("exam");
+    } else {
+      router.push("/teacher-exams?tab=scheduled");
+    }
+  }}
+  className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+>
+  Cancel
+</Button>
+
                 <Button
                   onClick={() => {
                     if (isSettingsFormComplete()) {
@@ -608,7 +734,10 @@ function ExamBuilderContent() {
 
                 {/* SAVED SECTIONS */}
                 <div className="flex flex-wrap gap-2 mt-4 border-t border-slate-100 pt-4 items-center">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Saved Sections:</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">
+                    Saved Sections:
+                  </span>
+
                   {parts.length === 0 ? (
                     <span className="text-xs font-medium text-slate-400 italic">
                       No sections saved yet. Create one above to begin.
@@ -642,529 +771,602 @@ function ExamBuilderContent() {
                 </p>
               </Card>
             ) : (
-              <Card>
-                <CardContent className="space-y-5">
-                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                    <h2 className="text-xs font-bold text-navy-900 uppercase tracking-wider">
-                      Active Section: {activePart?.title}
-                    </h2>
-                    <Badge variant="info">{QUESTION_TYPE_LABELS[currentFormat]}</Badge>
-                  </div>
+              <div ref={formSectionRef}>
+                <Card>
+                  <CardContent className="space-y-5">
+                    <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                      <h2 className="text-xs font-bold text-navy-900 uppercase tracking-wider">
+                        Active Section: {activePart?.title}
+                      </h2>
+                      <Badge variant="info">{QUESTION_TYPE_LABELS[currentFormat]}</Badge>
+                    </div>
 
-                  {/* MARKS & MEDIA METADATA */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
+                    {/* MARKS & MEDIA METADATA */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Points / Marks
+                        </label>
+                        <input
+                          type="number"
+                          value={form.marks}
+                          onChange={(e) => setForm({ ...form, marks: parseInt(e.target.value) || 1 })}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Media Attachment
+                        </label>
+                        <select
+                          value={form.mediaType}
+                          onChange={(e) =>
+                            setForm({ ...form, mediaType: e.target.value as Question["mediaType"] })
+                          }
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400 cursor-pointer"
+                        >
+                          <option value="none">None</option>
+                          <option value="image">Image URL</option>
+                          <option value="audio">Audio URL</option>
+                          <option value="video">Video URL</option>
+                        </select>
+                      </div>
+
+                      {form.mediaType !== "none" && (
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                            {form.mediaType.toUpperCase()} Media URL
+                          </label>
+                          <input
+                            type="url"
+                            placeholder="https://example.com/media.png"
+                            value={form.mediaUrl || ""}
+                            onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* QUESTION PROMPT */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                        Points / Marks
+                        Question Text Prompt *
                       </label>
-                      <input
-                        type="number"
-                        value={form.marks}
-                        onChange={(e) => setForm({ ...form, marks: parseInt(e.target.value) || 1 })}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400"
+                      <textarea
+                        rows={3}
+                        placeholder="Enter the main question prompt or problem statement..."
+                        value={form.text}
+                        onChange={(e) => setForm({ ...form, text: e.target.value })}
+                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400 resize-none"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                        Media Attachment
-                      </label>
-                      <select
-                        value={form.mediaType}
-                        onChange={(e) => setForm({ ...form, mediaType: e.target.value as Question["mediaType"] })}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400 cursor-pointer"
-                      >
-                        <option value="none">None</option>
-                        <option value="image">Image URL</option>
-                        <option value="audio">Audio URL</option>
-                        <option value="video">Video URL</option>
-                      </select>
-                    </div>
-
-                    {form.mediaType !== "none" && (
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                          {form.mediaType.toUpperCase()} Media URL
+                    {/* 1. MCQ */}
+                    {currentFormat === "mcq" && (
+                      <div className="space-y-3">
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                          Multiple Choice Options (Select correct answer)
                         </label>
-                        <input
-                          type="url"
-                          placeholder="https://example.com/media.png"
-                          value={form.mediaUrl || ""}
-                          onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400"
-                        />
-                      </div>
-                    )}
-                  </div>
 
-                  {/* QUESTION PROMPT */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Question Text Prompt *
-                    </label>
-                    <textarea
-                      rows={3}
-                      placeholder="Enter the main question prompt or problem statement..."
-                      value={form.text}
-                      onChange={(e) => setForm({ ...form, text: e.target.value })}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400 resize-none"
-                    />
-                  </div>
+                        <div className="space-y-2.5">
+                          {(form.mcqOptions || []).map((opt, i) => (
+                            <div key={i} className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setForm({ ...form, mcqCorrect: i })}
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
+                                  form.mcqCorrect === i
+                                    ? "border-sky-500 bg-sky-50 text-sky-600"
+                                    : "border-slate-300"
+                                }`}
+                              >
+                                {form.mcqCorrect === i && (
+                                  <span className="w-2 h-2 rounded-full bg-sky-500" />
+                                )}
+                              </button>
 
-                  {/* 1. MCQ */}
-                  {currentFormat === "mcq" && (
-                    <div className="space-y-3">
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Multiple Choice Options (Select correct answer)
-                      </label>
-                      <div className="space-y-2.5">
-                        {(form.mcqOptions || []).map((opt, i) => (
-                          <div key={i} className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setForm({ ...form, mcqCorrect: i })}
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
-                                form.mcqCorrect === i ? "border-sky-500 bg-sky-50 text-sky-600" : "border-slate-300"
-                              }`}
-                            >
-                              {form.mcqCorrect === i && <span className="w-2 h-2 rounded-full bg-sky-500" />}
-                            </button>
-                            <input
-                              type="text"
-                              value={opt}
-                              onChange={(e) => {
-                                const c = [...(form.mcqOptions || [])];
-                                c[i] = e.target.value;
-                                setForm({ ...form, mcqOptions: c });
-                              }}
-                              className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setForm({ ...form, mcqOptions: (form.mcqOptions || []).filter((_, idx) => idx !== i) })
-                              }
-                              disabled={(form.mcqOptions || []).length <= 2}
-                              className="text-xs text-rose-500 font-semibold hover:underline disabled:opacity-30 cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm({
-                            ...form,
-                            mcqOptions: [
-                              ...(form.mcqOptions || []),
-                              `Option ${String.fromCharCode(65 + (form.mcqOptions || []).length)}`,
-                            ],
-                          })
-                        }
-                        className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
-                      >
-                        + Add Option
-                      </button>
-                    </div>
-                  )}
+                              <input
+                                type="text"
+                                value={opt}
+                                onChange={(e) => {
+                                  const c = [...(form.mcqOptions || [])];
+                                  c[i] = e.target.value;
+                                  setForm({ ...form, mcqOptions: c });
+                                }}
+                                className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
+                              />
 
-                  {/* 2. MULTI SELECT */}
-                  {currentFormat === "multi_select" && (
-                    <div className="space-y-3">
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Checkbox Options (Check all correct answers)
-                      </label>
-                      <div className="space-y-2.5">
-                        {(form.multiOptions || []).map((opt, i) => (
-                          <div key={i} className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={(form.multiCorrect || [])[i] || false}
-                              onChange={(e) => {
-                                const c = [...(form.multiCorrect || [])];
-                                c[i] = e.target.checked;
-                                setForm({ ...form, multiCorrect: c });
-                              }}
-                              className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer"
-                            />
-                            <input
-                              type="text"
-                              value={opt}
-                              onChange={(e) => {
-                                const c = [...(form.multiOptions || [])];
-                                c[i] = e.target.value;
-                                setForm({ ...form, multiOptions: c });
-                              }}
-                              className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setForm({
-                                  ...form,
-                                  multiOptions: (form.multiOptions || []).filter((_, idx) => idx !== i),
-                                  multiCorrect: (form.multiCorrect || []).filter((_, idx) => idx !== i),
-                                });
-                              }}
-                              disabled={(form.multiOptions || []).length <= 2}
-                              className="text-xs text-rose-500 font-semibold hover:underline disabled:opacity-30 cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm({
-                            ...form,
-                            multiOptions: [
-                              ...(form.multiOptions || []),
-                              `Option ${String.fromCharCode(65 + (form.multiOptions || []).length)}`,
-                            ],
-                            multiCorrect: [...(form.multiCorrect || []), false],
-                          })
-                        }
-                        className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
-                      >
-                        + Add Checkbox Option
-                      </button>
-                    </div>
-                  )}
-
-                  {/* 3. TRUE / FALSE */}
-                  {currentFormat === "true_false" && (
-                    <div className="space-y-2">
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Correct Key Answer
-                      </label>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setForm({ ...form, tfCorrect: true })}
-                          className={`px-6 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                            form.tfCorrect ? "bg-sky-50 border-sky-400 text-sky-700 font-bold" : "border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          True
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setForm({ ...form, tfCorrect: false })}
-                          className={`px-6 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                            !form.tfCorrect ? "bg-sky-50 border-sky-400 text-sky-700 font-bold" : "border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          False
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 4. SHORT ANSWER */}
-                  {currentFormat === "short_answer" && (
-                    <div className="space-y-2.5">
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Accepted Answer Variants (Auto-grading)
-                      </label>
-                      {(form.shortAnswers || []).map((ans, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <input
-                            type="text"
-                            placeholder="e.g. CPU, Central Processing Unit"
-                            value={ans}
-                            onChange={(e) => {
-                              const c = [...(form.shortAnswers || [])];
-                              c[i] = e.target.value;
-                              setForm({ ...form, shortAnswers: c });
-                            }}
-                            className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
-                          />
-                          {(form.shortAnswers || []).length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setForm({ ...form, shortAnswers: (form.shortAnswers || []).filter((_, idx) => idx !== i) })
-                              }
-                              className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm({
+                                    ...form,
+                                    mcqOptions: (form.mcqOptions || []).filter((_, idx) => idx !== i),
+                                  })
+                                }
+                                disabled={(form.mcqOptions || []).length <= 2}
+                                className="text-xs text-rose-500 font-semibold hover:underline disabled:opacity-30 cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setForm({ ...form, shortAnswers: [...(form.shortAnswers || []), ""] })}
-                        className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
-                      >
-                        + Add Accepted Answer Variant
-                      </button>
-                    </div>
-                  )}
 
-                  {/* 5. LONG QUESTION (formerly Essay) — the base prompt box above is sufficient */}
-                  {currentFormat === "long_answer" && (
-                    <p className="text-xs text-slate-400 italic">
-                      Students will respond in a free-form long-answer text box. No extra configuration needed.
-                    </p>
-                  )}
-
-                  {/* 6. CODING — simplified to just the prompt box above */}
-                  {currentFormat === "coding" && (
-                    <p className="text-xs text-slate-400 italic">
-                      Students will respond in a free-form code box. No language, starter code, or test cases are configured here.
-                    </p>
-                  )}
-
-                  {/* 7. FILL IN THE BLANK */}
-                  {currentFormat === "fill_blank" && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                          Template Text (mark blanks as [1], [2]... or 1....., 2.....)
-                        </label>
-                        <input
-                          type="text"
-                          value={form.blanksText || ""}
-                          onChange={(e) => setForm({ ...form, blanksText: e.target.value })}
-                          placeholder="e.g. The capital of France is [1]."
-                          className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                          Answer Key
-                        </label>
-                        {(form.answerKey || []).map((row, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={row.number}
-                              onChange={(e) => {
-                                const c = [...(form.answerKey || [])];
-                                c[i] = { ...c[i], number: e.target.value };
-                                setForm({ ...form, answerKey: c });
-                              }}
-                              className="w-14 border border-slate-200 rounded-xl px-2 py-2 text-xs text-center font-bold text-navy-900 outline-none focus:border-sky-400"
-                            />
-                            <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <input
-                              type="text"
-                              placeholder="Answer"
-                              value={row.answer}
-                              onChange={(e) => {
-                                const c = [...(form.answerKey || [])];
-                                c[i] = { ...c[i], answer: e.target.value };
-                                setForm({ ...form, answerKey: c });
-                              }}
-                              className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setForm({ ...form, answerKey: (form.answerKey || []).filter((_, idx) => idx !== i) })}
-                              className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ))}
                         <button
                           type="button"
                           onClick={() =>
                             setForm({
                               ...form,
-                              answerKey: [
-                                ...(form.answerKey || []),
-                                { number: String((form.answerKey || []).length + 1), answer: "" },
+                              mcqOptions: [
+                                ...(form.mcqOptions || []),
+                                `Option ${String.fromCharCode(65 + (form.mcqOptions || []).length)}`,
                               ],
                             })
                           }
                           className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                         >
-                          + Add Row
+                          + Add Option
                         </button>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* 8. MATCHING PAIRS */}
-                  {currentFormat === "matching" && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                            Left Items (numbered)
-                          </label>
-                          {(form.matchLeft || []).map((item, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-navy-900 w-5">{i + 1}.</span>
-                              <input
-                                type="text"
-                                value={item}
-                                onChange={(e) => {
-                                  const c = [...(form.matchLeft || [])];
-                                  c[i] = e.target.value;
-                                  setForm({ ...form, matchLeft: c });
-                                }}
-                                className="grow border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-navy-900 outline-none focus:border-sky-400"
-                              />
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => setForm({ ...form, matchLeft: [...(form.matchLeft || []), ""] })}
-                            className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
-                          >
-                            + Add Item
-                          </button>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                            Right Items (lettered)
-                          </label>
-                          {(form.matchRight || []).map((item, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-navy-900 w-5">
-                                {String.fromCharCode(65 + i)}.
-                              </span>
-                              <input
-                                type="text"
-                                value={item}
-                                onChange={(e) => {
-                                  const c = [...(form.matchRight || [])];
-                                  c[i] = e.target.value;
-                                  setForm({ ...form, matchRight: c });
-                                }}
-                                className="grow border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-navy-900 outline-none focus:border-sky-400"
-                              />
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => setForm({ ...form, matchRight: [...(form.matchRight || []), ""] })}
-                            className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
-                          >
-                            + Add Item
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
+                    {/* 2. MULTI SELECT */}
+                    {currentFormat === "multi_select" && (
+                      <div className="space-y-3">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                          Correct Mapping (e.g. 1 → C)
+                          Checkbox Options (Check all correct answers)
                         </label>
-                        {(form.matchAnswers || []).map((row, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <select
-                              value={row.left}
-                              onChange={(e) => {
-                                const c = [...(form.matchAnswers || [])];
-                                c[i] = { ...c[i], left: e.target.value };
-                                setForm({ ...form, matchAnswers: c });
-                              }}
-                              className="border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold text-navy-900 outline-none focus:border-sky-400 cursor-pointer"
-                            >
-                              {(form.matchLeft || []).map((_, idx) => (
-                                <option key={idx} value={String(idx + 1)}>
-                                  {idx + 1}
-                                </option>
-                              ))}
-                            </select>
-                            <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <select
-                              value={row.right}
-                              onChange={(e) => {
-                                const c = [...(form.matchAnswers || [])];
-                                c[i] = { ...c[i], right: e.target.value };
-                                setForm({ ...form, matchAnswers: c });
-                              }}
-                              className="border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold text-navy-900 outline-none focus:border-sky-400 cursor-pointer"
-                            >
-                              {(form.matchRight || []).map((_, idx) => (
-                                <option key={idx} value={String.fromCharCode(65 + idx)}>
-                                  {String.fromCharCode(65 + idx)}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setForm({ ...form, matchAnswers: (form.matchAnswers || []).filter((_, idx) => idx !== i) })
-                              }
-                              className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ))}
+
+                        <div className="space-y-2.5">
+                          {(form.multiOptions || []).map((opt, i) => (
+                            <div key={i} className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={(form.multiCorrect || [])[i] || false}
+                                onChange={(e) => {
+                                  const c = [...(form.multiCorrect || [])];
+                                  c[i] = e.target.checked;
+                                  setForm({ ...form, multiCorrect: c });
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer"
+                              />
+
+                              <input
+                                type="text"
+                                value={opt}
+                                onChange={(e) => {
+                                  const c = [...(form.multiOptions || [])];
+                                  c[i] = e.target.value;
+                                  setForm({ ...form, multiOptions: c });
+                                }}
+                                className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setForm({
+                                    ...form,
+                                    multiOptions: (form.multiOptions || []).filter((_, idx) => idx !== i),
+                                    multiCorrect: (form.multiCorrect || []).filter((_, idx) => idx !== i),
+                                  });
+                                }}
+                                disabled={(form.multiOptions || []).length <= 2}
+                                className="text-xs text-rose-500 font-semibold hover:underline disabled:opacity-30 cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
                         <button
                           type="button"
                           onClick={() =>
                             setForm({
                               ...form,
-                              matchAnswers: [...(form.matchAnswers || []), { left: "1", right: "A" }],
+                              multiOptions: [
+                                ...(form.multiOptions || []),
+                                `Option ${String.fromCharCode(65 + (form.multiOptions || []).length)}`,
+                              ],
+                              multiCorrect: [...(form.multiCorrect || []), false],
                             })
                           }
-                          className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
+                          className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                         >
-                          + Add Mapping Row
+                          + Add Checkbox Option
                         </button>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* 9. ORDERING */}
-                  {currentFormat === "ordering" && (
-                    <div className="space-y-2.5">
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Target Sequence Order (Top to Bottom)
-                      </label>
-                      {(form.orderingItems || []).map((item, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-navy-900">{i + 1}.</span>
+                    {/* 3. TRUE / FALSE */}
+                    {currentFormat === "true_false" && (
+                      <div className="space-y-2">
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                          Correct Key Answer
+                        </label>
+
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setForm({ ...form, tfCorrect: true })}
+                            className={`px-6 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              form.tfCorrect
+                                ? "bg-sky-50 border-sky-400 text-sky-700 font-bold"
+                                : "border-slate-200 text-slate-600"
+                            }`}
+                          >
+                            True
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setForm({ ...form, tfCorrect: false })}
+                            className={`px-6 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              !form.tfCorrect
+                                ? "bg-sky-50 border-sky-400 text-sky-700 font-bold"
+                                : "border-slate-200 text-slate-600"
+                            }`}
+                          >
+                            False
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. SHORT ANSWER */}
+                    {currentFormat === "short_answer" && (
+                      <div className="space-y-2.5">
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                          Accepted Answer Variants (Auto-grading)
+                        </label>
+
+                        {(form.shortAnswers || []).map((ans, i) => (
+                          <div key={i} className="flex items-center gap-3">
+                            <input
+                              type="text"
+                              placeholder="e.g. CPU, Central Processing Unit"
+                              value={ans}
+                              onChange={(e) => {
+                                const c = [...(form.shortAnswers || [])];
+                                c[i] = e.target.value;
+                                setForm({ ...form, shortAnswers: c });
+                              }}
+                              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
+                            />
+
+                            {(form.shortAnswers || []).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm({
+                                    ...form,
+                                    shortAnswers: (form.shortAnswers || []).filter((_, idx) => idx !== i),
+                                  })
+                                }
+                                className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, shortAnswers: [...(form.shortAnswers || []), ""] })}
+                          className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
+                        >
+                          + Add Accepted Answer Variant
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 5. LONG QUESTION */}
+                    {currentFormat === "long_answer" && (
+                      <p className="text-xs text-slate-400 italic">
+                        Students will respond in a free-form long-answer text box. No extra configuration needed.
+                      </p>
+                    )}
+
+                    {/* 6. CODING */}
+                    {currentFormat === "coding" && (
+                      <p className="text-xs text-slate-400 italic">
+                        Students will respond in a free-form code box. No language, starter code, or test cases are configured here.
+                      </p>
+                    )}
+
+                    {/* 7. FILL IN THE BLANK */}
+                    {currentFormat === "fill_blank" && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Template Text (mark blanks as [1], [2]... or 1....., 2.....)
+                          </label>
                           <input
                             type="text"
-                            value={item}
-                            onChange={(e) => {
-                              const c = [...(form.orderingItems || [])];
-                              c[i] = e.target.value;
-                              setForm({ ...form, orderingItems: c });
-                            }}
+                            value={form.blanksText || ""}
+                            onChange={(e) => setForm({ ...form, blanksText: e.target.value })}
+                            placeholder="e.g. The capital of France is [1]."
                             className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
                           />
                         </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm({ ...form, orderingItems: [...(form.orderingItems || []), `Step ${(form.orderingItems || []).length + 1}`] })
-                        }
-                        className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
-                      >
-                        + Add Sequence Item
-                      </button>
-                    </div>
-                  )}
 
-                  {/* NEXT QUESTION / ADD SECTION CONTROLS */}
-                  <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
-                    <Button variant="outline" onClick={handleNextQuestion}>
-                      <Plus className="w-4 h-4" />
-                      {editingQuestionId ? "Save & Next Question" : "Next Question"}
-                    </Button>
-                    <Button onClick={handleAddSection}>
-                      <Check className="w-4 h-4" />
-                      Add Section
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                        <div className="space-y-2">
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Answer Key
+                          </label>
+
+                          {(form.answerKey || []).map((row, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={row.number}
+                                onChange={(e) => {
+                                  const c = [...(form.answerKey || [])];
+                                  c[i] = { ...c[i], number: e.target.value };
+                                  setForm({ ...form, answerKey: c });
+                                }}
+                                className="w-14 border border-slate-200 rounded-xl px-2 py-2 text-xs text-center font-bold text-navy-900 outline-none focus:border-sky-400"
+                              />
+
+                              <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+
+                              <input
+                                type="text"
+                                placeholder="Answer"
+                                value={row.answer}
+                                onChange={(e) => {
+                                  const c = [...(form.answerKey || [])];
+                                  c[i] = { ...c[i], answer: e.target.value };
+                                  setForm({ ...form, answerKey: c });
+                                }}
+                                className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm({
+                                    ...form,
+                                    answerKey: (form.answerKey || []).filter((_, idx) => idx !== i),
+                                  })
+                                }
+                                className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                answerKey: [
+                                  ...(form.answerKey || []),
+                                  { number: String((form.answerKey || []).length + 1), answer: "" },
+                                ],
+                              })
+                            }
+                            className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
+                          >
+                            + Add Row
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 8. MATCHING PAIRS */}
+                    {currentFormat === "matching" && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                              Left Items (numbered)
+                            </label>
+
+                            {(form.matchLeft || []).map((item, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-navy-900 w-5">{i + 1}.</span>
+                                <input
+                                  type="text"
+                                  value={item}
+                                  onChange={(e) => {
+                                    const c = [...(form.matchLeft || [])];
+                                    c[i] = e.target.value;
+                                    setForm({ ...form, matchLeft: c });
+                                  }}
+                                  className="grow border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-navy-900 outline-none focus:border-sky-400"
+                                />
+                              </div>
+                            ))}
+
+                            <button
+                              type="button"
+                              onClick={() => setForm({ ...form, matchLeft: [...(form.matchLeft || []), ""] })}
+                              className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
+                            >
+                              + Add Item
+                            </button>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                              Right Items (lettered)
+                            </label>
+
+                            {(form.matchRight || []).map((item, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-navy-900 w-5">
+                                  {String.fromCharCode(65 + i)}.
+                                </span>
+                                <input
+                                  type="text"
+                                  value={item}
+                                  onChange={(e) => {
+                                    const c = [...(form.matchRight || [])];
+                                    c[i] = e.target.value;
+                                    setForm({ ...form, matchRight: c });
+                                  }}
+                                  className="grow border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-navy-900 outline-none focus:border-sky-400"
+                                />
+                              </div>
+                            ))}
+
+                            <button
+                              type="button"
+                              onClick={() => setForm({ ...form, matchRight: [...(form.matchRight || []), ""] })}
+                              className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
+                            >
+                              + Add Item
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Correct Mapping (e.g. 1 → C)
+                          </label>
+
+                          {(form.matchAnswers || []).map((row, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <select
+                                value={row.left}
+                                onChange={(e) => {
+                                  const c = [...(form.matchAnswers || [])];
+                                  c[i] = { ...c[i], left: e.target.value };
+                                  setForm({ ...form, matchAnswers: c });
+                                }}
+                                className="border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold text-navy-900 outline-none focus:border-sky-400 cursor-pointer"
+                              >
+                                {(form.matchLeft || []).map((_, idx) => (
+                                  <option key={idx} value={String(idx + 1)}>
+                                    {idx + 1}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+
+                              <select
+                                value={row.right}
+                                onChange={(e) => {
+                                  const c = [...(form.matchAnswers || [])];
+                                  c[i] = { ...c[i], right: e.target.value };
+                                  setForm({ ...form, matchAnswers: c });
+                                }}
+                                className="border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold text-navy-900 outline-none focus:border-sky-400 cursor-pointer"
+                              >
+                                {(form.matchRight || []).map((_, idx) => (
+                                  <option key={idx} value={String.fromCharCode(65 + idx)}>
+                                    {String.fromCharCode(65 + idx)}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm({
+                                    ...form,
+                                    matchAnswers: (form.matchAnswers || []).filter((_, idx) => idx !== i),
+                                  })
+                                }
+                                className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                matchAnswers: [...(form.matchAnswers || []), { left: "1", right: "A" }],
+                              })
+                            }
+                            className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
+                          >
+                            + Add Mapping Row
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 9. ORDERING */}
+                    {currentFormat === "ordering" && (
+                      <div className="space-y-2.5">
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                          Target Sequence Order (Top to Bottom)
+                        </label>
+
+                        {(form.orderingItems || []).map((item, i) => (
+                          <div key={i} className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-navy-900">{i + 1}.</span>
+                            <input
+                              type="text"
+                              value={item}
+                              onChange={(e) => {
+                                const c = [...(form.orderingItems || [])];
+                                c[i] = e.target.value;
+                                setForm({ ...form, orderingItems: c });
+                              }}
+                              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
+                            />
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              orderingItems: [
+                                ...(form.orderingItems || []),
+                                `Step ${(form.orderingItems || []).length + 1}`,
+                              ],
+                            })
+                          }
+                          className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
+                        >
+                          + Add Sequence Item
+                        </button>
+                      </div>
+                    )}
+
+                    {/* NEXT QUESTION / ADD SECTION CONTROLS */}
+                    <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                      {editingQuestionId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => openCancelConfirmation("question")}
+                          className="mr-auto bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+                        >
+                          Cancel Edit
+                        </Button>
+                      )}
+
+                      <Button variant="outline" onClick={handleNextQuestion}>
+                        <Plus className="w-4 h-4" />
+                        {editingQuestionId ? "Save & Next Question" : "Next Question"}
+                      </Button>
+
+                      <Button onClick={handleAddSection}>
+                        <Check className="w-4 h-4" />
+                        Add Section
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             )}
 
             {/* STAGED QUESTIONS FOR THE ACTIVE SECTION */}
@@ -1174,6 +1376,7 @@ function ExamBuilderContent() {
                   <h2 className="text-xs font-bold text-navy-900 uppercase tracking-wider">
                     Staged Questions ({stagedQuestions.length}) — will be saved when you click &ldquo;Add Section&rdquo;
                   </h2>
+
                   {stagedQuestions.map((q, idx) => (
                     <div
                       key={q.id}
@@ -1183,20 +1386,28 @@ function ExamBuilderContent() {
                         <span className="text-xs font-bold text-navy-900 mr-1.5">Q{idx + 1}.</span>
                         <span className="text-xs font-medium text-slate-800">{q.text}</span>
                       </div>
+
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="info">{q.marks} pts</Badge>
+
                         <button
                           onClick={() => handleEditQuestion(q, "staged")}
                           className="text-slate-500 hover:text-navy-900 cursor-pointer"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
+
                         <button
-                          onClick={() => handleDeleteStaged(q.id)}
-                          className="text-rose-500 hover:text-rose-700 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+  onClick={() =>
+    openDeleteConfirmation({
+      source: "staged",
+      questionId: q.id,
+    })
+  }
+  className="text-rose-500 hover:text-rose-700 cursor-pointer"
+>
+  <Trash2 className="w-3.5 h-3.5" />
+</button>
                       </div>
                     </div>
                   ))}
@@ -1212,7 +1423,12 @@ function ExamBuilderContent() {
                     Saved Questions ({parts.reduce((acc, p) => acc + p.questions.length, 0)})
                   </h2>
                   <Badge variant="neutral">
-                    Total Marks: {parts.reduce((acc, p) => acc + p.questions.reduce((qAcc, q) => qAcc + q.marks, 0), 0)} pts
+                    Total Marks:{" "}
+                    {parts.reduce(
+                      (acc, p) => acc + p.questions.reduce((qAcc, q) => qAcc + q.marks, 0),
+                      0
+                    )}{" "}
+                    pts
                   </Badge>
                 </div>
 
@@ -1225,13 +1441,20 @@ function ExamBuilderContent() {
                     {parts
                       .filter((part) => part.questions.length > 0)
                       .map((part) => (
-                        <div key={part.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                        <div
+                          key={part.id}
+                          className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3"
+                        >
                           <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
                             <div className="flex items-center gap-2">
                               <Badge>{part.title}</Badge>
-                              <Badge variant="neutral">{QUESTION_TYPE_LABELS[part.allowedType]}</Badge>
+                              <Badge variant="neutral">
+                                {QUESTION_TYPE_LABELS[part.allowedType]}
+                              </Badge>
                             </div>
-                            <span className="text-xs font-medium text-slate-500">{part.questions.length} items</span>
+                            <span className="text-xs font-medium text-slate-500">
+                              {part.questions.length} items
+                            </span>
                           </div>
 
                           <div className="space-y-2.5 pt-0.5">
@@ -1241,11 +1464,15 @@ function ExamBuilderContent() {
                                 className="bg-white p-3.5 rounded-xl border border-slate-200 flex justify-between items-center gap-4"
                               >
                                 <div>
-                                  <span className="text-xs font-bold text-navy-900 mr-1.5">Q{idx + 1}.</span>
+                                  <span className="text-xs font-bold text-navy-900 mr-1.5">
+                                    Q{idx + 1}.
+                                  </span>
                                   <span className="text-xs font-medium text-slate-800">{q.text}</span>
                                 </div>
+
                                 <div className="flex items-center gap-3 shrink-0">
                                   <Badge variant="info">{q.marks} pts</Badge>
+
                                   <button
                                     onClick={() => {
                                       setActivePartId(part.id);
@@ -1255,12 +1482,19 @@ function ExamBuilderContent() {
                                   >
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
+
                                   <button
-                                    onClick={() => handleDeleteQuestion(part.id, q.id)}
-                                    className="text-rose-500 hover:text-rose-700 cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+  onClick={() =>
+    openDeleteConfirmation({
+      source: "part",
+      partId: part.id,
+      questionId: q.id,
+    })
+  }
+  className="text-rose-500 hover:text-rose-700 cursor-pointer"
+>
+  <Trash2 className="w-3.5 h-3.5" />
+</button>
                                 </div>
                               </div>
                             ))}
@@ -1275,6 +1509,7 @@ function ExamBuilderContent() {
                   <Button variant="outline" onClick={() => setStep(1)} className="mr-auto">
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to Parameters
                   </Button>
+
                   <Button onClick={handleSaveExam}>{editId ? "Update Exam" : "Save Exam"}</Button>
                 </div>
               </CardContent>
@@ -1283,25 +1518,132 @@ function ExamBuilderContent() {
         )}
       </main>
 
+      {/* CANCEL / DISCARD CONFIRMATION MODAL */}
+<Dialog open={cancelConfirm.open} onClose={closeCancelConfirmation}>
+  <DialogHeader
+    title={
+      cancelConfirm.target === "question"
+        ? "Cancel editing this question?"
+        : "Discard exam changes?"
+    }
+    onClose={closeCancelConfirmation}
+  />
+
+  <div className="px-6 py-5 space-y-5">
+    <div className="flex items-start gap-3 rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
+      <div className="w-10 h-10 rounded-xl bg-white border border-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+        <AlertTriangle className="w-5 h-5" />
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-sm font-bold text-navy-900">
+          {cancelConfirm.target === "question"
+            ? "You have unsaved question changes."
+            : "You have unsaved exam changes."}
+        </p>
+
+        <p className="text-xs leading-5 text-slate-500 font-medium">
+          {cancelConfirm.target === "question"
+            ? "If you discard, the original question will be kept and your current edits will be removed."
+            : "If you discard, the original exam will remain unchanged and you will return to the exams page."}
+        </p>
+      </div>
+    </div>
+
+    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={closeCancelConfirmation}
+        className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+      >
+        Keep editing
+      </Button>
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleDiscardConfirmed}
+        className="bg-white border-rose-300 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+      >
+        Discard
+      </Button>
+    </div>
+  </div>
+</Dialog>
+{/* DELETE QUESTION CONFIRMATION MODAL */}
+<Dialog open={!!deleteConfirm} onClose={closeDeleteConfirmation}>
+  <DialogHeader
+    title="Delete this question?"
+    onClose={closeDeleteConfirmation}
+  />
+
+  <div className="px-6 py-5 space-y-5">
+    <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
+      <div className="w-10 h-10 rounded-xl bg-white border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+        <Trash2 className="w-5 h-5" />
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-sm font-bold text-navy-900">
+          This question will be removed.
+        </p>
+
+        <p className="text-xs leading-5 text-slate-500 font-medium">
+          This action cannot be undone.
+        </p>
+      </div>
+    </div>
+
+    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={closeDeleteConfirmation}
+        className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+      >
+        Cancel
+      </Button>
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleConfirmDeleteQuestion}
+        className="bg-white border-rose-300 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+      >
+        Delete Question
+      </Button>
+    </div>
+  </div>
+</Dialog>
       {/* LAUNCHED SUCCESS MODAL */}
       <Dialog open={isLaunched} onClose={() => setIsLaunched(false)}>
         <DialogHeader title="Exam Saved" onClose={() => setIsLaunched(false)} />
+
         <div className="px-6 py-5 text-center space-y-5">
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto border border-emerald-200">
             <CheckCircle2 className="w-6 h-6" />
           </div>
+
           <p className="text-xs text-slate-500 -mt-2 font-medium">
             Provide this access code to students when you&apos;re ready to launch.
           </p>
 
           <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-5 rounded-2xl flex flex-col items-center justify-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Access Code</span>
-            <span className="text-3xl font-extrabold font-mono tracking-widest text-navy-900">{accessCode}</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              Access Code
+            </span>
+            <span className="text-3xl font-extrabold font-mono tracking-widest text-navy-900">
+              {accessCode}
+            </span>
+
             <button
               type="button"
               onClick={handleCopyCode}
               className={`mt-1 text-xs font-semibold px-4 py-2 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
-                isCopied ? "bg-emerald-600 text-white" : "bg-white border border-slate-200 text-navy-900 hover:bg-slate-100"
+                isCopied
+                  ? "bg-emerald-600 text-white"
+                  : "bg-white border border-slate-200 text-navy-900 hover:bg-slate-100"
               }`}
             >
               {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1312,9 +1654,9 @@ function ExamBuilderContent() {
           <Button
             className="w-full"
             onClick={() => {
-              setIsLaunched(false);
-              router.push("/teacher-exams");
-            }}
+  setIsLaunched(false);
+  router.push("/teacher-exams");
+}}
           >
             Done & View All Exams
           </Button>
@@ -1326,7 +1668,13 @@ function ExamBuilderContent() {
 
 export default function CreateExamPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-slate-500 font-semibold text-center text-xs">Loading Exam Builder...</div>}>
+    <Suspense
+      fallback={
+        <div className="p-8 text-slate-500 font-semibold text-center text-xs">
+          Loading Exam Builder...
+        </div>
+      }
+    >
       <ExamBuilderContent />
     </Suspense>
   );
