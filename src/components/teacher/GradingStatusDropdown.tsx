@@ -21,7 +21,7 @@ export function GradingStatusDropdown({
     <DropdownMenu
       align="left"
       trigger={
-        <button className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white pl-1 pr-3 py-1 hover:bg-slate-50 transition-colors">
+        <button className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-300 bg-white pl-1 pr-3 py-1 hover:bg-slate-50 transition-colors">
           <Badge variant={current.variant}>{current.label}</Badge>
           <ChevronDown size={14} className="text-slate-400" />
         </button>

@@ -6,9 +6,8 @@ import { ArrowLeft, Check, Download } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useExamStore, GradedAnswer, GradingStatus } from "@/store/useExamStore";
+import { useExamStore, GradedAnswer } from "@/store/useExamStore";
 import { scoreSummary, effectiveGradingStatus } from "@/lib/grading-utils";
-import { GradingStatusDropdown } from "@/components/teacher/GradingStatusDropdown";
 
 type Html2PdfInstance = {
   set: (options: Record<string, unknown>) => {
@@ -25,7 +24,6 @@ export default function GradeStudentPage() {
 
   const exams = useExamStore((s) => s.exams);
   const saveManualGrades = useExamStore((s) => s.saveManualGrades);
-  const setGradingStatus = useExamStore((s) => s.setGradingStatus);
   const currentExam = exams.find((e) => e.id === examId) || null;
   const request = currentExam?.requests.find((r) => r.id === requestId) || null;
 
@@ -166,10 +164,6 @@ export default function GradeStudentPage() {
             <ArrowLeft size={15} /> Back to roster
           </button>
           <div className="flex items-center gap-2">
-            <GradingStatusDropdown
-              status={gradingStatus}
-              onChange={(status: GradingStatus) => setGradingStatus(examId, requestId, status)}
-            />
             <Button variant="outline" size="sm" disabled={isExporting} onClick={handleDownloadPDF}>
               <Download size={13} />
               {isExporting ? "Exporting..." : "Download PDF"}

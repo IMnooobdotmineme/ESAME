@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { getDepartmentCode } from "@/lib/department-utils";
 
+/** DEV/TESTING ONLY: when true, every room code auto-approves join requests
+ * (like DEMO123 already did), so you can test the full join → waiting-room →
+ * exam flow solo without a second "teacher" tab approving anyone.
+ * Set back to false before shipping. */
+const DEMO_MODE_AUTO_APPROVE = true;
+
 export type GradingStatus = "in-progress" | "complete";
 
 export interface GradedAnswer {
@@ -95,6 +101,7 @@ interface ExamStore {
   pauseExam: (roomCode: string) => void;
   resumeExam: (roomCode: string) => void;
   flagTabSwitch: (roomCode: string, requestId: string) => void;
+  submitViolationMessage: (roomCode: string, requestId: string, message: string) => void;
   grantContinue: (roomCode: string, requestId: string) => void;
   rejectLiveStudent: (roomCode: string, requestId: string) => void;
   reinstateLiveStudent: (roomCode: string, requestId: string) => void;
@@ -478,9 +485,13 @@ export const useExamStore = create<ExamStore>((set, get) => ({
       id: newRequestId,
       name: studentName,
       studentId: `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      // DEMO123 auto-approves so the join → waiting-room → exam flow can be
-      // tested end-to-end without needing a second "teacher" tab open.
-      status: targetExam.roomCode.toUpperCase() === "DEMO123" ? "approved" : "pending",
+      // DEMO123 (and, while DEMO_MODE_AUTO_APPROVE is on, every room) auto-approves
+      // so the join → waiting-room → exam flow can be tested end-to-end without
+      // needing a second "teacher" tab open.
+      status:
+        DEMO_MODE_AUTO_APPROVE || targetExam.roomCode.toUpperCase() === "DEMO123"
+          ? "approved"
+          : "pending",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       currentQuestion: 1,
       tabSwitches: 0,
@@ -619,6 +630,20 @@ export const useExamStore = create<ExamStore>((set, get) => ({
                   }),
                 }
               : req
+          ),
+        };
+      }),
+    }));
+  },
+
+  submitViolationMessage: (roomCode, requestId, message) => {
+    set((state) => ({
+      exams: state.exams.map((exam) => {
+        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
+        return {
+          ...exam,
+          requests: exam.requests.map((req) =>
+            req.id === requestId ? { ...req, violationMessage: message } : req
           ),
         };
       }),

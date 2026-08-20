@@ -6,12 +6,12 @@ export const PASS_THRESHOLD = 50; // percent
  * The grading status to treat a submission as, even if the teacher hasn't
  * explicitly set one yet: submissions with nothing left needing manual
  * grading default to "complete", everything else defaults to "in-progress".
- * An explicit teacher-set status always wins.
+ * A submission with no remaining manual questions is always complete.
  */
 export function effectiveGradingStatus(req: StudentRequest): GradingStatus {
-  if (req.gradingStatus) return req.gradingStatus;
   const needsReview = (req.answers || []).some((a) => a.needsManualGrading);
-  return needsReview ? "in-progress" : "complete";
+  if (!needsReview) return "complete";
+  return req.gradingStatus ?? "in-progress";
 }
 
 export function gradingStatusMeta(

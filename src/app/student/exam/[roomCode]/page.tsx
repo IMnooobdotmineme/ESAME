@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Clock, AlertTriangle } from "lucide-react";
+import { Clock, AlertTriangle, Check } from "lucide-react";
 import { useExamStore } from "@/store/useExamStore";
 import { ExamQuestionCard } from "@/components/student/ExamQuestionCard";
 import {
@@ -17,6 +17,10 @@ interface StudentSession {
   requestId: string;
   submittedAt: string;
 }
+
+// Student may only type a short note explaining the tab switch — enough to
+// give context, short enough to keep the teacher's review queue fast.
+const VIOLATION_MESSAGE_MAX_CHARS = 200;
 
 function formatTime(totalSeconds: number) {
   const s = Math.max(0, totalSeconds);
@@ -35,6 +39,7 @@ export default function StudentExamPage() {
 
   const exams = useExamStore((state) => state.exams);
   const flagTabSwitch = useExamStore((state) => state.flagTabSwitch);
+  const submitViolationMessage = useExamStore((state) => state.submitViolationMessage);
   const currentExam = exams.find((e) => e.roomCode.toUpperCase() === roomCode);
 
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
@@ -43,10 +48,12 @@ export default function StudentExamPage() {
 
   const [examContent] = useState(() => getMockExamContent());
   const [sectionIndex, setSectionIndex] = useState(0);
-  const [pageIndex, setPageIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [violationMessage, setViolationMessageInput] = useState("");
+  const [violationMessageSent, setViolationMessageSent] = useState(false);
 
   // Load the student's own session to know which request is theirs
   useEffect(() => {
@@ -94,6 +101,21 @@ export default function StudentExamPage() {
   const myRequest = currentExam?.requests.find((r) => r.id === requestId);
   const isLocked = Boolean(myRequest?.isLocked);
 
+  // Reset the violation message form each time a fresh lock event happens
+  useEffect(() => {
+    if (isLocked) {
+      setViolationMessageInput("");
+      setViolationMessageSent(false);
+    }
+  }, [isLocked, myRequest?.lastLockedAt]);
+
+  function handleSendViolationMessage() {
+    const trimmed = violationMessage.trim();
+    if (!trimmed || !requestId) return;
+    submitViolationMessage(roomCode, requestId, trimmed);
+    setViolationMessageSent(true);
+  }
+
   // Start the countdown once authorized
   useEffect(() => {
     if (isAuthorized && currentExam && secondsRemaining === null) {
@@ -137,14 +159,14 @@ export default function StudentExamPage() {
   }, [answers]);
 
   const section = examContent.sections[sectionIndex];
-  const page = section?.pages[pageIndex];
-
-  const sectionQuestionIds = useMemo(
-    () => (section ? section.pages.flatMap((p) => p.questions.map((q) => q.id)) : []),
+  // Each section renders as a single scrollable page — no per-section pagination.
+  const sectionQuestions = useMemo(
+    () => (section ? section.pages.flatMap((p) => p.questions) : []),
     [section]
   );
-  const answeredInSection = sectionQuestionIds.filter(
-    (id) => answers[id] !== undefined && answers[id] !== ""
+
+  const answeredInSection = sectionQuestions.filter(
+    (q) => answers[q.id] !== undefined && answers[q.id] !== ""
   ).length;
 
   const isLastSection = sectionIndex === examContent.sections.length - 1;
@@ -161,13 +183,13 @@ export default function StudentExamPage() {
       if (confirmed) handleSubmit();
     } else {
       setSectionIndex((i) => i + 1);
-      setPageIndex(0);
     }
   }
 
-  function isPageComplete(pageQuestionIds: string[]) {
-    return pageQuestionIds.every(
-      (id) => answers[id] !== undefined && answers[id] !== ""
+  function isSectionComplete(questions: typeof sectionQuestions) {
+    return (
+      questions.length > 0 &&
+      questions.every((q) => answers[q.id] !== undefined && answers[q.id] !== "")
     );
   }
 
@@ -201,7 +223,7 @@ export default function StudentExamPage() {
     );
   }
 
-  if (!page || secondsRemaining === null) return null;
+  if (!section || secondsRemaining === null) return null;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -217,16 +239,48 @@ export default function StudentExamPage() {
               We detected you switched away from this tab. Your exam has been
               paused and flagged for your teacher.
             </p>
+
+            {violationMessageSent ? (
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs font-medium text-amber-700">
+                  Message sent — waiting for teacher approval...
+                </span>
+              </div>
+            ) : (
+              <div className="text-left space-y-1.5 pt-1">
+                <label className="text-xs font-semibold text-slate-600">
+                  Explain what happened (optional)
+                </label>
+                <textarea
+                  value={violationMessage}
+                  onChange={(e) =>
+                    setViolationMessageInput(e.target.value.slice(0, VIOLATION_MESSAGE_MAX_CHARS))
+                  }
+                  maxLength={VIOLATION_MESSAGE_MAX_CHARS}
+                  rows={3}
+                  placeholder="e.g. My notification popped up and I clicked it by accident..."
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 resize-none"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">
+                    {violationMessage.length}/{VIOLATION_MESSAGE_MAX_CHARS} characters
+                  </span>
+                </div>
+                <button
+                  onClick={handleSendViolationMessage}
+                  disabled={!violationMessage.trim()}
+                  className="w-full py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+                >
+                  Request Permission to Continue
+                </button>
+              </div>
+            )}
+
             <p className="text-xs text-slate-400">
               Stay on this page — you will be able to continue once your teacher
               grants permission.
             </p>
-            <div className="flex items-center justify-center gap-2 pt-2">
-              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-xs font-medium text-amber-700">
-                Waiting for teacher approval...
-              </span>
-            </div>
           </div>
         </div>
       )}
@@ -258,98 +312,92 @@ export default function StudentExamPage() {
         </div>
       </div>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-5">
-        {/* Section tabs — free navigation between sections */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {examContent.sections.map((s, i) => {
-            const isCurrent = i === sectionIndex;
-            const sectionIds = s.pages.flatMap((p) => p.questions.map((q) => q.id));
-            const sectionComplete =
-              sectionIds.length > 0 &&
-              sectionIds.every((id) => answers[id] !== undefined && answers[id] !== "");
-            return (
-              <button
-                key={s.id}
-                onClick={() => {
-                  setSectionIndex(i);
-                  setPageIndex(0);
-                }}
-                className={`shrink-0 px-3.5 py-1.5 rounded-full border text-xs font-semibold transition ${
-                  isCurrent
-                    ? "bg-navy-900 text-white border-navy-900"
-                    : sectionComplete
-                    ? "border-emerald-300 text-emerald-600 bg-white"
-                    : "border-slate-200 text-slate-500 bg-white hover:bg-slate-50"
-                }`}
-              >
-                {i + 1}. {s.title}
-              </button>
-            );
-          })}
-        </div>
+      <main className="max-w-5xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-6">
+        {/* Section sidebar */}
+        <div className="md:w-60 shrink-0">
+          <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-1 md:pb-0 md:sticky md:top-6">
+            {examContent.sections.map((s, i) => {
+              const isCurrent = i === sectionIndex;
+              const sQuestions = s.pages.flatMap((p) => p.questions);
+              const sectionComplete = isSectionComplete(sQuestions);
 
-        <h1 className="text-sm font-bold text-navy-900">
-          Section {sectionIndex + 1} of {examContent.sections.length} — {section.title}
-        </h1>
-
-        {/* Stat boxes */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
-            <p className="text-xs text-slate-400 mb-1">Answered</p>
-            <p className="text-sm font-bold text-navy-900">
-              {answeredInSection}/{sectionQuestionIds.length}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
-            <p className="text-xs text-slate-400 mb-1">Page</p>
-            <p className="text-sm font-bold text-navy-900">
-              {pageIndex + 1} of {section.pages.length}
-            </p>
-          </div>
-        </div>
-
-        {/* Questions */}
-        <div className="space-y-5">
-          {page.questions.map((q) => (
-            <ExamQuestionCard
-              key={q.id}
-              question={q}
-              answer={answers[q.id]}
-              onAnswer={handleAnswer}
-            />
-          ))}
-        </div>
-
-        {/* Bottom nav */}
-        <div className="flex items-center justify-between pt-2">
-          <div className="flex gap-2">
-            {section.pages.map((p, i) => {
-              const complete = isPageComplete(p.questions.map((q) => q.id));
-              const isCurrent = i === pageIndex;
               return (
                 <button
-                  key={p.id}
-                  onClick={() => setPageIndex(i)}
-                  className={`w-9 h-9 rounded-lg border text-sm font-semibold transition ${
+                  key={s.id}
+                  onClick={() => setSectionIndex(i)}
+                  className={`shrink-0 md:w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
                     isCurrent
-                      ? "bg-navy-900 text-white border-navy-900"
-                      : complete
-                      ? "border-emerald-400 text-emerald-600 bg-white"
-                      : "border-slate-200 text-slate-400 bg-white"
+                      ? "bg-navy-900 text-white"
+                      : sectionComplete
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  {i + 1}
+                  <span
+                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono ${
+                      isCurrent
+                        ? "bg-white/15 text-white"
+                        : sectionComplete
+                        ? "bg-emerald-500 text-white"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {sectionComplete ? (
+                      <Check key={`${s.id}-check`} size={14} className="check-pop" />
+                    ) : (
+                      `[${i + 1}]`
+                    )}
+                  </span>
+                  <span className="text-sm font-semibold truncate">{s.title}</span>
                 </button>
               );
             })}
           </div>
+        </div>
 
-          <button
-            onClick={handlePrimaryAction}
-            className="px-6 py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition"
-          >
-            {isLastSection ? "Submit Exam" : "Next Section"}
-          </button>
+        {/* Main content */}
+        <div className="flex-1 min-w-0 space-y-5">
+          <h1 className="text-sm font-bold text-navy-900">
+            Section {sectionIndex + 1} of {examContent.sections.length} — {section.title}
+          </h1>
+
+          {/* Stat boxes */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+              <p className="text-xs text-slate-400 mb-1">Answered</p>
+              <p className="text-sm font-bold text-navy-900">
+                {answeredInSection}/{sectionQuestions.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+              <p className="text-xs text-slate-400 mb-1">Section</p>
+              <p className="text-sm font-bold text-navy-900">
+                [{sectionIndex + 1}] of [{examContent.sections.length}]
+              </p>
+            </div>
+          </div>
+
+          {/* Questions — the whole section scrolls down, no per-section pagination */}
+          <div className="space-y-5">
+            {sectionQuestions.map((q) => (
+              <ExamQuestionCard
+                key={q.id}
+                question={q}
+                answer={answers[q.id]}
+                onAnswer={handleAnswer}
+              />
+            ))}
+          </div>
+
+          {/* Bottom nav */}
+          <div className="flex items-center justify-end pt-2">
+            <button
+              onClick={handlePrimaryAction}
+              className="px-6 py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition"
+            >
+              {isLastSection ? "Submit Exam" : "Next Section"}
+            </button>
+          </div>
         </div>
       </main>
     </div>

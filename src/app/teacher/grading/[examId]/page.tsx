@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useExamStore, StudentRequest, Exam } from "@/store/useExamStore";
-import { examStats, submissionStatus, scoreSummary, effectiveGradingStatus, gradingStatusMeta } from "@/lib/grading-utils";
+import { examStats, submissionStatus, scoreSummary, effectiveGradingStatus } from "@/lib/grading-utils";
 
 type Html2PdfInstance = {
   set: (options: Record<string, unknown>) => {
@@ -108,8 +108,7 @@ export default function GradingDetailPage() {
         const s = scoreSummary(r);
         const rowNumber = 5 + idx;
         const row = sheet.getRow(rowNumber);
-        const resultLabel =
-          effectiveGradingStatus(r) !== "complete" ? "Pending Review" : s.pass ? "Pass" : "Fail";
+        const resultLabel = effectiveGradingStatus(r) !== "complete" ? "Pending" : s.pass ? "Pass" : "Fail";
 
         const values = [r.studentId, r.name, r.submittedAt || "—", `${s.total} / ${s.max}`, s.percentage / 100, resultLabel];
 
@@ -353,9 +352,7 @@ export default function GradingDetailPage() {
                         {!req.isSubmitted ? (
                           <span className="text-slate-300">—</span>
                         ) : effectiveGradingStatus(req) !== "complete" ? (
-                          <Badge variant={gradingStatusMeta(effectiveGradingStatus(req)).variant}>
-                            {gradingStatusMeta(effectiveGradingStatus(req)).label}
-                          </Badge>
+                          <Badge variant="info">Pending</Badge>
                         ) : (
                           <Badge variant={s.pass ? "success" : "danger"}>{s.pass ? "Pass" : "Fail"}</Badge>
                         )}

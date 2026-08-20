@@ -4,26 +4,22 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EsameLogo } from "@/components/organization/EsameLogo";
-import { getMockExamSession } from "@/lib/student-exam-data";
+import { useExamStore } from "@/store/useExamStore";
+import { getMockExamContent, totalQuestionCount, totalMaxScore } from "@/lib/student-exam-content";
 
-function getTimeParts(msRemaining: number) {
-  const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return {
-    hours: String(hours).padStart(2, "0"),
-    minutes: String(minutes).padStart(2, "0"),
-    seconds: String(seconds).padStart(2, "0"),
-  };
+interface StudentSession {
+  studentName: string;
+  studentId: string;
+  roomCode: string;
+  requestId: string;
 }
 
 export default function WaitingRoomPage() {
   const router = useRouter();
-  const [candidateName, setCandidateName] = useState("");
-  const [roomCode, setRoomCode] = useState("");
-  const [session] = useState(() => getMockExamSession());
-  const [msRemaining, setMsRemaining] = useState<number | null>(null);
+  const exams = useExamStore((state) => state.exams);
+
+  const [session, setSession] = useState<StudentSession | null>(null);
+  const [examContent] = useState(() => getMockExamContent());
 
   useEffect(() => {
     const raw = sessionStorage.getItem("esame_student_session");
@@ -31,30 +27,22 @@ export default function WaitingRoomPage() {
       router.replace("/student/join");
       return;
     }
-    const parsed = JSON.parse(raw);
-    setCandidateName(parsed.studentName ?? "");
-    setRoomCode(parsed.roomCode ?? "");
+    setSession(JSON.parse(raw));
   }, [router]);
 
-  useEffect(() => {
-    const target = new Date(session.startAt).getTime();
+  const currentExam = exams.find(
+    (e) => e.roomCode.toUpperCase() === session?.roomCode.toUpperCase()
+  );
 
-    function tick() {
-      setMsRemaining(target - Date.now());
-    }
+  if (!session || !currentExam) return null;
 
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [session.startAt]);
+  const isStarted = Boolean(currentExam.isStarted && !currentExam.isEnded);
+  const questionCount = totalQuestionCount(examContent);
+  const fullScore = totalMaxScore(examContent);
 
-  if (msRemaining === null) return null;
-
-  const isReady = msRemaining <= 0;
-  const { hours, minutes, seconds } = getTimeParts(msRemaining);
-
-  function handleStart() {
-    router.push(`/student/exam/${roomCode}`);
+  function handleJoin() {
+    if (!isStarted) return;
+    router.push(`/student/exam/${session!.roomCode}`);
   }
 
   return (
@@ -65,17 +53,22 @@ export default function WaitingRoomPage() {
       </div>
 
       <main className="max-w-2xl mx-auto px-4 py-10 space-y-5">
-        {/* Countdown */}
+        {/* Status */}
         <div className="text-center">
-          <h1 className="text-sm font-bold tracking-widest text-navy-900 mb-4">
-            {isReady ? "STARTING NOW" : "STARTING IN"}
+          <h1 className="text-sm font-bold tracking-widest text-navy-900 mb-3">
+            {isStarted ? "EXAM IS LIVE" : "WAITING FOR TEACHER TO START"}
           </h1>
-          <div className="flex items-center justify-center gap-3">
-            <TimeBox value={hours} label="HOURS" />
-            <span className="text-2xl font-bold text-slate-300">:</span>
-            <TimeBox value={minutes} label="MINUTES" />
-            <span className="text-2xl font-bold text-slate-300">:</span>
-            <TimeBox value={seconds} label="SECONDS" />
+          <div className="flex items-center justify-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isStarted ? "bg-emerald-500" : "bg-amber-400 animate-pulse"
+              }`}
+            />
+            <p className="text-xs text-slate-500">
+              {isStarted
+                ? "Your teacher has started the exam. You may join now."
+                : "This exam has not been started by your teacher yet. This page will update automatically."}
+            </p>
           </div>
         </div>
 
@@ -85,28 +78,37 @@ export default function WaitingRoomPage() {
             EXAM DETAILS
           </h2>
           <div className="grid grid-cols-2 gap-y-4 text-sm">
+            <div className="col-span-2">
+              <p className="text-slate-400 text-xs mb-1">Exam Name</p>
+              <p className="font-semibold text-navy-900">{currentExam.title}</p>
+            </div>
+            <div>
+              <p className="text-slate-400 text-xs mb-1">Department</p>
+              <p className="font-semibold text-navy-900">{currentExam.department}</p>
+            </div>
+            <div>
+              <p className="text-slate-400 text-xs mb-1">Subject</p>
+              <p className="font-semibold text-navy-900">{currentExam.subject}</p>
+            </div>
             <div>
               <p className="text-slate-400 text-xs mb-1">Candidate</p>
-              <p className="font-semibold text-navy-900">{candidateName || "—"}</p>
+              <p className="font-semibold text-navy-900">{session.studentName || "—"}</p>
             </div>
             <div>
               <p className="text-slate-400 text-xs mb-1">Duration</p>
               <p className="font-semibold text-navy-900">
-                {session.durationMinutes} minutes
+                {currentExam.durationMinutes} minutes
               </p>
             </div>
             <div>
               <p className="text-slate-400 text-xs mb-1">Sections</p>
               <p className="font-semibold text-navy-900">
-                {session.sectionsCount} sections, {session.questionTypesCount} question
-                types
+                {examContent.sections.length} sections, {questionCount} questions
               </p>
             </div>
             <div>
-              <p className="text-slate-400 text-xs mb-1">Attempts</p>
-              <p className="font-semibold text-navy-900">
-                {session.attempts} attempt only
-              </p>
+              <p className="text-slate-400 text-xs mb-1">Full Score</p>
+              <p className="font-semibold text-navy-900">{fullScore} points</p>
             </div>
           </div>
         </div>
@@ -155,28 +157,17 @@ export default function WaitingRoomPage() {
 
         {/* CTA */}
         <button
-          onClick={handleStart}
-          disabled={!isReady}
+          onClick={handleJoin}
+          disabled={!isStarted}
           className={`w-full py-3.5 rounded-full text-sm font-semibold transition ${
-            isReady
+            isStarted
               ? "bg-navy-900 text-white hover:bg-navy-800"
               : "bg-slate-300 text-slate-500 cursor-not-allowed"
           }`}
         >
-          {isReady ? "Start Exam" : "waiting for start time ..."}
+          {isStarted ? "Join the Exam" : "Waiting for teacher to start..."}
         </button>
       </main>
-    </div>
-  );
-}
-
-function TimeBox({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="w-20 rounded-2xl border border-slate-200 bg-white shadow-sm py-3 flex flex-col items-center">
-      <span className="text-2xl font-bold text-navy-900">{value}</span>
-      <span className="text-[10px] tracking-widest text-slate-400 mt-1">
-        {label}
-      </span>
     </div>
   );
 }

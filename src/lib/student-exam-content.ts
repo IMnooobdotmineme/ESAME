@@ -284,6 +284,31 @@ export function getMockExamContent(): MockExamContent {
   };
 }
 
+// Questions without explicit `marks` (mcq, multi_select, true_false,
+// short_answer, fill_blank, matching, ordering) are worth 1 point each.
+function questionPoints(q: ExamQuestion): number {
+  return "marks" in q ? q.marks : 1;
+}
+
+export function totalQuestionCount(exam: MockExamContent): number {
+  return exam.sections.reduce(
+    (sum, s) => sum + s.pages.reduce((pSum, p) => pSum + p.questions.length, 0),
+    0
+  );
+}
+
+export function totalMaxScore(exam: MockExamContent): number {
+  return exam.sections.reduce(
+    (sum, s) =>
+      sum +
+      s.pages.reduce(
+        (pSum, p) => pSum + p.questions.reduce((qSum, q) => qSum + questionPoints(q), 0),
+        0
+      ),
+    0
+  );
+}
+
 export function examHasManualGrading(exam: MockExamContent): boolean {
   return exam.sections.some((section) =>
     section.pages.some((page) =>

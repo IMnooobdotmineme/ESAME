@@ -25,14 +25,14 @@ const TYPE_LABEL: Record<ExamQuestion["type"], string> = {
 const optionButtonClass = (selected: boolean) =>
   `w-full flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm text-left transition ${
     selected
-      ? "border-examblue-400 bg-examblue-50 text-navy-900"
+      ? "border-sky-400 bg-sky-50 text-navy-900"
       : "border-slate-200 text-slate-600 hover:bg-slate-50"
   }`;
 
 export function ExamQuestionCard({ question, answer, onAnswer }: Props) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-      <span className="inline-block rounded-full bg-examblue-50 text-examblue-600 px-3 py-1 text-xs font-bold tracking-wide mb-3">
+      <span className="inline-block rounded-full bg-sky-50 text-sky-700 px-3 py-1 text-xs font-bold tracking-wide mb-3">
         {TYPE_LABEL[question.type]}
       </span>
 
@@ -82,7 +82,7 @@ export function ExamQuestionCard({ question, answer, onAnswer }: Props) {
               >
                 <span
                   className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                    selected ? "bg-examblue-500 border-examblue-500" : "border-slate-300"
+                    selected ? "bg-sky-500 border-sky-500" : "border-slate-300"
                   }`}
                 >
                   {selected && <span className="w-2 h-2 bg-white rounded-sm" />}
@@ -106,7 +106,7 @@ export function ExamQuestionCard({ question, answer, onAnswer }: Props) {
                 onClick={() => onAnswer(question.id, value)}
                 className={`flex-1 rounded-xl border py-2.5 text-sm font-medium transition ${
                   selected
-                    ? "border-examblue-400 bg-examblue-50 text-navy-900"
+                    ? "border-sky-400 bg-sky-50 text-navy-900"
                     : "border-slate-200 text-slate-600 hover:bg-slate-50"
                 }`}
               >

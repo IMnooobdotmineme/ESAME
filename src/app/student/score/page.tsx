@@ -59,8 +59,8 @@ export default function ScorePage() {
         {/* Summary card */}
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-8 flex flex-col items-center text-center">
           {isPending ? (
-            <div className="w-16 h-16 rounded-full bg-examblue-50 flex items-center justify-center">
-              <Clock3 size={30} className="text-examblue-600" />
+            <div className="w-16 h-16 rounded-full bg-sky-50 flex items-center justify-center">
+              <Clock3 size={30} className="text-sky-700" />
             </div>
           ) : (
             <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center">
@@ -119,7 +119,7 @@ export default function ScorePage() {
             </div>
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
               <p className="text-xs text-slate-400 mb-1">Manual Review</p>
-              <p className="text-lg font-bold text-examblue-600">
+              <p className="text-lg font-bold text-sky-700">
                 {score.manualGradeCount}
               </p>
             </div>
