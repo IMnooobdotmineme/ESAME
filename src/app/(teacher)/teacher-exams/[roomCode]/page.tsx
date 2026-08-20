@@ -31,7 +31,7 @@ export default function TeacherExamLobbyPage() {
             <p className="text-sm text-slate-500">
               The exam room code you specified could not be located in the system.
             </p>
-            <Button className="w-full" onClick={() => router.push("/teacher/exams")}>
+            <Button className="w-full" onClick={() => router.push("/teacher-exams")}>
               Back to Exams List
             </Button>
           </Card>
@@ -48,7 +48,7 @@ export default function TeacherExamLobbyPage() {
       alert(result.message || "Could not start this exam.");
       return;
     }
-    router.push("/teacher/monitor");
+    router.push("/monitor");
   };
 
   return (
@@ -59,7 +59,7 @@ export default function TeacherExamLobbyPage() {
         {/* ACTION BAR */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <button
-            onClick={() => router.push("/teacher/exams")}
+            onClick={() => router.push("/teacher-exams")}
             className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-navy-900 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -68,7 +68,7 @@ export default function TeacherExamLobbyPage() {
 
           {exam.isStarted && !exam.isEnded ? (
             <button
-              onClick={() => router.push("/teacher/monitor")}
+              onClick={() => router.push("/monitor")}
               className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

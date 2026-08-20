@@ -195,7 +195,7 @@ export default function MyExamsPage() {
               className="w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400"
             />
           </div>
-          <Button onClick={() => router.push("/teacher/exams/new")}>
+          <Button onClick={() => router.push("/teacher-exams/new")}>
             <Plus size={16} />
             Create New Exam
           </Button>
@@ -232,7 +232,7 @@ export default function MyExamsPage() {
               </p>
               {activeTab === "active" && !examSearch.trim() && (
                 <button
-                  onClick={() => router.push("/teacher/exams/new")}
+                  onClick={() => router.push("/teacher-exams/new")}
                   className="text-xs text-sky-600 font-semibold hover:text-sky-700 transition-colors inline-block cursor-pointer"
                 >
                   Create your first exam
@@ -290,7 +290,7 @@ export default function MyExamsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/teacher/exams/new?edit=${exam.id}`)}
+                      onClick={() => router.push(`/teacher-exams/new?edit=${exam.id}`)}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       Edit Exam
@@ -301,7 +301,7 @@ export default function MyExamsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/teacher/grading/${exam.id}`)}
+                      onClick={() => router.push(`/grading/${exam.id}`)}
                     >
                       <FileText className="w-3.5 h-3.5" />
                       View Details
@@ -313,7 +313,7 @@ export default function MyExamsPage() {
                       size="sm"
                       onClick={() => {
                         launchExam(exam.id);
-                        router.push(`/teacher/exams/${exam.roomCode}`);
+                        router.push(`/teacher-exams/${exam.roomCode}`);
                       }}
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
@@ -327,8 +327,8 @@ export default function MyExamsPage() {
                       onClick={() =>
                         router.push(
                           exam.isStarted
-                            ? "/teacher/monitor"
-                            : `/teacher/exams/${exam.roomCode}`
+                            ? "/monitor"
+                            : `/teacher-exams/${exam.roomCode}`
                         )
                       }
                     >

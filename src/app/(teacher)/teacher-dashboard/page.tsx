@@ -29,7 +29,6 @@ import { examStats, formatExamDate } from "@/lib/grading-utils";
 const NOTIF_META: Record<NotificationType, { icon: React.ElementType; iconBg: string; iconColor: string }> = {
   violation: { icon: AlertTriangle, iconBg: "bg-red-50", iconColor: "text-red-600" },
   request: { icon: UserCheck, iconBg: "bg-sky-50", iconColor: "text-sky-600" },
-  system: { icon: Bell, iconBg: "bg-slate-100", iconColor: "text-slate-500" },
   info: { icon: Bell, iconBg: "bg-sky-50", iconColor: "text-sky-600" },
 };
 
@@ -119,7 +118,7 @@ export default function TeacherDashboardPage() {
       <main className="p-6 space-y-6">
         {/* PAGE ACTION ROW */}
         <div className="flex justify-end">
-          <Button onClick={() => router.push("/teacher/exams/new")}>
+          <Button onClick={() => router.push("/teacher-exams/new")}>
             <Plus size={16} />
             Create New Exam
           </Button>
@@ -146,7 +145,7 @@ export default function TeacherDashboardPage() {
                 </p>
               </div>
               <button
-                onClick={() => router.push("/teacher/grading")}
+                onClick={() => router.push("/grading")}
                 className="text-xs font-medium text-sky-600 hover:underline inline-flex items-center gap-1 shrink-0"
               >
                 View all <ArrowRight size={14} />
@@ -182,7 +181,7 @@ export default function TeacherDashboardPage() {
 
                       <div className="flex items-center gap-3 shrink-0">
                         <Badge variant="warning">{stats.pending} pending</Badge>
-                        <Button size="sm" onClick={() => router.push(`/teacher/grading/${exam.id}`)}>
+                        <Button size="sm" onClick={() => router.push(`/grading/${exam.id}`)}>
                           Grade now
                         </Button>
                       </div>
@@ -200,7 +199,7 @@ export default function TeacherDashboardPage() {
                 Recent Activity
               </CardTitle>
               <button
-                onClick={() => router.push("/teacher/notifications")}
+                onClick={() => router.push("/teacher-notifications")}
                 className="text-xs font-medium text-sky-600 hover:underline inline-flex items-center gap-1 shrink-0"
               >
                 View all
@@ -223,10 +222,10 @@ export default function TeacherDashboardPage() {
                         onClick={() =>
                           router.push(
                             notif.type === "request" && notif.roomCode
-                              ? `/teacher/exams/${notif.roomCode}`
+                              ? `/teacher-exams/${notif.roomCode}`
                               : notif.roomCode
-                              ? "/teacher/monitor"
-                              : "/teacher/notifications"
+                              ? "/monitor"
+                              : "/teacher-notifications"
                           )
                         }
                         className="w-full flex items-start gap-3 text-left group"
@@ -263,7 +262,7 @@ export default function TeacherDashboardPage() {
               <CardTitle className="text-base font-semibold text-navy-900">Live Now</CardTitle>
               {liveExams.length > 0 && (
                 <button
-                  onClick={() => router.push("/teacher/monitor")}
+                  onClick={() => router.push("/monitor")}
                   className="text-xs font-medium text-sky-600 hover:underline inline-flex items-center gap-1 shrink-0"
                 >
                   Open monitor <ArrowRight size={14} />
@@ -307,7 +306,7 @@ export default function TeacherDashboardPage() {
                             <span className="font-mono font-bold text-slate-600">{exam.roomCode}</span>
                           </div>
                         </div>
-                        <Button size="sm" onClick={() => router.push("/teacher/monitor")}>
+                        <Button size="sm" onClick={() => router.push("/monitor")}>
                           <Play className="w-3.5 h-3.5 fill-current" />
                           Monitor
                         </Button>
@@ -324,7 +323,7 @@ export default function TeacherDashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <CardTitle className="text-base font-semibold text-navy-900">Upcoming</CardTitle>
               <button
-                onClick={() => router.push("/teacher/exams")}
+                onClick={() => router.push("/teacher-exams")}
                 className="text-xs font-medium text-sky-600 hover:underline inline-flex items-center gap-1 shrink-0"
               >
                 View all <ArrowRight size={14} />
@@ -362,7 +361,7 @@ export default function TeacherDashboardPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => router.push("/teacher/exams")}
+                        onClick={() => router.push("/teacher-exams")}
                       >
                         View
                       </Button>

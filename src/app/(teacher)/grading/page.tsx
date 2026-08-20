@@ -123,7 +123,7 @@ export default function GradingPage() {
                 return (
                   <tr
                     key={exam.id}
-                    onClick={() => router.push(`/teacher/grading/${exam.id}`)}
+                    onClick={() => router.push(`/grading/${exam.id}`)}
                     className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 cursor-pointer"
                   >
                     <td className="px-5 py-3.5 text-center">

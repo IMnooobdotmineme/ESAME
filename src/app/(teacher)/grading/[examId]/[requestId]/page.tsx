@@ -46,7 +46,7 @@ export default function GradeStudentPage() {
             <p className="text-sm text-slate-500">
               This student submission couldn&apos;t be located.
             </p>
-            <Button className="w-full" onClick={() => router.push("/teacher/grading")}>
+            <Button className="w-full" onClick={() => router.push("/grading")}>
               Back to All Exams
             </Button>
           </Card>
@@ -71,29 +71,23 @@ export default function GradeStudentPage() {
         score: Number(manualScores[a.id] || 0),
       }));
     saveManualGrades(currentExam.id, request.id, grades);
-    router.push(`/teacher/grading/${examId}`);
+    router.push(`/grading/${examId}`);
   }
 
   async function handleDownloadPDF() {
     setIsExporting(true);
     try {
-      const pdfWindow = window as Html2PdfWindow;
-      if (!pdfWindow.html2pdf) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src =
-            "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Failed to load PDF library"));
-          document.head.appendChild(script);
-        });
-      }
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas-pro"),
+        import("jspdf"),
+      ]);
 
       const container = document.createElement("div");
       container.style.padding = "30px";
       container.style.fontFamily = "Arial, sans-serif";
       container.style.color = "#14213d";
       container.style.backgroundColor = "#ffffff";
+      container.style.width = "780px";
       container.innerHTML = `
         <h1 style="margin:0;font-size:20px;font-weight:800;">${currentExam!.title} (${currentExam!.courseCode})</h1>
         <p style="margin:6px 0 14px 0;color:#475569;font-size:13px;">
@@ -128,14 +122,36 @@ export default function GradeStudentPage() {
           .join("")}
       `;
 
-      const options = {
-        margin: 10,
-        filename: `${request!.name.replace(/\s+/g, "_")}_Result.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      };
-      await pdfWindow.html2pdf!().set(options).from(container).save();
+      // Render off-screen so nothing flashes on screen
+      container.style.position = "fixed";
+      container.style.left = "-9999px";
+      container.style.top = "0";
+      document.body.appendChild(container);
+
+      const canvas = await html2canvas(container, { scale: 2, backgroundColor: "#ffffff" });
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.98);
+      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth - 20; // 10mm margins each side
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 10;
+
+      pdf.addImage(imgData, "JPEG", 10, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight - 20;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight + 10;
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 10, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight - 20;
+      }
+
+      pdf.save(`${request!.name.replace(/\s+/g, "_")}_Result.pdf`);
     } catch (err) {
       console.error("PDF export failed", err);
       alert("Failed to download PDF script.");
@@ -158,7 +174,7 @@ export default function GradeStudentPage() {
       <main className="p-6 space-y-5 max-w-3xl mx-auto">
         <div className="flex items-center justify-between">
           <button
-            onClick={() => router.push(`/teacher/grading/${examId}`)}
+            onClick={() => router.push(`/grading/${examId}`)}
             className="text-sm font-medium text-slate-600 hover:text-navy-900 inline-flex items-center gap-1"
           >
             <ArrowLeft size={15} /> Back to roster
@@ -235,7 +251,7 @@ export default function GradeStudentPage() {
 
 
         <div className="flex justify-end gap-3 pt-2 pb-6">
-          <Button variant="outline" onClick={() => router.push(`/teacher/grading/${examId}`)}>
+          <Button variant="outline" onClick={() => router.push(`/grading/${examId}`)}>
             Cancel
           </Button>
           <Button onClick={handleSaveGrades}>

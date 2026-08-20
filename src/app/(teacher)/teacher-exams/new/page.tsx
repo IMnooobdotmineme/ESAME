@@ -160,7 +160,7 @@ function ExamBuilderContent() {
             ? "Completed exams cannot be edited."
             : "This exam is live and cannot be edited. End the session first."
         );
-        router.push("/teacher/exams");
+        router.push("/teacher-exams");
         return;
       }
       setExamData({
@@ -356,7 +356,7 @@ function ExamBuilderContent() {
         alert(result.message || "This exam cannot be edited.");
         return;
       }
-      router.push("/teacher/exams");
+      router.push("/teacher-exams");
       return;
     }
 
@@ -535,7 +535,7 @@ function ExamBuilderContent() {
               </div>
 
               <div className="flex justify-end gap-2.5 pt-5 border-t border-slate-100">
-                <Button variant="outline" onClick={() => router.push("/teacher/exams")}>
+                <Button variant="outline" onClick={() => router.push("/teacher-exams")}>
                   Cancel
                 </Button>
                 <Button
@@ -1313,7 +1313,7 @@ function ExamBuilderContent() {
             className="w-full"
             onClick={() => {
               setIsLaunched(false);
-              router.push("/teacher/exams");
+              router.push("/teacher-exams");
             }}
           >
             Done & View All Exams

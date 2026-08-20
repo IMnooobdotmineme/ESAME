@@ -101,7 +101,7 @@ export default function TeacherLiveMonitorPage() {
                 Start an exam from your repository to monitor students here in real-time.
               </p>
             </div>
-            <Button className="w-full" onClick={() => router.push("/teacher/exams")}>
+            <Button className="w-full" onClick={() => router.push("/teacher-exams")}>
               Go to Exams Repository
             </Button>
           </Card>
@@ -133,7 +133,7 @@ export default function TeacherLiveMonitorPage() {
             </div>
             <Button
               className="w-full"
-              onClick={() => router.push(`/teacher/exams/${activeExam.roomCode}`)}
+              onClick={() => router.push(`/teacher-exams/${activeExam.roomCode}`)}
             >
               Go to Lobby
             </Button>
@@ -217,10 +217,10 @@ export default function TeacherLiveMonitorPage() {
             </div>
 
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Button variant="outline" onClick={() => router.push("/teacher/exams")}>
+              <Button variant="outline" onClick={() => router.push("/teacher-exams")}>
                 Back to My Exams
               </Button>
-              <Button onClick={() => router.push("/teacher/grading")}>
+              <Button onClick={() => router.push("/grading")}>
                 <ClipboardList className="w-4 h-4" />
                 Go to Grading
               </Button>
