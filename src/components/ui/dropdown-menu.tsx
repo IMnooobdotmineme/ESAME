@@ -10,17 +10,26 @@ interface DropdownMenuProps {
   align?: "left" | "right";
 }
 
-// Renders the menu into a portal on document.body with fixed positioning,
-// so it can never be clipped by an ancestor's overflow-hidden (e.g. rounded table cards).
-export function DropdownMenu({ trigger, children, align = "right" }: DropdownMenuProps) {
+export function DropdownMenu({
+  trigger,
+  children,
+  align = "right",
+}: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   function updatePosition() {
     if (!triggerRef.current) return;
+
     const rect = triggerRef.current.getBoundingClientRect();
+
     setPos({
       top: rect.bottom + 6,
       left: align === "right" ? rect.right : rect.left,
@@ -29,28 +38,36 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
   }
 
   useLayoutEffect(() => {
-    if (open) updatePosition();
+    if (open) {
+      updatePosition();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
+
     function onClickOutside(e: MouseEvent) {
+      const target = e.target as Node;
+
       if (
         triggerRef.current &&
-        !triggerRef.current.contains(e.target as Node) &&
+        !triggerRef.current.contains(target) &&
         menuRef.current &&
-        !menuRef.current.contains(e.target as Node)
+        !menuRef.current.contains(target)
       ) {
         setOpen(false);
       }
     }
+
     function onScrollOrResize() {
       updatePosition();
     }
+
     document.addEventListener("mousedown", onClickOutside);
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
+
     return () => {
       document.removeEventListener("mousedown", onClickOutside);
       window.removeEventListener("scroll", onScrollOrResize, true);
@@ -60,9 +77,13 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
 
   return (
     <>
-      <div ref={triggerRef} onClick={() => setOpen((o) => !o)}>
+      <div
+        ref={triggerRef}
+        onClick={() => setOpen((o) => !o)}
+      >
         {trigger}
       </div>
+
       {open &&
         pos &&
         typeof document !== "undefined" &&
@@ -72,12 +93,16 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
             style={{
               position: "fixed",
               top: pos.top,
-              left: align === "right" ? undefined : pos.left,
-              right: align === "right" ? window.innerWidth - pos.left : undefined,
+              left:
+                align === "right"
+                  ? undefined
+                  : pos.left,
+              right:
+                align === "right"
+                  ? window.innerWidth - pos.left
+                  : undefined,
             }}
-            className={cn(
-              "z-50 w-52 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg"
-            )}
+            className="z-50 w-52 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg"
             onClick={() => setOpen(false)}
           >
             {children}
@@ -93,6 +118,7 @@ export function DropdownItem({
   onClick,
   danger,
   disabled,
+  selected,
   className,
   title,
 }: {
@@ -100,6 +126,7 @@ export function DropdownItem({
   onClick?: () => void;
   danger?: boolean;
   disabled?: boolean;
+  selected?: boolean;
   className?: string;
   title?: string;
 }) {
@@ -109,18 +136,14 @@ export function DropdownItem({
       disabled={disabled}
       title={title}
       className={cn(
-        "flex w-full items-center gap-2 px-4 py-2 text-sm text-left hover:bg-slate-50 transition-colors",
-        danger ? "text-red-600" : "text-navy-900",
-        disabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
-        className
-
-        "flex w-full items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors",
+        "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors",
         selected
-          ? "bg-sky-400/10 text-sky-600 font-semibold"
+          ? "bg-sky-400/10 font-semibold text-sky-600"
           : danger
           ? "text-red-600 hover:bg-slate-50"
-          : "text-navy-900 hover:bg-slate-50"
-
+          : "text-navy-900 hover:bg-slate-50",
+        disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
+        className
       )}
     >
       {children}
