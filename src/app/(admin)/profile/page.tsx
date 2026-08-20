@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { KeyRound, Mail, Check, Eye, EyeOff, ShieldCheck, Lock, Fingerprint } from "lucide-react";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
-const ADMIN_EMAIL = "admin@esame.edu";
 
 function PasswordField({
   label,
@@ -53,30 +51,69 @@ function PasswordField({
 }
 
 export default function AdminProfilePage() {
+  const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
   const [passwords, setPasswords] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.name && data.email) setProfile({ name: data.name, email: data.email });
+      })
+      .catch((err) => console.error("Failed to load admin profile:", err));
+  }, []);
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPasswords({ ...passwords, [e.target.name]: e.target.value });
     setSaved(false);
+    setError("");
   };
 
-  const updatePassword = (e: React.FormEvent) => {
+  const updatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
     if (passwords.newPassword !== passwords.confirmPassword) {
-      alert("New passwords do not match!");
+      setError("New passwords do not match.");
       return;
     }
-    setSaved(true);
-    setPasswords({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
+    if (passwords.newPassword.length < 8) {
+      setError("New password must be at least 8 characters long.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: passwords.currentPassword,
+          newPassword: passwords.newPassword,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Failed to update password.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      setSaved(true);
+      setPasswords({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -105,9 +142,11 @@ export default function AdminProfilePage() {
               <div className="relative z-20 h-24 w-24 shrink-0 rounded-full bg-navy-900 ring-4 ring-white shadow-lg flex items-center justify-center">
                 <span className="text-2xl font-semibold text-white leading-none">AD</span>
               </div>
-              <h2 className="text-xl font-semibold text-navy-900 mt-4">Super Admin</h2>
+              <h2 className="text-xl font-semibold text-navy-900 mt-4">
+                {profile?.name ?? "System Admin"}
+              </h2>
               <p className="text-sm text-slate-500 flex items-center gap-1.5 mt-1">
-                <Mail size={14} /> {ADMIN_EMAIL}
+                <Mail size={14} /> {profile?.email ?? "—"}
               </p>
               <Badge variant="info" className="mt-3">
                 <ShieldCheck size={12} /> Administrator
@@ -152,10 +191,17 @@ export default function AdminProfilePage() {
                 onChange={handlePasswordChange}
               />
 
+              {error && (
+                <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                  {error}
+                </p>
+              )}
+
               <div className="flex items-center gap-3 pt-2">
-                <Button type="submit" className="gap-2">
+                <Button type="submit" className="gap-2" disabled={isSubmitting}>
                   <Fingerprint size={15} />
-                  Update Password
+                  {isSubmitting ? "Updating..." : "Update Password"}
                 </Button>
                 {saved && (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">

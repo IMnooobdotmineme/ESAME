@@ -12,6 +12,7 @@ import {
   REMEMBER_ME_TTL_MS,
   SHORT_SESSION_TTL_MS,
 } from "../../../../lib/session";
+import { recordLog } from "../../../../lib/logs";
 
 export async function POST(req: Request) {
   try {
@@ -59,6 +60,11 @@ export async function POST(req: Request) {
 
     const userType = record.userType;
     let userId: string;
+    // Populated below so we have a label + orgId/orgLabel ready for whichever
+    // activity log call applies once we know the purpose.
+    let actorLabel = emailLower;
+    let orgIdForLog: string | null = null;
+    let orgLabelForLog: string | null = null;
 
     if (userType === "org") {
       const [org] = await db
@@ -69,11 +75,26 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Account not found." }, { status: 404 });
       }
       userId = org.id;
+      actorLabel = `${org.name} (Org Admin)`;
+      orgIdForLog = org.id;
+      orgLabelForLog = org.name;
+
       if (record.purpose === "signup" && org.status === "pending_verification") {
         await db
           .update(organizations)
           .set({ status: "active" })
           .where(eq(organizations.id, org.id));
+
+        recordLog({
+          action: "org_email_verified",
+          entityType: "org",
+          entityId: org.id,
+          orgId: org.id,
+          userId: org.id,
+          userType: "org",
+          actorLabel,
+          orgLabel: org.name,
+        }).catch((err) => console.error("Failed to log org_email_verified:", err));
       }
     } else {
       const [teacher] = await db
@@ -84,6 +105,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Account not found." }, { status: 404 });
       }
       userId = teacher.id;
+      actorLabel = teacher.name || teacher.email;
+      orgIdForLog = teacher.orgId;
+
+      const [parentOrg] = await db
+        .select({ name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, teacher.orgId));
+      orgLabelForLog = parentOrg?.name ?? null;
     }
 
     if (record.purpose === "forgot_password") {
@@ -120,6 +149,23 @@ export async function POST(req: Request) {
         : DEFAULT_SESSION_TTL_MS;
 
     const { token, expiresAt } = await createSession(userType, userId, ttlMs);
+
+    // Login is only truly complete once the code is verified — this is the
+    // correct place to log org_login_success / teacher_login_success (NOT the
+    // /api/auth/login route, which only gets as far as sending the code).
+    if (record.purpose === "login") {
+      recordLog({
+        action: userType === "org" ? "org_login_success" : "teacher_login_success",
+        entityType: userType,
+        entityId: userId,
+        orgId: orgIdForLog,
+        userId,
+        userType,
+        actorLabel,
+        orgLabel: orgLabelForLog,
+      }).catch((err) => console.error(`Failed to log ${userType}_login_success:`, err));
+    }
+
     const redirect = userType === "org" ? "/dashboard" : "/teacher/dashboard";
     const res = NextResponse.json({ ok: true, purpose: record.purpose, redirect });
     setSessionCookie(res, token, expiresAt);

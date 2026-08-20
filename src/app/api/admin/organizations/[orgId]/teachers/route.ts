@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { organizations, teachers, exams, examStudents, notifications, activityLogs } from "@/db/schema";
+import { organizations, teachers, exams, examStudents, notifications } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import {
   sendAdminTeacherDeletedEmail,
   sendAdminTeacherStatusEmail,
 } from "@/lib/email";
 import { formatJoinedDate, normalizeAssignments } from "@/lib/org-utils";
+import { requireAdminSession } from "@/lib/session";
+import { logTeacherActivated, logTeacherDeleted, logTeacherSuspended } from "@/lib/logs";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +138,11 @@ export async function PATCH(
   context: { params: Promise<{ orgId: string }> }
 ) {
   try {
+    const admin = await requireAdminSession();
+    if (!admin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { orgId } = await context.params;
     const body = await req.json();
     const teacherId = String(body.teacherId ?? "").trim();
@@ -194,20 +201,10 @@ export async function PATCH(
         console.error("Failed to insert notification for org:", notifErr);
       }
 
-      // Log activity
+      // Log activity — uses the catalog's "teacher_suspended" action (admin-initiated),
+      // which sets group="user", severity, actorLabel, and orgLabel correctly.
       try {
-        await db.insert(activityLogs).values({
-          orgId: org.id,
-          userType: "admin",
-          action: "teacher_suspended_by_admin",
-          entityType: "teacher",
-          entityId: teacher.id,
-          details: {
-            orgName: org.name,
-            teacherName: teacherDisplayName,
-            event: `Teacher ${teacherDisplayName} suspended by admin`,
-          },
-        });
+        await logTeacherSuspended(teacher.id, teacherDisplayName, org.id, org.name, "admin");
       } catch (logErr) {
         console.error("Failed to insert activity log:", logErr);
       }
@@ -242,18 +239,7 @@ export async function PATCH(
 
       // Log activity
       try {
-        await db.insert(activityLogs).values({
-          orgId: org.id,
-          userType: "admin",
-          action: "teacher_activated_by_admin",
-          entityType: "teacher",
-          entityId: teacher.id,
-          details: {
-            orgName: org.name,
-            teacherName: teacherDisplayName,
-            event: `Teacher ${teacherDisplayName} activated by admin`,
-          },
-        });
+        await logTeacherActivated(teacher.id, teacherDisplayName, org.id, org.name, "admin");
       } catch (logErr) {
         console.error("Failed to insert activity log:", logErr);
       }
@@ -274,6 +260,11 @@ export async function DELETE(
   context: { params: Promise<{ orgId: string }> }
 ) {
   try {
+    const admin = await requireAdminSession();
+    if (!admin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { orgId } = await context.params;
     const body = await req.json();
     const teacherId = String(body.teacherId ?? "").trim();
@@ -334,18 +325,7 @@ export async function DELETE(
 
     // Log activity
     try {
-      await db.insert(activityLogs).values({
-        orgId: org.id,
-        userType: "admin",
-        action: "teacher_deleted_by_admin",
-        entityType: "teacher",
-        entityId: teacher.id,
-        details: {
-          orgName: org.name,
-          teacherName: teacherDisplayName,
-          event: `Teacher ${teacherDisplayName} deleted by admin`,
-        },
-      });
+      await logTeacherDeleted(teacher.id, teacherDisplayName, org.id, org.name, "admin");
     } catch (logErr) {
       console.error("Failed to insert activity log:", logErr);
     }

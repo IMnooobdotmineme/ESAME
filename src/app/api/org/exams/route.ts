@@ -69,6 +69,8 @@ type AttemptRow = {
   createdAt: Date;
 };
 
+type Trend = { value: string; direction: "up" | "down" };
+
 function mapExamStatus(status: ExamListRow["status"]): ExamStatus {
   switch (status) {
     case "in_progress":
@@ -162,10 +164,42 @@ function isScheduledWithin24Hours(exam: ExamListRow) {
   return time >= now && time <= now + 24 * 60 * 60 * 1000;
 }
 
+// ---------- Month-over-month trend helpers ----------
+
+/** monthsAgo=0 -> current calendar month, monthsAgo=1 -> previous calendar month */
+function getMonthRange(monthsAgo: number) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() - monthsAgo + 1, 1);
+  return { start, end };
+}
+
+function isWithinRange(date: Date | null, start: Date, end: Date) {
+  if (!date) return false;
+  const t = new Date(date).getTime();
+  return t >= start.getTime() && t < end.getTime();
+}
+
+/** Returns undefined when there's nothing to compare (both periods empty) — caller should omit the badge. */
+function computeTrend(current: number, previous: number): Trend | undefined {
+  if (current === 0 && previous === 0) return undefined;
+  if (previous === 0) return { value: "New", direction: "up" };
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return { value: `${pct >= 0 ? "+" : ""}${pct}%`, direction: pct >= 0 ? "up" : "down" };
+}
+
+// Org exam views only ever show In Progress / Completed exams —
+// Scheduled and Locked are excluded at the query level.
+const VISIBLE_EXAM_STATUSES = ["in_progress", "completed"] as const;
+
 async function loadExamRows(orgId: string, examId?: string) {
   const conditions = examId
-    ? and(eq(exams.orgId, orgId), eq(exams.id, examId))
-    : eq(exams.orgId, orgId);
+    ? and(
+        eq(exams.orgId, orgId),
+        eq(exams.id, examId),
+        inArray(exams.status, VISIBLE_EXAM_STATUSES)
+      )
+    : and(eq(exams.orgId, orgId), inArray(exams.status, VISIBLE_EXAM_STATUSES));
 
   return (await db
     .select({
@@ -346,12 +380,34 @@ export async function GET(req: Request) {
     return NextResponse.json({ exam: examsPayload[0] ?? null });
   }
 
+  // --- Trend: Active Exams = in_progress exams created this month vs last month ---
+  const thisMonth = getMonthRange(0);
+  const lastMonth = getMonthRange(1);
+
+  const activeThisMonth = scopedRows.filter(
+    (exam) => exam.status === "in_progress" && isWithinRange(exam.createdAt, thisMonth.start, thisMonth.end)
+  ).length;
+  const activeLastMonth = scopedRows.filter(
+    (exam) => exam.status === "in_progress" && isWithinRange(exam.createdAt, lastMonth.start, lastMonth.end)
+  ).length;
+
+  // --- Trend: Total Submissions = latest submitted attempts, bucketed by submittedAt month ---
+  const allLatestAttempts = Array.from(latestAttempts.values());
+  const submittedThisMonth = allLatestAttempts.filter(
+    (attempt) => attempt.submittedAt && isWithinRange(attempt.submittedAt, thisMonth.start, thisMonth.end)
+  ).length;
+  const submittedLastMonth = allLatestAttempts.filter(
+    (attempt) => attempt.submittedAt && isWithinRange(attempt.submittedAt, lastMonth.start, lastMonth.end)
+  ).length;
+
   return NextResponse.json({
     exams: examsPayload,
     totals: {
       active: scopedRows.filter((exam) => exam.status === "in_progress").length,
       scheduled: scopedRows.filter(isScheduledWithin24Hours).length,
       totalSubmissions: examsPayload.reduce((sum, exam) => sum + exam.results.length, 0),
+      activeTrend: computeTrend(activeThisMonth, activeLastMonth) ?? null,
+      submissionsTrend: computeTrend(submittedThisMonth, submittedLastMonth) ?? null,
     },
   });
 }

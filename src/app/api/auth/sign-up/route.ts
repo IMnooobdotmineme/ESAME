@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "../../../../lib/password";
 import { createAndSendVerificationCode } from "../../../../lib/verification";
 import { checkRateLimit, getClientIp, RateLimitError } from "../../../../lib/rate-limit";
+import { logOrgSignup } from "../../../../lib/logs";
 
 export async function POST(req: Request) {
   try {
@@ -78,6 +79,14 @@ export async function POST(req: Request) {
     await db
       .insert(passwordHistory)
       .values({ userType: "org", userId: org.id, passwordHash });
+
+    // Log activity — group="user", actorLabel/orgLabel set from the catalog.
+    // NOTE: this fires as soon as the org row exists, i.e. while status is still
+    // "pending_verification". If you'd rather only log once the org confirms their
+    // email, move this call into the verify-code route's signup branch instead.
+    logOrgSignup(org.id, orgName).catch((err) =>
+      console.error("Failed to log org_signup:", err)
+    );
 
     await createAndSendVerificationCode({
       email: emailLower,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Search,
   Clock,
@@ -37,59 +37,49 @@ interface SystemLogEntry {
   archived?: boolean;
 }
 
-const INITIAL_USER_LOGS: UserLogEntry[] = [
-  {
-    id: "ulog-01",
-    actor: "admin@its.edu (Org Admin)",
-    organization: "Institute of Technology & Science",
-    event: "Successful organization portal authentication",
-    timestamp: "Aug 09, 2026 - 13:45:02",
-    severity: "info",
-  },
-  {
-    id: "ulog-02",
-    actor: "Ly Vannak (Teacher)",
-    organization: "Institute of Technology & Science",
-    event: "Account activated by platform admin",
-    timestamp: "Aug 09, 2026 - 10:02:15",
-    severity: "info",
-  },
-  {
-    id: "ulog-03",
-    actor: "r.chen@university.edu (Teacher)",
-    organization: "Faculty of Computer Science & Engineering",
-    event: "Failed login attempt (3/5) - Invalid password credential",
-    timestamp: "Aug 09, 2026 - 08:22:01",
-    severity: "warning",
-  },
-];
+// Raw shape returned by /api/admin/logs/{user|system} (see lib/logs.ts -> buildLogRow).
+interface ApiLogRow {
+  id: string;
+  actor?: string;
+  organization?: string;
+  event: string;
+  timestamp: string; // ISO string
+  severity: "info" | "warning" | "critical";
+  archived: boolean;
+}
 
-const INITIAL_SYSTEM_LOGS: SystemLogEntry[] = [
-  {
-    id: "slog-01",
-    event: "Scheduled database backup completed successfully",
-    timestamp: "Aug 09, 2026 - 14:10:22",
-    severity: "info",
-  },
-  {
-    id: "slog-02",
-    event: "Rate-limiting triggered on endpoint /api/auth/v1 due to rapid requests",
-    timestamp: "Aug 09, 2026 - 12:30:11",
-    severity: "warning",
-  },
-  {
-    id: "slog-03",
-    event: "Webhook timeout while syncing institution asset assets/logo_66.png",
-    timestamp: "Aug 09, 2026 - 11:15:40",
-    severity: "critical",
-  },
-  {
-    id: "slog-04",
-    event: "Platform maintenance window closed",
-    timestamp: "Aug 09, 2026 - 06:00:00",
-    severity: "info",
-  },
-];
+// API returns ISO timestamps; the UI (TimestampCell/splitTimestamp) expects
+// "Aug 09, 2026 - 13:45:02", so we format here and leave the display
+// components untouched.
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const date = d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+  const time = d.toLocaleTimeString("en-GB", { hour12: false });
+  return `${date} - ${time}`;
+}
+
+function toUserLogEntry(row: ApiLogRow): UserLogEntry {
+  return {
+    id: row.id,
+    actor: row.actor ?? "Unknown",
+    organization: row.organization ?? "—",
+    event: row.event,
+    timestamp: formatTimestamp(row.timestamp),
+    severity: row.severity,
+    archived: row.archived,
+  };
+}
+
+function toSystemLogEntry(row: ApiLogRow): SystemLogEntry {
+  return {
+    id: row.id,
+    event: row.event,
+    timestamp: formatTimestamp(row.timestamp),
+    severity: row.severity,
+    archived: row.archived,
+  };
+}
 
 function severityBadge(severity: "info" | "warning" | "critical") {
   if (severity === "critical") return <Badge variant="danger">Critical</Badge>;
@@ -171,24 +161,82 @@ function EmptyState({ message }: { message: string }) {
 export default function AdminLogsPage() {
   const [tab, setTab] = useState<LogTab>("user");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [userLogs, setUserLogs] = useState<UserLogEntry[]>(INITIAL_USER_LOGS);
-  const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>(INITIAL_SYSTEM_LOGS);
+  const [userLogs, setUserLogs] = useState<UserLogEntry[]>([]);
+  const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>([]);
+  const [userArchivedCount, setUserArchivedCount] = useState(0);
+  const [systemArchivedCount, setSystemArchivedCount] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [archiveAllConfirm, setArchiveAllConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ tab: LogTab; id: string; label: string } | null>(null);
 
-  function toggleUserArchive(id: string) {
-    setUserLogs((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, archived: !l.archived } : l))
-    );
+  // Debounce the search box so we're not hitting the API on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        search: debouncedSearch,
+        archived: String(showArchived),
+      });
+
+      if (tab === "user") {
+        const res = await fetch(`/api/admin/logs/user?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to load user logs");
+        const data: { logs: ApiLogRow[]; archivedCount: number } = await res.json();
+        setUserLogs(data.logs.map(toUserLogEntry));
+        setUserArchivedCount(data.archivedCount);
+      } else {
+        const res = await fetch(`/api/admin/logs/system?${params.toString()}`);
+        if (!res.ok) throw new Error("Failed to load system logs");
+        const data: { logs: ApiLogRow[]; archivedCount: number } = await res.json();
+        setSystemLogs(data.logs.map(toSystemLogEntry));
+        setSystemArchivedCount(data.archivedCount);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [tab, showArchived, debouncedSearch]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  async function toggleUserArchive(id: string) {
+    const wasArchived = userLogs.find((l) => l.id === id)?.archived;
+    setUserLogs((prev) => prev.filter((l) => l.id !== id)); // leaves current view once flipped
+    setUserArchivedCount((c) => (wasArchived ? c - 1 : c + 1));
+    try {
+      const res = await fetch(`/api/admin/logs/${id}`, { method: "PATCH" });
+      if (!res.ok) throw new Error("Failed to toggle archive");
+    } catch (err) {
+      console.error(err);
+      loadLogs(); // resync on failure
+    }
   }
 
-  function toggleSystemArchive(id: string) {
-    setSystemLogs((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, archived: !l.archived } : l))
-    );
+  async function toggleSystemArchive(id: string) {
+    const wasArchived = systemLogs.find((l) => l.id === id)?.archived;
+    setSystemLogs((prev) => prev.filter((l) => l.id !== id));
+    setSystemArchivedCount((c) => (wasArchived ? c - 1 : c + 1));
+    try {
+      const res = await fetch(`/api/admin/logs/${id}`, { method: "PATCH" });
+      if (!res.ok) throw new Error("Failed to toggle archive");
+    } catch (err) {
+      console.error(err);
+      loadLogs();
+    }
   }
 
+  // Server already applies the archived/search filters; this is just a
+  // defensive pass so the UI stays correct if state briefly lags a request.
   const filteredUserLogs = userLogs.filter(
     (log) =>
       !!log.archived === showArchived &&
@@ -203,34 +251,44 @@ export default function AdminLogsPage() {
       log.event.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const archivedCount =
-    tab === "user"
-      ? userLogs.filter((l) => l.archived).length
-      : systemLogs.filter((l) => l.archived).length;
+  const archivedCount = tab === "user" ? userArchivedCount : systemArchivedCount;
 
-  function confirmArchiveAll() {
-    if (tab === "user") {
-      const visibleIds = new Set(filteredUserLogs.map((l) => l.id));
-      setUserLogs((prev) =>
-        prev.map((l) => (visibleIds.has(l.id) ? { ...l, archived: true } : l))
-      );
-    } else {
-      const visibleIds = new Set(filteredSystemLogs.map((l) => l.id));
-      setSystemLogs((prev) =>
-        prev.map((l) => (visibleIds.has(l.id) ? { ...l, archived: true } : l))
-      );
-    }
+  async function confirmArchiveAll() {
     setArchiveAllConfirm(false);
+    try {
+      const res = await fetch("/api/admin/logs/archive-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group: tab, search: debouncedSearch }),
+      });
+      if (!res.ok) throw new Error("Failed to archive all");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      loadLogs();
+    }
   }
 
-  function confirmDeleteLog() {
+  async function confirmDeleteLog() {
     if (!deleteTarget) return;
-    if (deleteTarget.tab === "user") {
-      setUserLogs((prev) => prev.filter((l) => l.id !== deleteTarget.id));
-    } else {
-      setSystemLogs((prev) => prev.filter((l) => l.id !== deleteTarget.id));
-    }
+    const { tab: deleteTab, id } = deleteTarget;
     setDeleteTarget(null);
+
+    if (deleteTab === "user") {
+      setUserLogs((prev) => prev.filter((l) => l.id !== id));
+      setUserArchivedCount((c) => c - 1);
+    } else {
+      setSystemLogs((prev) => prev.filter((l) => l.id !== id));
+      setSystemArchivedCount((c) => c - 1);
+    }
+
+    try {
+      const res = await fetch(`/api/admin/logs/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete log");
+    } catch (err) {
+      console.error(err);
+      loadLogs(); // resync on failure
+    }
   }
 
   const visibleCountForTab = tab === "user" ? filteredUserLogs.length : filteredSystemLogs.length;

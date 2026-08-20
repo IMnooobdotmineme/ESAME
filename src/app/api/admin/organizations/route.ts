@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { organizations, teachers, exams, examStudents, activityLogs } from "@/db/schema";
+import { organizations, teachers, exams, examStudents } from "@/db/schema";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import {
   sendOrgActivatedEmail,
@@ -10,6 +10,8 @@ import {
   sendTeacherOrgDeletedEmail,
   sendTeacherOrgSuspendedEmail,
 } from "@/lib/email";
+import { requireAdminSession } from "@/lib/session";
+import { logOrgActivated, logOrgDeleted, logOrgSuspended } from "@/lib/logs";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +124,11 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   try {
+    const admin = await requireAdminSession();
+    if (!admin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const orgId = String(body.orgId ?? "").trim();
     const requestedStatus = String(body.status ?? "").trim(); // "Active" | "Suspended"
@@ -172,19 +179,8 @@ export async function PATCH(req: Request) {
         );
       }
 
-      // 3. Log activity
-      await db.insert(activityLogs).values({
-        orgId: org.id,
-        userType: "admin",
-        action: "org_suspended",
-        entityType: "org",
-        entityId: org.id,
-        details: {
-          orgName: org.name,
-          event: `Organization "${org.name}" suspended by admin`,
-          message: `Organization "${org.name}" and ${teacherRows.length} teacher accounts frozen by admin`,
-        },
-      });
+      // 3. Log activity (sets group="user", severity, actorLabel, orgLabel from the catalog)
+      await logOrgSuspended(org.id, org.name, admin.userId);
     } else {
       // 1. Send email to Org
       sendOrgActivatedEmail(org.email, org.name).catch((err) =>
@@ -199,18 +195,7 @@ export async function PATCH(req: Request) {
       }
 
       // 3. Log activity
-      await db.insert(activityLogs).values({
-        orgId: org.id,
-        userType: "admin",
-        action: "org_activated",
-        entityType: "org",
-        entityId: org.id,
-        details: {
-          orgName: org.name,
-          event: `Organization "${org.name}" activated by admin`,
-          message: `Organization "${org.name}" and its teacher accounts un-frozen by admin`,
-        },
-      });
+      await logOrgActivated(org.id, org.name, admin.userId);
     }
 
     return NextResponse.json({
@@ -231,6 +216,11 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    const admin = await requireAdminSession();
+    if (!admin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const orgId = String(body.orgId ?? "").trim();
 
@@ -269,20 +259,12 @@ export async function DELETE(req: Request) {
       );
     }
 
+    // Log activity BEFORE deleting, so entityId still points at a row that (until this
+    // request completes) actually exists
+    await logOrgDeleted(org.id, org.name, admin.userId);
+
     // Delete organization (cascades to all child records)
     await db.delete(organizations).where(eq(organizations.id, orgId));
-
-    // Log activity
-    await db.insert(activityLogs).values({
-      userType: "admin",
-      action: "org_deleted",
-      entityType: "org",
-      details: {
-        orgName: org.name,
-        event: `Organization "${org.name}" permanently deleted by admin`,
-        message: `Organization "${org.name}" and ${teacherRows.length} teacher accounts deleted`,
-      },
-    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

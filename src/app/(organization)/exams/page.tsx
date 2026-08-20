@@ -5,8 +5,20 @@ import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { StatCard } from "@/components/organization/StatCard"; 
 import type { ExamRecord, ExamStatus } from "@/lib/exam-data";
-import { Search, Calendar, ChevronLeft, ChevronRight, ChevronRight as Arrow, X, Check, ArrowUpDown } from "lucide-react";
+import {
+  Search,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  ChevronRight as Arrow,
+  X,
+  Check,
+  ArrowUpDown,
+  ClipboardList,
+  Users,
+} from "lucide-react";
 
 const STATUS_VARIANT: Record<ExamStatus, "info" | "success" | "warning" | "danger"> = {
   "In Progress": "info",
@@ -15,7 +27,7 @@ const STATUS_VARIANT: Record<ExamStatus, "info" | "success" | "warning" | "dange
   Locked: "danger",
 };
 
-const FILTERS: ("All" | ExamStatus)[] = ["All", "Scheduled", "In Progress", "Completed", "Locked"];
+const FILTERS: ("All" | ExamStatus)[] = ["All", "In Progress", "Completed"];
 
 type SortOrder = "default" | "newest" | "oldest" | "title-asc" | "title-desc";
 
@@ -28,9 +40,27 @@ const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
 
 const PAGE_SIZE = 5;
 
+type Trend = { value: string; direction: "up" | "down" };
+
+type Totals = {
+  active: number;
+  scheduled: number;
+  totalSubmissions: number;
+  activeTrend: Trend | null;
+  submissionsTrend: Trend | null;
+};
+
+const EMPTY_TOTALS: Totals = {
+  active: 0,
+  scheduled: 0,
+  totalSubmissions: 0,
+  activeTrend: null,
+  submissionsTrend: null,
+};
+
 export default function ExamManagementPage() {
   const [exams, setExams] = useState<ExamRecord[]>([]);
-  const [totals, setTotals] = useState({ active: 0, scheduled: 0, totalSubmissions: 0 });
+  const [totals, setTotals] = useState<Totals>(EMPTY_TOTALS);
   const [filter, setFilter] = useState<"All" | ExamStatus>("All");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -51,14 +81,16 @@ export default function ExamManagementPage() {
             active: Number(payload.totals?.active ?? 0),
             scheduled: Number(payload.totals?.scheduled ?? 0),
             totalSubmissions: Number(payload.totals?.totalSubmissions ?? 0),
+            activeTrend: payload.totals?.activeTrend ?? null,
+            submissionsTrend: payload.totals?.submissionsTrend ?? null,
           });
         } else {
           setExams([]);
-          setTotals({ active: 0, scheduled: 0, totalSubmissions: 0 });
+          setTotals(EMPTY_TOTALS);
         }
       } catch {
         setExams([]);
-        setTotals({ active: 0, scheduled: 0, totalSubmissions: 0 });
+        setTotals(EMPTY_TOTALS);
       }
     }
 
@@ -130,27 +162,25 @@ export default function ExamManagementPage() {
       <main className="p-6 space-y-5">
         {/* Stat cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card className="p-5">
-            <p className="text-sm text-slate-500">Active Exams</p>
-            <div className="mt-1 flex items-center gap-2">
-              <p className="text-2xl font-semibold text-navy-900">{activeCount}</p>
-              <Badge variant="success">+2 Today</Badge>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <p className="text-sm text-slate-500">Scheduled (24h)</p>
-            <div className="mt-1 flex items-center gap-2">
-              <p className="text-2xl font-semibold text-navy-900">{scheduledCount}</p>
-              <Calendar size={16} className="text-slate-300" />
-            </div>
-          </Card>
-          <Card className="p-5">
-            <p className="text-sm text-slate-500">Total Submissions</p>
-            <div className="mt-1 flex items-center gap-2">
-              <p className="text-2xl font-semibold text-navy-900">{totalSubmissions.toLocaleString()}</p>
-              <Badge variant="info">89% Avg</Badge>
-            </div>
-          </Card>
+          <StatCard
+            label="Active Exams"
+            value={String(activeCount)}
+            icon={ClipboardList}
+            trend={totals.activeTrend ?? undefined}
+          />
+          <StatCard
+            label="Scheduled (24h)"
+            value={String(scheduledCount)}
+            icon={Calendar}
+            iconBg="bg-slate-50"
+            iconColor="text-slate-400"
+          />
+          <StatCard
+            label="Total Submissions"
+            value={totalSubmissions.toLocaleString()}
+            icon={Users}
+            trend={totals.submissionsTrend ?? undefined}
+          />
         </div>
 
         {/* Filter row */}

@@ -11,7 +11,7 @@ export const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (signup
 export const REMEMBER_ME_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days ("Remember me" checked)
 export const SHORT_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 day ("Remember me" unchecked)
 
-export type UserType = "org" | "teacher";
+export type UserType = "org" | "teacher" | "admin";
 
 export async function createSession(
   userType: UserType,
@@ -94,6 +94,14 @@ export async function requireTeacherSession() {
     return null;
   }
 
+  return session;
+}
+
+// Admin has no separate status table (single env-provisioned admin row) —
+// just needs a valid, unexpired session with userType === "admin".
+export async function requireAdminSession() {
+  const session = await getSessionFromCookie();
+  if (!session || session.userType !== "admin") return null;
   return session;
 }
 

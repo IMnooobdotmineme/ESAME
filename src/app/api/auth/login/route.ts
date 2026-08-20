@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { organizations, teachers } from "@/db/schema";
+import { admins, organizations, teachers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword } from "../../../../lib/password";
 import { createAndSendVerificationCode } from "../../../../lib/verification";
+import {
+  createSession,
+  setSessionCookie,
+  REMEMBER_ME_TTL_MS,
+  SHORT_SESSION_TTL_MS,
+} from "../../../../lib/session";
 import {
   checkRateLimit,
   getClientIp,
@@ -12,6 +18,7 @@ import {
   clearFailedLogins,
   RateLimitError,
 } from "../../../../lib/rate-limit";
+import { recordLog, logLoginFailed } from "../../../../lib/logs";
 
 const GENERIC_ERROR = "Invalid email or password.";
 const IP_LOGIN_MAX = 20;
@@ -34,6 +41,42 @@ export async function POST(req: Request) {
 
     await assertAccountNotLocked(emailLower);
 
+    // ---- Admin (checked first: single account, no signup, no verify-code step) ----
+    const [admin] = await db
+      .select()
+      .from(admins)
+      .where(eq(admins.email, emailLower));
+
+    if (admin) {
+      const valid = await verifyPassword(password, admin.passwordHash);
+      if (!valid) {
+        await recordFailedLogin(emailLower);
+        await logLoginFailed("admin", emailLower, null, null, 1).catch((err) =>
+          console.error("Failed to log admin_login_failed:", err)
+        );
+        return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+      }
+      await clearFailedLogins(emailLower);
+
+      // Admin skips email verification entirely — session is issued right away,
+      // so this is the correct point to log a completed login.
+      const ttlMs = rememberMeBool ? REMEMBER_ME_TTL_MS : SHORT_SESSION_TTL_MS;
+      const { token, expiresAt } = await createSession("admin", admin.id, ttlMs);
+
+      recordLog({
+        action: "admin_login_success",
+        entityType: "admin",
+        entityId: admin.id,
+        userId: admin.id,
+        userType: "admin",
+        actorLabel: emailLower,
+      }).catch((err) => console.error("Failed to log admin_login_success:", err));
+
+      const res = NextResponse.json({ ok: true, redirect: "/admin-dashboard" });
+      setSessionCookie(res, token, expiresAt);
+      return res;
+    }
+
     const [org] = await db
       .select()
       .from(organizations)
@@ -55,6 +98,9 @@ export async function POST(req: Request) {
       const valid = await verifyPassword(password, org.passwordHash);
       if (!valid) {
         await recordFailedLogin(emailLower);
+        await logLoginFailed("org", org.name, org.id, org.name, 1).catch((err) =>
+          console.error("Failed to log org_login_failed:", err)
+        );
         return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
       }
       await clearFailedLogins(emailLower);
@@ -64,6 +110,10 @@ export async function POST(req: Request) {
         userType: "org",
         rememberMe: rememberMeBool,
       });
+      // NOTE: org_login_success is intentionally NOT logged here — password is
+      // correct but login isn't complete until the emailed verification code is
+      // confirmed. Log "org_login_success" in the verify-code route instead, once
+      // the code check passes.
       return NextResponse.json({ ok: true, email: emailLower });
     }
 
@@ -95,7 +145,7 @@ export async function POST(req: Request) {
         );
       }
       const [parentOrg] = await db
-        .select({ status: organizations.status })
+        .select({ status: organizations.status, name: organizations.name })
         .from(organizations)
         .where(eq(organizations.id, teacher.orgId));
       if (parentOrg && parentOrg.status === "suspended") {
@@ -107,6 +157,13 @@ export async function POST(req: Request) {
       const valid = await verifyPassword(password, teacher.passwordHash);
       if (!valid) {
         await recordFailedLogin(emailLower);
+        await logLoginFailed(
+          "teacher",
+          teacher.name || teacher.email,
+          teacher.orgId,
+          parentOrg?.name ?? null,
+          1
+        ).catch((err) => console.error("Failed to log teacher_login_failed:", err));
         return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
       }
       await clearFailedLogins(emailLower);
@@ -116,6 +173,8 @@ export async function POST(req: Request) {
         userType: "teacher",
         rememberMe: rememberMeBool,
       });
+      // NOTE: same as org above — teacher_login_success belongs in the verify-code
+      // route, once the emailed code is actually confirmed.
       return NextResponse.json({ ok: true, email: emailLower });
     }
 

@@ -21,7 +21,7 @@ export async function verifyPassword(
  * (including their current one), based on the password_history table.
  */
 export async function isPasswordReused(
-  userType: "org" | "teacher",
+  userType: "org" | "teacher" | "admin",
   userId: string,
   newPassword: string
 ): Promise<boolean> {

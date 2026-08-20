@@ -40,7 +40,7 @@ export function AdminSidebar() {
 
       <div className="px-6 pt-5 pb-2">
         <p className="text-xs uppercase tracking-wide text-white/40">Administrator</p>
-        <p className="text-sm font-medium truncate">Admin Control</p>
+        <p className="text-sm font-medium truncate">System Admin</p>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">

@@ -46,8 +46,13 @@ function LoginForm() {
         return;
       }
 
-      // A verification code was just emailed — go verify it.
-      router.push(`/verify-code?email=${encodeURIComponent(data.email)}&from=login`);
+      if (data.redirect) {
+        // Admin: session was already created server-side, no code to verify.
+        router.push(data.redirect);
+      } else {
+        // Org / teacher: a verification code was just emailed — go verify it.
+        router.push(`/verify-code?email=${encodeURIComponent(data.email)}&from=login`);
+      }
     } catch {
       setError("Something went wrong. Please try again.");
       setIsSubmitting(false);

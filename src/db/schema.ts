@@ -23,7 +23,7 @@ export const teacherStatusEnum = pgEnum("teacher_status", [
   "deleted",
 ]);
 
-export const userTypeEnum = pgEnum("user_type", ["org", "teacher"]);
+export const userTypeEnum = pgEnum("user_type", ["org", "teacher", "admin"]);
 
 export const verificationPurposeEnum = pgEnum("verification_purpose", [
   "signup",
@@ -51,6 +51,17 @@ export const questionTypeEnum = pgEnum("question_type", [
 export const reviewStatusEnum = pgEnum("review_status", [
   "reviewed",
   "needs_review",
+]);
+
+// ---------- Activity / system log enums ----------
+// Which tab a log entry belongs to on the admin Logs page.
+export const logGroupEnum = pgEnum("log_group", ["user", "system"]);
+
+// Drives the severity dot + badge in the UI.
+export const logSeverityEnum = pgEnum("log_severity", [
+  "info",
+  "warning",
+  "critical",
 ]);
 
 // ---------- Organizations (sign up as org) ----------
@@ -316,15 +327,27 @@ export const notifications = pgTable("notifications", {
 });
 
 // ---------- Activity Logs (audit trail for exams, submissions, grading, admin actions) ----------
+// This single table backs BOTH tabs on the admin Logs page:
+//   - group = "user"   -> "User Logs" tab (org + teacher + admin account/auth events)
+//   - group = "system" -> "System Logs" tab (platform/infra events, no human actor)
 export const activityLogs = pgTable("activity_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
   userId: uuid("user_id"), // can be org, teacher, or admin
   userType: text("user_type").notNull().default("system"), // "admin" | "org" | "teacher" | "system"
-  action: text("action").notNull(), // e.g., "exam_created", "student_submitted", "org_suspended", etc.
+  action: text("action").notNull(), // e.g., "exam_created", "student_submitted", "org_suspended", etc. (see ACTIVITY_LOG_ACTIONS in lib/logs.ts)
   entityType: text("entity_type").notNull(), // "org", "teacher", "exam", "question", "submission", "system"
   entityId: uuid("entity_id"), // examId, submissionId, teacherId, orgId, etc.
   details: jsonb("details"), // additional context
+
+  // --- Admin Logs page fields ---
+  group: logGroupEnum("group").notNull().default("system"), // which tab this row shows up in
+  severity: logSeverityEnum("severity").notNull().default("info"), // drives the severity dot/badge
+  actorLabel: text("actor_label"), // snapshot display string, e.g. "Ly Vannak (Teacher)" — null for system logs
+  orgLabel: text("org_label"), // snapshot org name, e.g. "Institute of Technology & Science" — null for system logs
+  isArchived: boolean("is_archived").notNull().default(false),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+
   ipAddress: text("ip_address"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -361,3 +384,11 @@ export const broadcasts = pgTable("broadcasts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+export const admins = pgTable("admins", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+ 
