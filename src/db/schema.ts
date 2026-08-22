@@ -1,3 +1,4 @@
+// src/db/schema.ts
 import {
   pgTable,
   pgEnum,
@@ -53,18 +54,26 @@ export const reviewStatusEnum = pgEnum("review_status", [
   "needs_review",
 ]);
 
-// ---------- Activity / system log enums ----------
-// Which tab a log entry belongs to on the admin Logs page.
 export const logGroupEnum = pgEnum("log_group", ["user", "system"]);
 
-// Drives the severity dot + badge in the UI.
 export const logSeverityEnum = pgEnum("log_severity", [
   "info",
   "warning",
   "critical",
 ]);
 
-// ---------- Organizations (sign up as org) ----------
+export const examStudentStatusEnum = pgEnum("exam_student_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const gradingStatusEnum = pgEnum("grading_status", [
+  "in_progress",
+  "complete",
+]);
+
+// ---------- Organizations ----------
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -110,7 +119,7 @@ export const subjects = pgTable("subjects", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Teachers (created only via org invite) ----------
+// ---------- Teachers ----------
 export const teachers = pgTable("teachers", {
   id: uuid("id").defaultRandom().primaryKey(),
   orgId: uuid("org_id")
@@ -118,24 +127,28 @@ export const teachers = pgTable("teachers", {
     .references(() => organizations.id, { onDelete: "cascade" }),
   name: text("name"),
   email: text("email").notNull().unique(),
-  passwordHash: text("password_hash"), // null until invite is accepted
+  passwordHash: text("password_hash"),
   status: teacherStatusEnum("status").notNull().default("invited"),
-  suspendedBy: text("suspended_by"), // "admin" | "org" | null
-  deletedBy: text("deleted_by"), // "admin" | "org" | null
+  suspendedBy: text("suspended_by"),
+  deletedBy: text("deleted_by"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-  assignments: jsonb("assignments").$type<Array<{ department: string; subject: string }>>().notNull().default([]),
+  assignments: jsonb("assignments")
+    .$type<Array<{ department: string; subject: string }>>()
+    .notNull()
+    .default([]),
   inviteToken: text("invite_token").unique(),
   inviteTokenExpiresAt: timestamp("invite_token_expires_at", { withTimezone: true }),
   googleId: text("google_id").unique(),
+  avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Verification codes (signup / login / forgot-password) ----------
+// ---------- Verification codes ----------
 export const verificationCodes = pgTable("verification_codes", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull(),
-  code: text("code").notNull(), // sha256 hash of the 6-digit code, never store plaintext
+  code: text("code").notNull(),
   purpose: verificationPurposeEnum("purpose").notNull(),
   userType: userTypeEnum("user_type").notNull(),
   attempts: integer("attempts").notNull().default(0),
@@ -145,18 +158,18 @@ export const verificationCodes = pgTable("verification_codes", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Sessions (DB-backed, revocable) ----------
+// ---------- Sessions ----------
 export const sessions = pgTable("sessions", {
-  id: text("id").primaryKey(), // random session token
+  id: text("id").primaryKey(),
   userType: userTypeEnum("user_type").notNull(),
   userId: uuid("user_id").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Short-lived reset tokens (issued after forgot-password code is verified) ----------
+// ---------- Reset tokens ----------
 export const resetTokens = pgTable("reset_tokens", {
-  id: text("id").primaryKey(), // random token, stored in an httpOnly cookie
+  id: text("id").primaryKey(),
   userType: userTypeEnum("user_type").notNull(),
   userId: uuid("user_id").notNull(),
   email: text("email").notNull(),
@@ -165,7 +178,7 @@ export const resetTokens = pgTable("reset_tokens", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Password history (prevents reusing an old password) ----------
+// ---------- Password history ----------
 export const passwordHistory = pgTable("password_history", {
   id: uuid("id").defaultRandom().primaryKey(),
   userType: userTypeEnum("user_type").notNull(),
@@ -174,14 +187,14 @@ export const passwordHistory = pgTable("password_history", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Generic rate limiting (IP-based and account-based throttles) ----------
+// ---------- Rate limits ----------
 export const rateLimits = pgTable("rate_limits", {
-  key: text("key").primaryKey(), // e.g. "login:ip:1.2.3.4" or "failed-login:user@x.com"
+  key: text("key").primaryKey(),
   count: integer("count").notNull().default(0),
   resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
 });
 
-// ---------- Exams (created by teachers) ----------
+// ---------- Exams ----------
 export const exams = pgTable("exams", {
   id: uuid("id").defaultRandom().primaryKey(),
   orgId: uuid("org_id")
@@ -206,13 +219,17 @@ export const exams = pgTable("exams", {
   endTime: timestamp("end_time", { withTimezone: true }),
   durationMinutes: integer("duration_minutes").notNull().default(60),
   status: examStatusEnum("status").notNull().default("scheduled"),
+  isLaunched: boolean("is_launched").notNull().default(false),  // ← ADD
+  isPaused: boolean("is_paused").notNull().default(false),      // ← ADD
   totalQuestions: integer("total_questions").notNull().default(0),
   totalPoints: integer("total_points").notNull().default(0),
+  parts: jsonb("parts").$type<unknown[]>().notNull().default([]), // ← ADD
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  gradingStatus: gradingStatusEnum("grading_status").notNull().default("in_progress"), // ← ADD
 });
 
-// ---------- Exam Sections (groups of questions within an exam) ----------
+// ---------- Exam Sections ----------
 export const examSections = pgTable("exam_sections", {
   id: uuid("id").defaultRandom().primaryKey(),
   examId: uuid("exam_id")
@@ -224,7 +241,7 @@ export const examSections = pgTable("exam_sections", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Exam Pages (pages within sections) ----------
+// ---------- Exam Pages ----------
 export const examPages = pgTable("exam_pages", {
   id: uuid("id").defaultRandom().primaryKey(),
   sectionId: uuid("section_id")
@@ -244,11 +261,11 @@ export const examQuestions = pgTable("exam_questions", {
   questionType: questionTypeEnum("question_type").notNull(),
   points: integer("points").notNull().default(1),
   questionOrder: integer("question_order").notNull(),
-  explanation: text("explanation"), // show after submission
+  explanation: text("explanation"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Exam Question Options (for MCQ and Multiple Select) ----------
+// ---------- Exam Question Options ----------
 export const examQuestionOptions = pgTable("exam_question_options", {
   id: uuid("id").defaultRandom().primaryKey(),
   questionId: uuid("question_id")
@@ -260,22 +277,28 @@ export const examQuestionOptions = pgTable("exam_question_options", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Student Exam Assignments (many-to-many: students enrolled in exams) ----------
+// ---------- Student Exam Assignments ----------
 export const examStudents = pgTable("exam_students", {
   id: uuid("id").defaultRandom().primaryKey(),
   examId: uuid("exam_id")
     .notNull()
     .references(() => exams.id, { onDelete: "cascade" }),
-  studentId: text("student_id").notNull(), // can be email or external ID
+  studentId: text("student_id").notNull(),
   studentName: text("student_name"),
   studentEmail: text("student_email"),
+  status: examStudentStatusEnum("status").notNull().default("pending"),
+  isLocked: boolean("is_locked").notNull().default(false),
+  isRejectedLive: boolean("is_rejected_live").notNull().default(false),
+  tabSwitches: integer("tab_switches").notNull().default(0),
+  violationMessage: text("violation_message"),
+  lastLockedAt: timestamp("last_locked_at", { withTimezone: true }),
   invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Student Exam Attempts (track multiple attempts per student per exam) ----------
+// ---------- Student Exam Attempts ----------
 export const studentExamAttempts = pgTable("student_exam_attempts", {
   id: uuid("id").defaultRandom().primaryKey(),
   examStudentId: uuid("exam_student_id")
@@ -288,10 +311,12 @@ export const studentExamAttempts = pgTable("student_exam_attempts", {
   manualPoints: integer("manual_points").notNull().default(0),
   maxPoints: integer("max_points").notNull().default(0),
   status: reviewStatusEnum("status").notNull().default("needs_review"),
+  isForcedSubmit: boolean("is_forced_submit").notNull().default(false),
+  gradingStatus: gradingStatusEnum("grading_status").notNull().default("in_progress"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Student Answers (individual answers to individual questions) ----------
+// ---------- Student Answers ----------
 export const studentAnswers = pgTable("student_answers", {
   id: uuid("id").defaultRandom().primaryKey(),
   attemptId: uuid("attempt_id")
@@ -300,9 +325,9 @@ export const studentAnswers = pgTable("student_answers", {
   questionId: uuid("question_id")
     .notNull()
     .references(() => examQuestions.id, { onDelete: "cascade" }),
-  answerText: text("answer_text"), // for essay, short answer, coding
-  selectedOptionIds: jsonb("selected_option_ids").$type<string[]>().notNull().default([]), // for MCQ, multiple select
-  markedCorrect: boolean("marked_correct"), // null = not yet graded, true/false = graded
+  answerText: text("answer_text"),
+  selectedOptionIds: jsonb("selected_option_ids").$type<string[]>().notNull().default([]),
+  markedCorrect: boolean("marked_correct"),
   autoPoints: integer("auto_points").notNull().default(0),
   manualPoints: integer("manual_points").notNull().default(0),
   feedback: text("feedback"),
@@ -310,49 +335,43 @@ export const studentAnswers = pgTable("student_answers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Notifications (exam notifications for teachers/orgs) ----------
+// ---------- Notifications ----------
 export const notifications = pgTable("notifications", {
   id: uuid("id").defaultRandom().primaryKey(),
   orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
   teacherId: uuid("teacher_id").references(() => teachers.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   message: text("message").notNull(),
-  type: text("type").notNull(), // e.g., "teacher_invite", "exam_created", "submission_received", "grade_ready"
-  relatedEntityId: uuid("related_entity_id"), // examId, teacherId, etc.
-  relatedEntityType: text("related_entity_type"), // "exam", "teacher", "submission"
+  type: text("type").notNull(),
+  relatedEntityId: uuid("related_entity_id"),
+  relatedEntityType: text("related_entity_type"),
   isRead: boolean("is_read").notNull().default(false),
   isArchived: boolean("is_archived").notNull().default(false),
   readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Activity Logs (audit trail for exams, submissions, grading, admin actions) ----------
-// This single table backs BOTH tabs on the admin Logs page:
-//   - group = "user"   -> "User Logs" tab (org + teacher + admin account/auth events)
-//   - group = "system" -> "System Logs" tab (platform/infra events, no human actor)
+// ---------- Activity Logs ----------
 export const activityLogs = pgTable("activity_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
-  userId: uuid("user_id"), // can be org, teacher, or admin
-  userType: text("user_type").notNull().default("system"), // "admin" | "org" | "teacher" | "system"
-  action: text("action").notNull(), // e.g., "exam_created", "student_submitted", "org_suspended", etc. (see ACTIVITY_LOG_ACTIONS in lib/logs.ts)
-  entityType: text("entity_type").notNull(), // "org", "teacher", "exam", "question", "submission", "system"
-  entityId: uuid("entity_id"), // examId, submissionId, teacherId, orgId, etc.
-  details: jsonb("details"), // additional context
-
-  // --- Admin Logs page fields ---
-  group: logGroupEnum("group").notNull().default("system"), // which tab this row shows up in
-  severity: logSeverityEnum("severity").notNull().default("info"), // drives the severity dot/badge
-  actorLabel: text("actor_label"), // snapshot display string, e.g. "Ly Vannak (Teacher)" — null for system logs
-  orgLabel: text("org_label"), // snapshot org name, e.g. "Institute of Technology & Science" — null for system logs
+  userId: uuid("user_id"),
+  userType: text("user_type").notNull().default("system"),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id"),
+  details: jsonb("details"),
+  group: logGroupEnum("group").notNull().default("system"),
+  severity: logSeverityEnum("severity").notNull().default("info"),
+  actorLabel: text("actor_label"),
+  orgLabel: text("org_label"),
   isArchived: boolean("is_archived").notNull().default(false),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
-
   ipAddress: text("ip_address"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Exam Analytics (cached/computed stats for performance) ----------
+// ---------- Exam Analytics ----------
 export const examAnalytics = pgTable("exam_analytics", {
   id: uuid("id").defaultRandom().primaryKey(),
   examId: uuid("exam_id")
@@ -361,29 +380,31 @@ export const examAnalytics = pgTable("exam_analytics", {
   totalEnrolled: integer("total_enrolled").notNull().default(0),
   totalSubmitted: integer("total_submitted").notNull().default(0),
   averageScore: integer("average_score").notNull().default(0),
-  passRate: integer("pass_rate").notNull().default(0), // percentage 0-100
+  passRate: integer("pass_rate").notNull().default(0),
   highestScore: integer("highest_score").notNull().default(0),
   lowestScore: integer("lowest_score").notNull().default(0),
-  scoreDistribution: jsonb("score_distribution").$type<Record<string, number>>().notNull().default({}), // e.g., {"0-20": 5, "21-40": 10}
+  scoreDistribution: jsonb("score_distribution").$type<Record<string, number>>().notNull().default({}),
   questionStats: jsonb("question_stats").$type<Array<{ questionId: string; correctCount: number; totalAttempts: number }>>().notNull().default([]),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- Broadcasts (admin system announcements) ----------
+// ---------- Broadcasts ----------
 export const broadcasts = pgTable("broadcasts", {
   id: uuid("id").defaultRandom().primaryKey(),
   subject: text("subject").notNull(),
   message: text("message").notNull(),
-  audience: text("audience").notNull(), // "all_users" | "all_organizations" | "all_teachers" | "specific_organization" | "specific_teacher"
+  audience: text("audience").notNull(),
   targetOrgId: uuid("target_org_id").references(() => organizations.id, { onDelete: "set null" }),
   targetTeacherId: uuid("target_teacher_id").references(() => teachers.id, { onDelete: "set null" }),
   audienceLabel: text("audience_label").notNull(),
   recipientsCount: integer("recipients_count").notNull().default(0),
-  priority: text("priority").notNull().default("normal"), // "normal" | "urgent"
+  priority: text("priority").notNull().default("normal"),
   isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------- Admins ----------
 export const admins = pgTable("admins", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
@@ -391,4 +412,3 @@ export const admins = pgTable("admins", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
- 

@@ -1,6 +1,5 @@
 "use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Search, ArrowLeft, Download, FileSpreadsheet, Users, FileCheck2, ShieldAlert } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
@@ -10,21 +9,18 @@ import { Button } from "@/components/ui/button";
 import { useExamStore, StudentRequest, Exam } from "@/store/useExamStore";
 import { examStats, submissionStatus, scoreSummary, effectiveGradingStatus } from "@/lib/grading-utils";
 
-type Html2PdfInstance = {
-  set: (options: Record<string, unknown>) => {
-    from: (container: HTMLElement) => { save: () => Promise<void> };
-  };
-};
-type Html2PdfWindow = Window & { html2pdf?: () => Html2PdfInstance };
-
 export default function GradingDetailPage() {
   const router = useRouter();
   const params = useParams();
   const examId = params.examId as string;
-
   const exams = useExamStore((s) => s.exams);
-  const currentExam = exams.find((e) => e.id === examId) || null;
+  const fetchExams = useExamStore((s) => s.fetchExams);
 
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
+
+  const currentExam = exams.find((e) => e.id === examId) || null;
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [studentSearch, setStudentSearch] = useState("");
@@ -55,12 +51,10 @@ export default function GradingDetailPage() {
       const workbook = new ExcelJS.Workbook();
       workbook.creator = "ESAME";
       workbook.created = new Date();
-
       const sheet = workbook.addWorksheet("Results", {
         views: [{ state: "frozen", ySplit: 4 }],
         pageSetup: { orientation: "landscape", fitToPage: true },
       });
-
       const COLUMN_COUNT = 6;
       const NAVY = "FF1F4E78";
       const PEACH = "FF6AA84F";
@@ -68,15 +62,12 @@ export default function GradingDetailPage() {
       const PASS_TEXT = "FF047857";
       const FAIL_TEXT = "FFDC2626";
       const PENDING_TEXT = "FFB45309";
-
       const thinBorder = {
         top: { style: "thin" as const, color: { argb: BORDER_COLOR } },
         left: { style: "thin" as const, color: { argb: BORDER_COLOR } },
         bottom: { style: "thin" as const, color: { argb: BORDER_COLOR } },
         right: { style: "thin" as const, color: { argb: BORDER_COLOR } },
       };
-
-      // --- ROW 1-2: Title banner (merged, navy fill, white bold centered) ---
       sheet.mergeCells(1, 1, 2, COLUMN_COUNT);
       const titleCell = sheet.getCell("A1");
       titleCell.value = `${exam.title} (${exam.courseCode})`;
@@ -85,11 +76,7 @@ export default function GradingDetailPage() {
       titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
       sheet.getRow(1).height = 20;
       sheet.getRow(2).height = 20;
-
-      // Row 3 left blank as a visual spacer.
       sheet.getRow(3).height = 8;
-
-      // --- ROW 4: Column headers (peach fill, bold centered, bordered) ---
       const headerRow = sheet.getRow(4);
       const headers = ["Student ID", "Student Name", "Submitted At", "Total Score", "Percentage", "Result"];
       headers.forEach((label, i) => {
@@ -101,17 +88,13 @@ export default function GradingDetailPage() {
         cell.border = thinBorder;
       });
       headerRow.height = 22;
-
-      // --- DATA ROWS ---
       const submissions = exam.requests.filter((r) => r.isSubmitted);
       submissions.forEach((r, idx) => {
         const s = scoreSummary(r);
         const rowNumber = 5 + idx;
         const row = sheet.getRow(rowNumber);
         const resultLabel = effectiveGradingStatus(r) !== "complete" ? "Pending" : s.pass ? "Pass" : "Fail";
-
         const values = [r.studentId, r.name, r.submittedAt || "—", `${s.total} / ${s.max}`, s.percentage / 100, resultLabel];
-
         values.forEach((val, i) => {
           const cell = row.getCell(i + 1);
           cell.value = val;
@@ -119,18 +102,12 @@ export default function GradingDetailPage() {
           cell.alignment = { vertical: "middle", horizontal: "center" };
           cell.border = thinBorder;
         });
-
-        // Percentage as a real number formatted as %
         row.getCell(5).numFmt = "0%";
-
-        // Result text colored (no heavy fill, keeps it clean)
         const resultCell = row.getCell(6);
         const textColor = resultLabel === "Pass" ? PASS_TEXT : resultLabel === "Fail" ? FAIL_TEXT : PENDING_TEXT;
         resultCell.font = { name: "Calibri", size: 10.5, bold: true, color: { argb: textColor } };
-
         row.height = 20;
       });
-
       if (submissions.length === 0) {
         const emptyRow = sheet.getRow(5);
         sheet.mergeCells(5, 1, 5, COLUMN_COUNT);
@@ -140,22 +117,15 @@ export default function GradingDetailPage() {
         emptyRow.getCell(1).border = thinBorder;
         emptyRow.height = 24;
       }
-
-      // Header row stays visible + adds dropdown filter arrows
-      sheet.autoFilter = {
-        from: { row: 4, column: 1 },
-        to: { row: 4, column: COLUMN_COUNT },
-      };
-
+      sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: COLUMN_COUNT } };
       sheet.columns = [
-        { width: 16 }, // Student ID
-        { width: 26 }, // Student Name
-        { width: 18 }, // Submitted At
-        { width: 14 }, // Total Score
-        { width: 13 }, // Percentage
-        { width: 16 }, // Result
+        { width: 16 },
+        { width: 26 },
+        { width: 18 },
+        { width: 14 },
+        { width: 13 },
+        { width: 16 },
       ];
-
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -183,7 +153,6 @@ export default function GradingDetailPage() {
         import("html2canvas-pro"),
         import("jspdf"),
       ]);
-
       const s = scoreSummary(req);
       const container = document.createElement("div");
       container.style.padding = "30px";
@@ -224,36 +193,28 @@ export default function GradingDetailPage() {
           )
           .join("")}
       `;
-
-      // Render off-screen so nothing flashes on screen
       container.style.position = "fixed";
       container.style.left = "-9999px";
       container.style.top = "0";
       document.body.appendChild(container);
-
       const canvas = await html2canvas(container, { scale: 2, backgroundColor: "#ffffff" });
       document.body.removeChild(container);
-
       const imgData = canvas.toDataURL("image/jpeg", 0.98);
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth - 20; // 10mm margins each side
+      const imgWidth = pageWidth - 20;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
       let heightLeft = imgHeight;
       let position = 10;
-
       pdf.addImage(imgData, "JPEG", 10, position, imgWidth, imgHeight);
       heightLeft -= pageHeight - 20;
-
       while (heightLeft > 0) {
         position = heightLeft - imgHeight + 10;
         pdf.addPage();
         pdf.addImage(imgData, "JPEG", 10, position, imgWidth, imgHeight);
         heightLeft -= pageHeight - 20;
       }
-
       pdf.save(`${req.name.replace(/\s+/g, "_")}_Result.pdf`);
     } catch (err) {
       console.error("PDF export failed", err);
@@ -276,7 +237,6 @@ export default function GradingDetailPage() {
         title={currentExam.title}
         description={`Course code: ${currentExam.courseCode}`}
       />
-
       <main className="p-6 space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <button
@@ -344,64 +304,64 @@ export default function GradingDetailPage() {
             </thead>
             <tbody>
               {filteredRequests.map((req) => {
-                  const status = submissionStatus(req);
-                  const s = scoreSummary(req);
-                  return (
-                    <tr key={req.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                      <td className="px-5 py-3.5 font-medium text-navy-900">
-                        {req.name}
-                        <span className="ml-1.5 text-xs font-mono font-normal text-slate-400">
-                          ({req.studentId})
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-600">{req.submittedAt || "—"}</td>
-                      <td className="px-5 py-3.5">
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-600">
-                        {req.isSubmitted ? `${s.total} / ${s.max}` : "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-600">
-                        {req.isSubmitted ? `${s.percentage}%` : "—"}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {!req.isSubmitted ? (
-                          <span className="text-slate-300">—</span>
-                        ) : effectiveGradingStatus(req) !== "complete" ? (
-                          <Badge variant="info">Pending</Badge>
-                        ) : (
-                          <Badge variant={s.pass ? "success" : "danger"}>{s.pass ? "Pass" : "Fail"}</Badge>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5 text-right space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={!req.isSubmitted || isExporting}
-                          onClick={() => handleDownloadPDF(currentExam, req)}
-                        >
-                          <Download size={13} />
-                          PDF
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={req.isSubmitted ? "primary" : "ghost"}
-                          disabled={!req.isSubmitted}
-                          onClick={() => router.push(`/grading/${examId}/${req.id}`)}
-                        >
-                          Grade Student
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              {approvedRequests.length > 0 && filteredRequests.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-400 text-sm">
-                      No students match &quot;{studentSearch}&quot;.
+                const status = submissionStatus(req);
+                const s = scoreSummary(req);
+                return (
+                  <tr key={req.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                    <td className="px-5 py-3.5 font-medium text-navy-900">
+                      {req.name}
+                      <span className="ml-1.5 text-xs font-mono font-normal text-slate-400">
+                        ({req.studentId})
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-600">{req.submittedAt || "—"}</td>
+                    <td className="px-5 py-3.5">
+                      <Badge variant={status.variant}>{status.label}</Badge>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-600">
+                      {req.isSubmitted ? `${s.total} / ${s.max}` : "—"}
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-600">
+                      {req.isSubmitted ? `${s.percentage}%` : "—"}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {!req.isSubmitted ? (
+                        <span className="text-slate-300">—</span>
+                      ) : effectiveGradingStatus(req) !== "complete" ? (
+                        <Badge variant="info">Pending</Badge>
+                      ) : (
+                        <Badge variant={s.pass ? "success" : "danger"}>{s.pass ? "Pass" : "Fail"}</Badge>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-right space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!req.isSubmitted || isExporting}
+                        onClick={() => handleDownloadPDF(currentExam, req)}
+                      >
+                        <Download size={13} />
+                        PDF
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={req.isSubmitted ? "primary" : "ghost"}
+                        disabled={!req.isSubmitted}
+                        onClick={() => router.push(`/grading/${examId}/${req.id}`)}
+                      >
+                        Grade Student
+                      </Button>
                     </td>
                   </tr>
-                )}
+                );
+              })}
+              {approvedRequests.length > 0 && filteredRequests.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-10 text-center text-slate-400 text-sm">
+                    No students match &quot;{studentSearch}&quot;.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </Card>

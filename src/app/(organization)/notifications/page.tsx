@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import {
   UserPlus,
   CalendarPlus,
@@ -17,8 +15,8 @@ import {
   CheckCheck,
   Archive,
   ArchiveRestore,
-  ArrowRight,
   Megaphone,
+  ChevronDown,
 } from "lucide-react";
 
 interface NotificationItem {
@@ -52,7 +50,7 @@ function getNotificationIcon(type: string): { icon: React.ElementType; iconColor
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
-  const [selected, setSelected] = useState<NotificationItem | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function loadNotifications() {
@@ -113,9 +111,18 @@ export default function NotificationsPage() {
     window.dispatchEvent(new Event("org-profile-updated"));
   }
 
-  function openDetail(n: NotificationItem) {
-    markRead(n.id);
-    setSelected({ ...n, read: true });
+  async function handleRowClick(n: NotificationItem) {
+    if (expandedId === n.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(n.id);
+    if (!n.read) markRead(n.id);
+  }
+
+  async function handleArchive(n: NotificationItem) {
+    await toggleArchive(n.id, !n.archived);
+    if (expandedId === n.id) setExpandedId(null);
   }
 
   return (
@@ -123,6 +130,7 @@ export default function NotificationsPage() {
       <OrgTopbar title="Notifications" description="Stay up to date with organization activity" />
 
       <main className="p-6 space-y-5">
+        {/* FILTERS + MARK ALL READ */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex gap-2">
             {FILTERS.map((f) => (
@@ -149,114 +157,93 @@ export default function NotificationsPage() {
           )}
         </div>
 
+        {/* NOTIFICATION LIST */}
         <Card className="overflow-hidden">
-          <ul className="divide-y divide-slate-50">
-            {filtered.map((n) => (
-              <li key={n.id}>
-                {(() => {
-                  const { icon: Icon, iconColor } = getNotificationIcon(n.type);
-                  return (
-                <button
-                  type="button"
-                  onClick={() => openDetail(n)}
-                  className={`w-full text-left flex items-start gap-4 px-5 py-4 hover:bg-slate-50/70 transition-colors ${
-                    !n.read ? "bg-sky-50/40" : ""
+          <ul className="divide-y divide-slate-100">
+            {filtered.map((n) => {
+              const { icon: Icon, iconColor } = getNotificationIcon(n.type);
+              const isExpanded = expandedId === n.id;
+              return (
+                <li
+                  key={n.id}
+                  className={`transition-colors ${
+                    isExpanded ? "bg-slate-50/70" : !n.read ? "bg-sky-50/40" : "hover:bg-slate-50/50"
                   }`}
                 >
-                  <div className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center ${iconColor}`}>
-                    <Icon size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-navy-900">{n.title}</p>
-                      {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />}
+                  <div className="px-5 py-4">
+                    <div className="flex items-start gap-3">
+                      {/* Main clickable area */}
+                      <button
+                        type="button"
+                        onClick={() => handleRowClick(n)}
+                        className="flex-1 min-w-0 text-left flex items-start gap-4"
+                      >
+                        <div className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center ${iconColor}`}>
+                          <Icon size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-navy-900">{n.title}</p>
+                            {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />}
+                          </div>
+                          <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{n.description}</p>
+                          <p className="text-xs text-slate-400 mt-1">{n.time}</p>
+                        </div>
+                      </button>
+
+                      {/* Right side: archive icon + chevron */}
+                      <div className="flex items-center gap-1 shrink-0 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleArchive(n)}
+                          title={n.archived ? "Unarchive" : "Archive"}
+                          className="h-8 w-8 rounded-full flex items-center justify-center text-slate-400 hover:text-navy-900 hover:bg-slate-200/70 transition-colors"
+                        >
+                          {n.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                        </button>
+                        <ChevronDown
+                          size={16}
+                          className={`text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                        />
+                      </div>
                     </div>
-                    <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{n.description}</p>
-                    <p className="text-xs text-slate-400 mt-1">{n.time}</p>
+
+                    {/* Inline detail panel (no modal, no View Details button) */}
+                    {isExpanded && (
+                      <div className="mt-4 ml-13 rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+                        <span className="inline-block rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-0.5">
+                          {n.category}
+                        </span>
+                        <p className="text-sm text-navy-900 leading-relaxed">{n.detail}</p>
+                        <dl className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-3 text-sm">
+                          <div>
+                            <dt className="text-xs text-slate-400">Triggered by</dt>
+                            <dd className="text-navy-900 font-medium mt-0.5">{n.actor}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-slate-400">Date &amp; Time</dt>
+                            <dd className="text-navy-900 font-medium mt-0.5">{n.timestamp}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    )}
                   </div>
-                </button>
-                  );
-                })()}
-              </li>
-            ))}
+                </li>
+              );
+            })}
             {filtered.length === 0 && (
               <li className="px-5 py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
                 <CheckCircle2 size={22} className="text-slate-300" />
-                {loading ? "Loading notifications..." : filter === "Archived" ? "No archived notifications." : "You're all caught up."}
+                {loading
+                  ? "Loading notifications..."
+                  : filter === "Archived"
+                  ? "No archived notifications."
+                  : "You're all caught up."}
               </li>
             )}
           </ul>
         </Card>
       </main>
-
-      {/* Detail modal */}
-      <Dialog open={!!selected} onClose={() => setSelected(null)} className="max-w-lg">
-        {selected && (
-          <>
-            <DialogHeader title={selected.title} onClose={() => setSelected(null)} />
-            <div className="px-6 py-5 space-y-5">
-              <div className="flex items-center gap-3">
-                <div className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center ${getNotificationIcon(selected.type).iconColor}`}>
-                  {(() => {
-                    const Icon = getNotificationIcon(selected.type).icon;
-                    return <Icon size={20} />;
-                  })()}
-                </div>
-                <div>
-                  <span className="inline-block rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-0.5">
-                    {selected.category}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-sm text-navy-900 leading-relaxed">{selected.detail}</p>
-
-              <dl className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm">
-                <div>
-                  <dt className="text-xs text-slate-400">Triggered by</dt>
-                  <dd className="text-navy-900 font-medium mt-0.5">{selected.actor}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-slate-400">Date &amp; Time</dt>
-                  <dd className="text-navy-900 font-medium mt-0.5">{selected.timestamp}</dd>
-                </div>
-              </dl>
-            </div>
-            <DialogFooter>
-              {!selected.archived ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    toggleArchive(selected.id, true);
-                    setSelected(null);
-                  }}
-                >
-                  <Archive size={15} />
-                  Archive
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    toggleArchive(selected.id, false);
-                    setSelected(null);
-                  }}
-                >
-                  <ArchiveRestore size={15} />
-                  Unarchive
-                </Button>
-              )}
-              {selected.href && (
-                <Link href={selected.href}>
-                  <Button onClick={() => setSelected(null)}>
-                    {selected.hrefLabel ?? "View Details"} <ArrowRight size={15} />
-                  </Button>
-                </Link>
-              )}
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
     </>
   );
 }

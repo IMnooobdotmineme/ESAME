@@ -68,13 +68,28 @@ export default function OrganizationDashboardPage() {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+    useEffect(() => {
     async function loadDashboard() {
       try {
         const response = await fetch("/api/org/dashboard", { cache: "no-store" });
-        const json = await response.json();
+        
+        // Read as text first to prevent JSON parse crashes on 500 errors
+        const text = await response.text();
+        let json: any = {};
+        
+        if (text) {
+          try {
+            json = JSON.parse(text);
+          } catch (parseError) {
+            console.error("❌ API returned non-JSON (likely a 500 server error). Raw response:", text);
+            throw new Error("Server returned an invalid response");
+          }
+        }
+
         if (response.ok && json?.stats) {
           setData(json);
+        } else {
+          console.error("❌ Dashboard API failed:", response.status, json);
         }
       } catch (error) {
         console.error("Failed to load dashboard data", error);

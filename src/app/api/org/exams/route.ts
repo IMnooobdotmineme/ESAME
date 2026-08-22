@@ -28,6 +28,7 @@ type ExamListRow = {
   endTime: Date | null;
   durationMinutes: number;
   status: "scheduled" | "in_progress" | "completed" | "locked";
+  gradingStatus: "in_progress" | "complete";
   totalQuestions: number;
   totalPoints: number;
   createdAt: Date;
@@ -71,12 +72,15 @@ type AttemptRow = {
 
 type Trend = { value: string; direction: "up" | "down" };
 
-function mapExamStatus(status: ExamListRow["status"]): ExamStatus {
+function mapExamStatus(
+  status: ExamListRow["status"],
+  gradingStatus?: ExamListRow["gradingStatus"] | null
+): ExamStatus {
   switch (status) {
     case "in_progress":
       return "In Progress";
     case "completed":
-      return "Completed";
+      return gradingStatus === "in_progress" ? "In Progress" : "Completed";
     case "locked":
       return "Locked";
     default:
@@ -213,6 +217,7 @@ async function loadExamRows(orgId: string, examId?: string) {
       endTime: exams.endTime,
       durationMinutes: exams.durationMinutes,
       status: exams.status,
+      gradingStatus: exams.gradingStatus,
       totalQuestions: exams.totalQuestions,
       totalPoints: exams.totalPoints,
       createdAt: exams.createdAt,
@@ -350,7 +355,7 @@ function buildExamPayload(
     date: formatDate(exam.scheduledDate ?? exam.startTime ?? exam.createdAt),
     time: formatTimeRange(exam.startTime, exam.endTime),
     duration: formatDuration(exam.durationMinutes),
-    status: mapExamStatus(exam.status),
+    status: mapExamStatus(exam.status, exam.gradingStatus),
     totalQuestions: exam.totalQuestions || questions.length,
     totalStudents: students.length,
     questions,

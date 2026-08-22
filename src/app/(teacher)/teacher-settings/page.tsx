@@ -20,7 +20,7 @@ import {
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogFooter, DialogHeader } from "@/components/ui/dialog";
-import { TEACHER_ASSIGNMENTS } from "@/lib/teacher-assignments-data";
+import { useTeacherStore } from "@/store/useTeacherStore";
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400";
@@ -30,10 +30,14 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarMenuWrapRef = useRef<HTMLDivElement>(null);
 
+  // Shared teacher store — updates topbar & sidebar instantly
+  const updateProfile = useTeacherStore((state) => state.updateProfile);
+
   const [profile, setProfile] = useState({
-    fullName: "Julian Vance",
-    email: "j.vance@university.edu",
+    fullName: "",
+    email: "",
   });
+  const [loading, setLoading] = useState(true);
 
   // Avatar
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -53,12 +57,60 @@ export default function SettingsPage() {
   const [showNext, setShowNext] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Departments & subjects are assigned by the organization admin — read-only here.
-  const assignments = TEACHER_ASSIGNMENTS || [];
+  // Departments & subjects — fetched from API (assigned by org admin)
+  const [assignments, setAssignments] = useState<
+    Array<{ department: string; subjects: string[] }>
+  >([]);
 
   const [savedProfile, setSavedProfile] = useState(false);
   const [savedPassword, setSavedPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  // --- Fetch teacher profile and assignments on mount ---
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const [profileRes, assignmentsRes] = await Promise.all([
+          fetch("/api/teacher/settings"),
+          fetch("/api/teacher/assignments"),
+        ]);
+
+        if (profileRes.ok) {
+          const data = await profileRes.json();
+          const teacher = data.teacher;
+          setProfile({
+            fullName: teacher.name || "",
+            email: teacher.email || "",
+          });
+          if (teacher.avatarUrl) {
+            setAvatarPreview(teacher.avatarUrl);
+          }
+
+          // Populate the shared store so topbar/sidebar show correct data immediately
+          updateProfile({
+            id: teacher.id,
+            name: teacher.name || "",
+            email: teacher.email || "",
+            avatarUrl: teacher.avatarUrl || null,
+            assignments: teacher.assignments || [],
+          });
+        }
+
+        if (assignmentsRes.ok) {
+          const data = await assignmentsRes.json();
+          setAssignments(data.assignments || []);
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function cropAvatarDataUrl(dataUrl: string, zoom: number): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -135,13 +187,43 @@ export default function SettingsPage() {
       .catch(() => setAvatarError("Unable to prepare image."));
   }
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedProfile(true);
-    setTimeout(() => setSavedProfile(false), 3000);
+    setSavingProfile(true);
+
+    try {
+      const res = await fetch("/api/teacher/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: profile.fullName,
+          avatarUrl: avatarPreview, // base64 data URL or null
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save profile.");
+      }
+
+      // ✅ Update the shared store IMMEDIATELY
+      // This makes the topbar and sidebar update without any page refresh
+      updateProfile({
+        name: profile.fullName,
+        avatarUrl: avatarPreview,
+      });
+
+      setSavedProfile(true);
+      setTimeout(() => setSavedProfile(false), 3000);
+    } catch (error: any) {
+      console.error("Profile save error:", error);
+      alert(error.message || "Failed to save profile.");
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!passwords.current || !passwords.next || !passwords.confirm) {
@@ -152,12 +234,61 @@ export default function SettingsPage() {
       setPasswordError("New password and confirmation don't match.");
       return;
     }
+    if (passwords.next === passwords.current) {
+      setPasswordError("New password must be different from your current password.");
+      return;
+    }
+    if (passwords.next.length < 8) {
+      setPasswordError("New password must be at least 8 characters.");
+      return;
+    }
+    
 
+    setSavingPassword(true);
     setPasswordError("");
-    setPasswords({ current: "", next: "", confirm: "" });
-    setSavedPassword(true);
-    setTimeout(() => setSavedPassword(false), 3000);
+
+    try {
+      const res = await fetch("/api/teacher/settings/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: passwords.current,
+          newPassword: passwords.next,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update password.");
+      }
+
+      setPasswords({ current: "", next: "", confirm: "" });
+      setSavedPassword(true);
+      setTimeout(() => setSavedPassword(false), 3000);
+    } catch (error: any) {
+      console.error("Password update error:", error);
+      setPasswordError(error.message || "Failed to update password.");
+    } finally {
+      setSavingPassword(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <>
+        <TeacherTopbar
+          title="Settings"
+          description="Manage your profile and password. Departments and subjects are assigned by your organization."
+        />
+        <main className="w-full max-w-3xl mx-auto p-6">
+          <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
+            <p className="text-sm text-slate-500 font-medium">Loading settings...</p>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -247,8 +378,8 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <p className="text-base font-semibold text-navy-900">{profile.fullName}</p>
-              
+              <p className="text-base font-semibold text-navy-900">{profile.fullName || "Teacher"}</p>
+
               {avatarError && <p className="mt-1 text-xs text-red-600">{avatarError}</p>}
             </div>
           </div>
@@ -285,9 +416,9 @@ export default function SettingsPage() {
                 <span>Profile Saved!</span>
               </div>
             )}
-            <Button type="submit">
+            <Button type="submit" disabled={savingProfile}>
               <Save className="w-4 h-4" />
-              Save Changes
+              {savingProfile ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </form>
@@ -418,9 +549,9 @@ export default function SettingsPage() {
                 <span>Password Updated!</span>
               </div>
             )}
-            <Button type="submit" variant="secondary">
+            <Button type="submit" variant="secondary" disabled={savingPassword}>
               <KeyRound className="w-4 h-4" />
-              Update Password
+              {savingPassword ? "Updating..." : "Update Password"}
             </Button>
           </div>
         </form>

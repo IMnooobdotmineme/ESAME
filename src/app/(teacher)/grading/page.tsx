@@ -1,6 +1,5 @@
 "use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Filter, Search } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
@@ -16,9 +15,14 @@ const selectClass =
 export default function GradingPage() {
   const router = useRouter();
   const exams = useExamStore((s) => s.exams);
-  const setGradingStatus = useExamStore((s) => s.setGradingStatus);
-  const gradableExams = exams.filter((e) => e.isEnded);
+  const fetchExams = useExamStore((s) => s.fetchExams);
+  const setExamGradingStatus = useExamStore((s) => s.setExamGradingStatus);
 
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
+
+  const gradableExams = exams.filter((e) => e.isEnded);
   const [dateFilter, setDateFilter] = useState("all");
   const [examSearch, setExamSearch] = useState("");
 
@@ -28,7 +32,6 @@ export default function GradingPage() {
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const ageInDays = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
-
       if (dateFilter === "new" && createdAt < startOfToday) return false;
       if (dateFilter === "7-days" && (ageInDays < 0 || ageInDays > 7)) return false;
       if (dateFilter === "30-days" && (ageInDays < 0 || ageInDays > 30)) return false;
@@ -45,11 +48,8 @@ export default function GradingPage() {
     return true;
   });
 
-  const handleExamStatusChange = (examId: string, status: GradingStatus) => {
-    const exam = exams.find((e) => e.id === examId);
-    exam?.requests
-      .filter((request) => request.isSubmitted)
-      .forEach((request) => setGradingStatus(examId, request.id, status));
+  const handleExamStatusChange = async (examId: string, status: GradingStatus) => {
+    await setExamGradingStatus(examId, status);
   };
 
   return (
@@ -58,7 +58,6 @@ export default function GradingPage() {
         title="Grading & Results"
         description="Select an exam session to review submissions and score manual questions."
       />
-
       <main className="p-6 space-y-5">
         {/* EXAM SEARCH */}
         <div className="relative max-w-sm">
@@ -78,7 +77,6 @@ export default function GradingPage() {
             <Filter className="w-3.5 h-3.5" />
             Filter:
           </span>
-
           <div className="relative inline-flex">
             <select
               value={dateFilter}
@@ -92,7 +90,6 @@ export default function GradingPage() {
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 w-3.5 h-3.5 -translate-y-1/2 text-slate-400" />
           </div>
-
           {dateFilter !== "all" && (
             <button
               onClick={() => setDateFilter("all")}
@@ -135,13 +132,18 @@ export default function GradingPage() {
                       </Badge>
                     </td>
                     <td className="px-5 py-3.5 text-slate-600">{exam.subject || "—"}</td>
-                    <td className="px-5 py-3.5 text-center text-slate-600 whitespace-nowrap">{formatExamDate(exam.createdAt)}</td>
+                    <td className="px-5 py-3.5 text-center text-slate-600 whitespace-nowrap">
+                      {formatExamDate(exam.createdAt)}
+                    </td>
                     <td className="px-5 py-3.5 text-center text-slate-600">{stats.examinees}</td>
                     <td className="px-5 py-3.5 text-center text-slate-600">{stats.submitted}</td>
                     <td className="px-5 py-3.5 text-center">
                       <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
                         <GradingStatusDropdown
-                          status={stats.pending > 0 ? "in-progress" : "complete"}
+                          status={
+                            exam.gradingStatus ??
+                            (stats.pending > 0 ? "in-progress" : "complete")
+                          }
                           onChange={(status) => handleExamStatusChange(exam.id, status)}
                         />
                       </div>

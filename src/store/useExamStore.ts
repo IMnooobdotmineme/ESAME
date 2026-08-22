@@ -1,12 +1,6 @@
 import { create } from "zustand";
 import { getDepartmentCode } from "@/lib/department-utils";
 
-/** DEV/TESTING ONLY: when true, every room code auto-approves join requests
- * (like DEMO123 already did), so you can test the full join → waiting-room →
- * exam flow solo without a second "teacher" tab approving anyone.
- * Set back to false before shipping. */
-const DEMO_MODE_AUTO_APPROVE = true;
-
 export type GradingStatus = "in-progress" | "complete";
 
 export interface GradedAnswer {
@@ -25,7 +19,6 @@ export interface GradedAnswer {
 export interface StudentRequest {
   id: string;
   name: string;
-  /** Student's own ID number, shown next to their name everywhere they appear. */
   studentId: string;
   status: "pending" | "approved" | "rejected";
   timestamp: string;
@@ -36,39 +29,30 @@ export interface StudentRequest {
   isLocked?: boolean;
   isRejectedLive?: boolean;
   lastLockedAt?: string;
-  /** Optional message the student wrote explaining their violation, shown to the teacher. */
   violationMessage?: string;
   submittedAt?: string;
   totalMaxPoints?: number;
   answers?: GradedAnswer[];
-  /** Teacher-set grading status for this submission. Defaults to "in-progress" once submitted. */
   gradingStatus?: GradingStatus;
 }
 
 export interface Exam {
   id: string;
   courseCode: string;
-  /** Full department name, e.g. "Computer Science". courseCode is the short badge derived from this. */
   department: string;
-  /** Full subject name, e.g. "Data Structures & Algorithms". */
   subject: string;
   title: string;
   durationMinutes: number;
   questionCount: number;
   roomCode: string;
-  /** True once the teacher clicks "Launch" from the Scheduled tab — moves it to Active,
-   * even before the exam is actually started (isStarted) from the lobby page. */
   isLaunched?: boolean;
   isStarted?: boolean;
   isEnded?: boolean;
   isPaused?: boolean;
-  /** ISO timestamp for when the exam was created — shown on the exam card instead of the join code. */
   createdAt: string;
-  /** Optional auto-launch date. Empty/undefined means the teacher launches manually. */
   startDate?: string;
+  gradingStatus?: GradingStatus;
   requests: StudentRequest[];
-  // Full question/section data from the exam builder — kept loosely typed here
-  // since the store doesn't need to know question internals, just persist them.
   parts?: unknown[];
 }
 
@@ -76,541 +60,207 @@ export interface CreateExamInput {
   title: string;
   department: string;
   subject: string;
+  description?: string;
   durationMinutes: number;
   parts: unknown[];
   questionCount: number;
   startDate?: string;
 }
 
+const CACHE_TTL = 10_000; // 10 seconds — navigating within this window is instant
+
 interface ExamStore {
   exams: Exam[];
+  isLoading: boolean;
+  lastFetchedAt: number | null;
+  fetchExams: (force?: boolean) => Promise<void>;
   requestToJoin: (
     roomCode: string,
     studentName: string
-  ) => { success: boolean; message?: string; requestId?: string };
+  ) => Promise<{ success: boolean; message?: string; requestId?: string }>;
   getStudentStatus: (
     roomCode: string,
     requestId: string
-  ) => "pending" | "approved" | "rejected" | null;
-  approveStudent: (roomCode: string, requestId: string) => void;
-  rejectStudent: (roomCode: string, requestId: string) => void;
-  deleteExam: (id: string) => void;
-  startExam: (roomCode: string) => { success: boolean; message?: string };
-  launchExam: (id: string) => void;
-  endExam: (roomCode: string) => void;
-  pauseExam: (roomCode: string) => void;
-  resumeExam: (roomCode: string) => void;
+  ) => Promise<"pending" | "approved" | "rejected" | null>;
+  approveStudent: (roomCode: string, requestId: string) => Promise<void>;
+  rejectStudent: (roomCode: string, requestId: string) => Promise<void>;
+  deleteExam: (id: string) => Promise<{ success: boolean; message?: string }>;
+  launchExam: (
+    id: string
+  ) => Promise<{ success: boolean; roomCode?: string; message?: string }>;
+  startExam: (roomCode: string) => Promise<{ success: boolean; message?: string }>;
+  endExam: (roomCode: string) => Promise<void>;
+  pauseExam: (roomCode: string) => Promise<void>;
+  resumeExam: (roomCode: string) => Promise<void>;
   flagTabSwitch: (roomCode: string, requestId: string) => void;
   submitViolationMessage: (roomCode: string, requestId: string, message: string) => void;
-  grantContinue: (roomCode: string, requestId: string) => void;
-  rejectLiveStudent: (roomCode: string, requestId: string) => void;
+  grantContinue: (roomCode: string, requestId: string) => Promise<void>;
+  rejectLiveStudent: (roomCode: string, requestId: string) => Promise<void>;
   reinstateLiveStudent: (roomCode: string, requestId: string) => void;
-  createExam: (input: CreateExamInput) => { id: string; roomCode: string };
-  updateExam: (id: string, input: Partial<CreateExamInput>) => { success: boolean; message?: string };
+  createExam: (
+    input: CreateExamInput
+  ) => Promise<{ id: string; roomCode: string; message?: string }>;
+  updateExam: (
+    id: string,
+    input: Partial<CreateExamInput>
+  ) => Promise<{ success: boolean; message?: string }>;
   saveManualGrades: (
     examId: string,
     requestId: string,
     grades: { questionId: string; score: number }[]
-  ) => void;
-  setGradingStatus: (examId: string, requestId: string, status: GradingStatus) => void;
-}
-
-function generateRoomCode(existingCodes: string[]): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  do {
-    code = "";
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-  } while (existingCodes.includes(code));
-  return code;
+  ) => Promise<void>;
+  setGradingStatus: (examId: string, requestId: string, status: GradingStatus) => Promise<void>;
+  setExamGradingStatus: (examId: string, status: GradingStatus) => Promise<void>;
 }
 
 export const useExamStore = create<ExamStore>((set, get) => ({
-  exams: [
-    {
-      id: "1",
-      courseCode: "CS",
-      department: "Computer Science",
-      subject: "Orientation Demo Session",
-      title: "Demo Exam Session",
-      durationMinutes: 60,
-      questionCount: 5,
-      roomCode: "DEMO123",
-      isLaunched: true,
-      isStarted: false,
-      isEnded: false,
-      isPaused: false,
-      createdAt: "2026-07-28T09:15:00",
-      requests: [
-        {
-          id: "req-1",
-          name: "Alex Johnson",
-          studentId: "STU-2026-0001",
-          status: "approved",
-          timestamp: "10:00 AM",
-          currentQuestion: 1,
-          tabSwitches: 0,
-          isSubmitted: false,
-          isLocked: false,
-        },
-        {
-          id: "req-0",
-          name: "Nadia Ferreira",
-          studentId: "STU-2026-0002",
-          status: "approved",
-          timestamp: "9:59 AM",
-          currentQuestion: 5,
-          tabSwitches: 0,
-          isSubmitted: true,
-          submittedAt: "10:41 AM",
-          isLocked: false,
-        },
-        {
-          id: "req-2",
-          name: "Priya Patel",
-          studentId: "STU-2026-0003",
-          status: "approved",
-          timestamp: "10:01 AM",
-          currentQuestion: 3,
-          tabSwitches: 1,
-          isSubmitted: false,
-          isLocked: true,
-          lastLockedAt: "10:14 AM",
-          violationMessage:
-            "My browser crashed and reopened automatically, I wasn't trying to switch tabs.",
-        },
-        {
-          id: "req-3",
-          name: "Daniel Kim",
-          studentId: "STU-2026-0004",
-          status: "approved",
-          timestamp: "10:02 AM",
-          currentQuestion: 5,
-          tabSwitches: 0,
-          isSubmitted: false,
-          isLocked: false,
-        },
-        {
-          id: "req-4",
-          name: "Chan Sopheak",
-          studentId: "STU-2026-0005",
-          status: "pending",
-          timestamp: "10:05 AM",
-        },
-        {
-          id: "req-5",
-          name: "Maria Gonzalez",
-          studentId: "STU-2026-0006",
-          status: "pending",
-          timestamp: "10:07 AM",
-        },
-        {
-          id: "req-6",
-          name: "Liam O'Brien",
-          studentId: "STU-2026-0007",
-          status: "rejected",
-          timestamp: "9:58 AM",
-        },
-      ],
-    },
-    {
-      id: "2",
-      courseCode: "CS",
-      department: "Computer Science",
-      subject: "Data Structures & Algorithms",
-      title: "Introduction to Computer Science (Midterm)",
-      durationMinutes: 60,
-      questionCount: 10,
-      roomCode: "X8K29P",
-      isStarted: true,
-      isEnded: true,
-      createdAt: "2026-08-02T14:40:00",
-      parts: [
-        {
-          id: "part-cs101-1",
-          title: "Section A: Core Concepts",
-          marks: 10,
-          description: "Format restricted to Multiple Choice (QCM).",
-          allowedType: "mcq",
-          questions: [{ id: "q1" }],
-        },
-        {
-          id: "part-cs101-2",
-          title: "Section B: Written Response",
-          marks: 40,
-          description: "Format restricted to Long Question.",
-          allowedType: "long_answer",
-          questions: [{ id: "q2" }],
-        },
-      ],
-      requests: [
-        {
-          id: "req-cs101-1",
-          name: "Alexander Wright",
-          studentId: "STU-2026-0008",
-          status: "approved",
-          timestamp: "1:58 PM",
-          isSubmitted: true,
-          submittedAt: "2:15 PM, Aug 9",
-          totalMaxPoints: 50,
-          answers: [
-            {
-              id: "q1",
-              type: "mcq",
-              questionText: "Which data structure uses LIFO (Last In, First Out)?",
-              maxPoints: 10,
-              studentAnswer: "Stack",
-              correctAnswer: "Stack",
-              autoScore: 10,
-            },
-            {
-              id: "q2",
-              type: "long",
-              questionText:
-                "Explain the difference between Object-Oriented and Functional Programming.",
-              maxPoints: 40,
-              studentAnswer:
-                "OOP organizes code around objects with data and methods. Functional programming treats computation as evaluating functions and avoids mutable state.",
-              manualScore: 34,
-              feedback: "Clear distinction made regarding state mutability.",
-              needsManualGrading: false,
-            },
-          ],
-        },
-        {
-          id: "req-cs101-2",
-          name: "Sarah Jenkins",
-          studentId: "STU-2026-0009",
-          status: "approved",
-          timestamp: "2:02 PM",
-          isSubmitted: true,
-          submittedAt: "2:20 PM, Aug 9",
-          totalMaxPoints: 50,
-          answers: [
-            {
-              id: "q1",
-              type: "mcq",
-              questionText: "Which data structure uses LIFO (Last In, First Out)?",
-              maxPoints: 10,
-              studentAnswer: "Queue",
-              correctAnswer: "Stack",
-              autoScore: 0,
-            },
-            {
-              id: "q2",
-              type: "long",
-              questionText:
-                "Explain the difference between Object-Oriented and Functional Programming.",
-              maxPoints: 40,
-              studentAnswer:
-                "OOP uses classes and objects to bundle data and functionality. Functional programming focuses on pure functions and immutability.",
-              needsManualGrading: true,
-            },
-          ],
-        },
-        {
-          id: "req-cs101-3",
-          name: "Emily Ross",
-          studentId: "STU-2026-0010",
-          status: "approved",
-          timestamp: "1:50 PM",
-          isSubmitted: true,
-          isForcedSubmit: true,
-          submittedAt: "2:00 PM, Aug 9",
-          totalMaxPoints: 50,
-          answers: [
-            {
-              id: "q1",
-              type: "mcq",
-              questionText: "Which data structure uses LIFO (Last In, First Out)?",
-              maxPoints: 10,
-              studentAnswer: "Stack",
-              correctAnswer: "Stack",
-              autoScore: 10,
-            },
-            {
-              id: "q2",
-              type: "long",
-              questionText:
-                "Explain the difference between Object-Oriented and Functional Programming.",
-              maxPoints: 40,
-              studentAnswer: "Ran out of time after a tab-switch lock.",
-              needsManualGrading: true,
-            },
-          ],
-        },
-        {
-          id: "req-cs101-4",
-          name: "Marcus Lee",
-          studentId: "STU-2026-0011",
-          status: "approved",
-          timestamp: "1:55 PM",
-          isSubmitted: true,
-          isForcedSubmit: true,
-          submittedAt: "2:30 PM, Aug 9",
-          totalMaxPoints: 50,
-          answers: [
-            {
-              id: "q1",
-              type: "mcq",
-              questionText: "Which data structure uses LIFO (Last In, First Out)?",
-              maxPoints: 10,
-              studentAnswer: "",
-              correctAnswer: "Stack",
-              autoScore: 0,
-            },
-            {
-              id: "q2",
-              type: "long",
-              questionText:
-                "Explain the difference between Object-Oriented and Functional Programming.",
-              maxPoints: 40,
-              studentAnswer: "",
-              needsManualGrading: true,
-            },
-          ],
-        },
-        {
-          id: "req-cs101-5",
-          name: "Nadia Rahman",
-          studentId: "STU-2026-0012",
-          status: "approved",
-          timestamp: "1:52 PM",
-          isSubmitted: true,
-          submittedAt: "2:10 PM, Aug 9",
-          totalMaxPoints: 50,
-          answers: [
-            {
-              id: "q1",
-              type: "mcq",
-              questionText: "Which data structure uses LIFO (Last In, First Out)?",
-              maxPoints: 10,
-              studentAnswer: "Stack",
-              correctAnswer: "Stack",
-              autoScore: 10,
-            },
-            {
-              id: "q2",
-              type: "long",
-              questionText:
-                "Explain the difference between Object-Oriented and Functional Programming.",
-              maxPoints: 40,
-              studentAnswer:
-                "OOP models programs as interacting objects that own state. FP composes pure functions and treats data as immutable, which makes reasoning about side effects easier.",
-              manualScore: 39,
-              feedback: "Excellent, precise answer.",
-              needsManualGrading: false,
-            },
-          ],
-        },
-        {
-          id: "req-cs101-6",
-          name: "Tyler Brooks",
-          studentId: "STU-2026-0013",
-          status: "approved",
-          timestamp: "1:59 PM",
-          isSubmitted: true,
-          submittedAt: "2:18 PM, Aug 9",
-          totalMaxPoints: 50,
-          answers: [
-            {
-              id: "q1",
-              type: "mcq",
-              questionText: "Which data structure uses LIFO (Last In, First Out)?",
-              maxPoints: 10,
-              studentAnswer: "Array",
-              correctAnswer: "Stack",
-              autoScore: 0,
-            },
-            {
-              id: "q2",
-              type: "long",
-              questionText:
-                "Explain the difference between Object-Oriented and Functional Programming.",
-              maxPoints: 40,
-              studentAnswer:
-                "Not sure, OOP is like classes I think and functional is something else.",
-              manualScore: 8,
-              feedback: "Needs to revisit both paradigms — see office hours.",
-              needsManualGrading: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      id: "3",
-      courseCode: "CHEM",
-      department: "Chemistry",
-      subject: "Organic Chemistry",
-      title: "Organic Chemistry Quiz 3",
-      durationMinutes: 45,
-      questionCount: 8,
-      roomCode: "CHEM3XQ",
-      // Scheduled only — no isLaunched/isStarted, so this sits in the Scheduled tab.
-      // The lobby already has pending join requests queued up so clicking
-      // "Launch Exam" immediately shows students waiting to be accepted.
-      createdAt: "2026-08-10T11:00:00",
-      requests: [
-        { id: "req-chem-1", name: "Priya Chandrasekaran", studentId: "STU-2026-0014", status: "pending", timestamp: "9:41 AM" },
-        { id: "req-chem-2", name: "Marcus Webb", studentId: "STU-2026-0015", status: "pending", timestamp: "9:43 AM" },
-        { id: "req-chem-3", name: "Isabella Conti", studentId: "STU-2026-0016", status: "pending", timestamp: "9:44 AM" },
-        { id: "req-chem-4", name: "Owen Fitzgerald", studentId: "STU-2026-0017", status: "pending", timestamp: "9:47 AM" },
-      ],
-    },
-  ],
+  exams: [],
+  isLoading: false,
+  lastFetchedAt: null,
 
-  requestToJoin: (roomCode, studentName) => {
-    const state = get();
-    const examIndex = state.exams.findIndex(
-      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
-    );
-
-    if (examIndex === -1) {
-      return { success: false, message: "Invalid Room Code. Please check and try again." };
+  // ✅ Cached fetch: instant navigation, fresh data only when forced or stale
+  fetchExams: async (force = false) => {
+    const { lastFetchedAt, exams } = get();
+    if (!force && lastFetchedAt && Date.now() - lastFetchedAt < CACHE_TTL) {
+      return; // use cache — page renders immediately
     }
-
-    const targetExam = state.exams[examIndex];
-    const isDemoExam = targetExam.roomCode.toUpperCase() === "DEMO123";
-    if (targetExam.isStarted && !targetExam.isEnded && !isDemoExam) {
-      return { success: false, message: "This exam has already started. New students can no longer join." };
+    if (exams.length === 0) set({ isLoading: true });
+    try {
+      const res = await fetch("/api/teacher/exams");
+      if (!res.ok) throw new Error("Failed to fetch exams");
+      const data = await res.json();
+      set({
+        exams: (data.exams || []).map((e: any) => ({
+          ...e,
+          courseCode: e.courseCode || getDepartmentCode(e.department || ""),
+        })),
+        isLoading: false,
+        lastFetchedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("fetchExams error:", error);
+      set({ isLoading: false });
     }
-    if (targetExam.isEnded) {
-      return { success: false, message: "This exam has already ended." };
-    }
-
-    const newRequestId = `req-${Date.now()}`;
-    const newRequest: StudentRequest = {
-      id: newRequestId,
-      name: studentName,
-      studentId: `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      // DEMO123 (and, while DEMO_MODE_AUTO_APPROVE is on, every room) auto-approves
-      // so the join → waiting-room → exam flow can be tested end-to-end without
-      // needing a second "teacher" tab open.
-      status:
-        DEMO_MODE_AUTO_APPROVE || targetExam.roomCode.toUpperCase() === "DEMO123"
-          ? "approved"
-          : "pending",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      currentQuestion: 1,
-      tabSwitches: 0,
-      isSubmitted: false,
-      isLocked: false,
-    };
-
-    const updatedExams = [...state.exams];
-    updatedExams[examIndex].requests.push(newRequest);
-
-    set({ exams: updatedExams });
-    return { success: true, requestId: newRequestId };
   },
 
-  getStudentStatus: (roomCode, requestId) => {
-    const exam = get().exams.find((e) => e.roomCode.toUpperCase() === roomCode.toUpperCase());
+  requestToJoin: async (roomCode, studentName) => {
+    return { success: false, message: "Student side not yet implemented" };
+  },
+
+  getStudentStatus: async (roomCode, requestId) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
     if (!exam) return null;
     const req = exam.requests.find((r) => r.id === requestId);
     return req ? req.status : null;
   },
 
-  approveStudent: (roomCode, requestId) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => {
-        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
-        return {
-          ...exam,
-          requests: exam.requests.map((req) =>
-            req.id === requestId ? { ...req, status: "approved" as const } : req
-          ),
-        };
-      }),
-    }));
-  },
-
-  rejectStudent: (roomCode, requestId) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => {
-        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
-        return {
-          ...exam,
-          requests: exam.requests.map((req) =>
-            req.id === requestId ? { ...req, status: "rejected" as const } : req
-          ),
-        };
-      }),
-    }));
-  },
-
-  deleteExam: (id) => {
-    set((state) => ({
-      exams: state.exams.filter((exam) => exam.id !== id),
-    }));
-  },
-
-  launchExam: (id) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => (exam.id === id ? { ...exam, isLaunched: true } : exam)),
-    }));
-  },
-
-  startExam: (roomCode) => {
-    const state = get();
-    const alreadyLive = state.exams.find(
-      (e) => e.isStarted && !e.isEnded && e.roomCode.toUpperCase() !== roomCode.toUpperCase()
+  approveStudent: async (roomCode, requestId) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
     );
-    if (alreadyLive) {
-      return {
-        success: false,
-        message: `"${alreadyLive.title}" is already live. End that session before starting another.`,
-      };
+    if (!exam) return;
+    try {
+      await fetch(`/api/teacher/exams/${exam.id}/approve/${requestId}`, { method: "POST" });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("approveStudent error:", error);
     }
-    set((state) => ({
-      exams: state.exams.map((exam) =>
-        exam.roomCode.toUpperCase() === roomCode.toUpperCase()
-          ? { ...exam, isStarted: true, isEnded: false }
-          : exam
-      ),
-    }));
-    return { success: true };
   },
 
-  endExam: (roomCode) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => {
-        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
-        const endedAt = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        return {
-          ...exam,
-          isEnded: true,
-          requests: exam.requests.map((req) =>
-            req.status === "approved" && !req.isSubmitted
-              ? { ...req, isSubmitted: true, isForcedSubmit: true, submittedAt: endedAt }
-              : req
-          ),
-        };
-      }),
-    }));
+  rejectStudent: async (roomCode, requestId) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
+    if (!exam) return;
+    try {
+      await fetch(`/api/teacher/exams/${exam.id}/reject/${requestId}`, { method: "POST" });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("rejectStudent error:", error);
+    }
   },
 
-  pauseExam: (roomCode) => {
-    set((state) => ({
-      exams: state.exams.map((exam) =>
-        exam.roomCode.toUpperCase() === roomCode.toUpperCase()
-          ? { ...exam, isPaused: true }
-          : exam
-      ),
-    }));
+  deleteExam: async (id) => {
+    try {
+      const res = await fetch(`/api/teacher/exams/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, message: data.error || "Failed to delete" };
+      await get().fetchExams(true);
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: "Network error" };
+    }
   },
 
-  resumeExam: (roomCode) => {
-    set((state) => ({
-      exams: state.exams.map((exam) =>
-        exam.roomCode.toUpperCase() === roomCode.toUpperCase()
-          ? { ...exam, isPaused: false }
-          : exam
-      ),
-    }));
+  launchExam: async (id) => {
+    try {
+      const res = await fetch(`/api/teacher/exams/${id}/launch`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, message: data.error || "Failed to launch exam." };
+      await get().fetchExams(true);
+      return { success: true, roomCode: data.roomCode };
+    } catch (error) {
+      return { success: false, message: "Network error" };
+    }
+  },
+
+  startExam: async (roomCode) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
+    if (!exam) return { success: false, message: "Exam not found." };
+    try {
+      const res = await fetch(`/api/teacher/exams/${exam.id}/start`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        return { success: false, message: data.message || "Failed to start exam." };
+      }
+      await get().fetchExams(true);
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: "Failed to start exam." };
+    }
+  },
+
+  endExam: async (roomCode) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
+    if (!exam) return;
+    try {
+      await fetch(`/api/teacher/exams/${exam.id}/end`, { method: "POST" });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("endExam error:", error);
+    }
+  },
+
+  pauseExam: async (roomCode) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
+    if (!exam) return;
+    try {
+      await fetch(`/api/teacher/exams/${exam.id}/pause`, { method: "POST" });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("pauseExam error:", error);
+    }
+  },
+
+  resumeExam: async (roomCode) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
+    if (!exam) return;
+    try {
+      await fetch(`/api/teacher/exams/${exam.id}/resume`, { method: "POST" });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("resumeExam error:", error);
+    }
   },
 
   flagTabSwitch: (roomCode, requestId) => {
@@ -651,32 +301,30 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     }));
   },
 
-  grantContinue: (roomCode, requestId) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => {
-        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
-        return {
-          ...exam,
-          requests: exam.requests.map((req) =>
-            req.id === requestId ? { ...req, isLocked: false } : req
-          ),
-        };
-      }),
-    }));
+  grantContinue: async (roomCode, requestId) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
+    if (!exam) return;
+    try {
+      await fetch(`/api/teacher/exams/${exam.id}/grant-continue/${requestId}`, { method: "POST" });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("grantContinue error:", error);
+    }
   },
 
-  rejectLiveStudent: (roomCode, requestId) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => {
-        if (exam.roomCode.toUpperCase() !== roomCode.toUpperCase()) return exam;
-        return {
-          ...exam,
-          requests: exam.requests.map((req) =>
-            req.id === requestId ? { ...req, isRejectedLive: true, isLocked: false } : req
-          ),
-        };
-      }),
-    }));
+  rejectLiveStudent: async (roomCode, requestId) => {
+    const exam = get().exams.find(
+      (e) => e.roomCode.toUpperCase() === roomCode.toUpperCase()
+    );
+    if (!exam) return;
+    try {
+      await fetch(`/api/teacher/exams/${exam.id}/reject-live/${requestId}`, { method: "POST" });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("rejectLiveStudent error:", error);
+    }
   },
 
   reinstateLiveStudent: (roomCode, requestId) => {
@@ -693,97 +341,92 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     }));
   },
 
-  createExam: (input) => {
-    const state = get();
-    const existingCodes = state.exams.map((e) => e.roomCode);
-    const roomCode = generateRoomCode(existingCodes);
-    const id = `exam-${Date.now()}`;
-
-    const newExam: Exam = {
-      id,
-      courseCode: getDepartmentCode(input.department),
-      department: input.department,
-      subject: input.subject,
-      title: input.title,
-      durationMinutes: input.durationMinutes,
-      questionCount: input.questionCount,
-      roomCode,
-      isStarted: false,
-      isEnded: false,
-      createdAt: new Date().toISOString(),
-      startDate: input.startDate,
-      requests: [],
-      parts: input.parts,
-    };
-
-    set({ exams: [newExam, ...state.exams] });
-    return { id, roomCode };
-  },
-
-  updateExam: (id, input) => {
-    const target = get().exams.find((e) => e.id === id);
-    if (!target) return { success: false, message: "Exam not found." };
-    if (target.isStarted && !target.isEnded) {
-      return { success: false, message: "This exam is live and cannot be edited. End the session first." };
+  createExam: async (input) => {
+    try {
+      const res = await fetch("/api/teacher/exams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { error: text };
+      }
+      if (!res.ok) return { id: "", roomCode: "", message: data.error || "Failed" };
+      await get().fetchExams(true);
+      return { id: data.id, roomCode: "" };
+    } catch (error) {
+      return { id: "", roomCode: "", message: "Network error" };
     }
-    if (target.isEnded) {
-      return { success: false, message: "Completed exams cannot be edited." };
+  },
+
+  updateExam: async (id, input) => {
+    try {
+      const res = await fetch(`/api/teacher/exams/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { error: text };
+      }
+      if (!res.ok || data.success === false) {
+        return { success: false, message: data.message || data.error || "Failed" };
+      }
+      await get().fetchExams(true);
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: "Network error" };
     }
-    set((state) => ({
-      exams: state.exams.map((exam) =>
-        exam.id === id
-          ? {
-              ...exam,
-              ...(input.title !== undefined && { title: input.title }),
-              ...(input.department !== undefined && {
-                department: input.department,
-                courseCode: getDepartmentCode(input.department),
-              }),
-              ...(input.subject !== undefined && { subject: input.subject }),
-              ...(input.durationMinutes !== undefined && { durationMinutes: input.durationMinutes }),
-              ...(input.questionCount !== undefined && { questionCount: input.questionCount }),
-              ...(input.parts !== undefined && { parts: input.parts }),
-              ...(input.startDate !== undefined && { startDate: input.startDate }),
-            }
-          : exam
-      ),
-    }));
-    return { success: true };
   },
 
-  saveManualGrades: (examId, requestId, grades) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => {
-        if (exam.id !== examId) return exam;
-        return {
-          ...exam,
-          requests: exam.requests.map((req) => {
-            if (req.id !== requestId || !req.answers) return req;
-            return {
-              ...req,
-              answers: req.answers.map((a) => {
-                const g = grades.find((x) => x.questionId === a.id);
-                if (!g) return a;
-                return { ...a, manualScore: g.score, needsManualGrading: false };
-              }),
-            };
-          }),
-        };
-      }),
-    }));
+  saveManualGrades: async (examId, requestId, grades) => {
+    try {
+      const res = await fetch(`/api/teacher/grading/${examId}/${requestId}/save-grades`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grades }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        console.error("saveManualGrades failed:", res.status, d);
+      }
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("saveManualGrades error:", error);
+    }
   },
 
-  setGradingStatus: (examId, requestId, status) => {
-    set((state) => ({
-      exams: state.exams.map((exam) => {
-        if (exam.id !== examId) return exam;
-        return {
-          ...exam,
-          requests: exam.requests.map((req) =>
-            req.id === requestId ? { ...req, gradingStatus: status } : req
-          ),
-        };
-      }),
-    }));
+  setGradingStatus: async (examId, requestId, status) => {
+    try {
+      await fetch(`/api/teacher/grading/${examId}/set-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, requestId }),
+      });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("setGradingStatus error:", error);
+    }
+  },
+
+  setExamGradingStatus: async (examId, status) => {
+    try {
+      await fetch(`/api/teacher/grading/${examId}/set-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      await get().fetchExams(true);
+    } catch (error) {
+      console.error("setExamGradingStatus error:", error);
+    }
   },
 }));

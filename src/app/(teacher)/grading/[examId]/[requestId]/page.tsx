@@ -1,6 +1,5 @@
 "use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Check, Download } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
@@ -9,32 +8,36 @@ import { Button } from "@/components/ui/button";
 import { useExamStore, GradedAnswer } from "@/store/useExamStore";
 import { scoreSummary, effectiveGradingStatus } from "@/lib/grading-utils";
 
-type Html2PdfInstance = {
-  set: (options: Record<string, unknown>) => {
-    from: (container: HTMLElement) => { save: () => Promise<void> };
-  };
-};
-type Html2PdfWindow = Window & { html2pdf?: () => Html2PdfInstance };
-
 export default function GradeStudentPage() {
   const router = useRouter();
   const params = useParams();
   const examId = params.examId as string;
   const requestId = params.requestId as string;
-
   const exams = useExamStore((s) => s.exams);
   const saveManualGrades = useExamStore((s) => s.saveManualGrades);
+  const fetchExams = useExamStore((s) => s.fetchExams);
+
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
+
   const currentExam = exams.find((e) => e.id === examId) || null;
   const request = currentExam?.requests.find((r) => r.id === requestId) || null;
 
-  const [manualScores, setManualScores] = useState<Record<string, number | "">>(() => {
-    const scores: Record<string, number | ""> = {};
-    request?.answers?.forEach((a) => {
-      scores[a.id] = a.manualScore ?? "";
-    });
-    return scores;
-  });
+  const [manualScores, setManualScores] = useState<Record<string, number | "">>({});
   const [isExporting, setIsExporting] = useState(false);
+
+  // Initialize score inputs once the submission loads from the API
+  useEffect(() => {
+    if (request?.answers) {
+      const scores: Record<string, number | ""> = {};
+      request.answers.forEach((a) => {
+        scores[a.id] = a.manualScore ?? "";
+      });
+      setManualScores(scores);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.id]);
 
   if (!currentExam || !request) {
     return (
@@ -62,7 +65,7 @@ export default function GradeStudentPage() {
     (a) => a.autoScore !== undefined || a.manualScore !== undefined
   ).length;
 
-  function handleSaveGrades() {
+  async function handleSaveGrades() {
     if (!currentExam || !request) return;
     const grades = (request.answers || [])
       .filter((a) => a.type !== "mcq")
@@ -70,7 +73,7 @@ export default function GradeStudentPage() {
         questionId: a.id,
         score: Number(manualScores[a.id] || 0),
       }));
-    saveManualGrades(currentExam.id, request.id, grades);
+    await saveManualGrades(currentExam.id, request.id, grades);
     router.push(`/grading/${examId}`);
   }
 
@@ -81,7 +84,6 @@ export default function GradeStudentPage() {
         import("html2canvas-pro"),
         import("jspdf"),
       ]);
-
       const container = document.createElement("div");
       container.style.padding = "30px";
       container.style.fontFamily = "Arial, sans-serif";
@@ -121,36 +123,28 @@ export default function GradeStudentPage() {
           )
           .join("")}
       `;
-
-      // Render off-screen so nothing flashes on screen
       container.style.position = "fixed";
       container.style.left = "-9999px";
       container.style.top = "0";
       document.body.appendChild(container);
-
       const canvas = await html2canvas(container, { scale: 2, backgroundColor: "#ffffff" });
       document.body.removeChild(container);
-
       const imgData = canvas.toDataURL("image/jpeg", 0.98);
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth - 20; // 10mm margins each side
+      const imgWidth = pageWidth - 20;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
       let heightLeft = imgHeight;
       let position = 10;
-
       pdf.addImage(imgData, "JPEG", 10, position, imgWidth, imgHeight);
       heightLeft -= pageHeight - 20;
-
       while (heightLeft > 0) {
         position = heightLeft - imgHeight + 10;
         pdf.addPage();
         pdf.addImage(imgData, "JPEG", 10, position, imgWidth, imgHeight);
         heightLeft -= pageHeight - 20;
       }
-
       pdf.save(`${request!.name.replace(/\s+/g, "_")}_Result.pdf`);
     } catch (err) {
       console.error("PDF export failed", err);
@@ -170,7 +164,6 @@ export default function GradeStudentPage() {
             : `Submitted ${request.submittedAt || "-"} · ${gradedCount} of ${totalCount} questions scored — mark Complete once finished`
         }
       />
-
       <main className="p-6 space-y-5 max-w-3xl mx-auto">
         <div className="flex items-center justify-between">
           <button
@@ -197,7 +190,6 @@ export default function GradeStudentPage() {
                 </span>
               </div>
               <p className="text-sm font-semibold text-navy-900">{q.questionText}</p>
-
               {q.type === "mcq" ? (
                 <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 text-sm space-y-1.5">
                   <div className="flex justify-between">
@@ -248,7 +240,6 @@ export default function GradeStudentPage() {
             </Card>
           ))}
         </div>
-
 
         <div className="flex justify-end gap-3 pt-2 pb-6">
           <Button variant="outline" onClick={() => router.push(`/grading/${examId}`)}>

@@ -1,6 +1,6 @@
 "use client";
-
 import React, { useState, useEffect } from "react";
+import { Copy, Check, CheckCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useExamStore, type Exam } from "@/store/useExamStore";
 import {
@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dialog, DialogHeader } from "@/components/ui/dialog"; // ← ADD THIS IMPORT
 
 type ExamCard = Exam & {
   status: "active" | "scheduled" | "completed";
@@ -27,92 +28,10 @@ type ExamCard = Exam & {
   questions?: unknown[];
 };
 
-// ----------------------------------------------------------------------
-// DEMO MOCK DATA (used only if the store is empty)
-// ----------------------------------------------------------------------
-const DEMO_MOCK_EXAMS: Partial<ExamCard>[] = [
-  {
-    id: "demo-1",
-    title: "Introduction to Computer Science (Midterm)",
-    courseCode: "CS",
-    department: "Computer Science",
-    subject: "Programming Fundamentals",
-    roomCode: "CS101-MID",
-    durationMinutes: 60,
-    questionCount: 30,
-    createdAt: "2026-07-20T09:00:00",
-    status: "active",
-  },
-  {
-    id: "demo-2",
-    title: "Software Engineering & Architecture Principles",
-    courseCode: "SE",
-    department: "Software Engineering",
-    subject: "Software Architecture & Design Patterns",
-    roomCode: "ARCH-2026",
-    durationMinutes: 90,
-    questionCount: 25,
-    createdAt: "2026-07-22T09:00:00",
-    status: "active",
-  },
-  {
-    id: "demo-3",
-    title: "Database Systems & SQL Optimization Final",
-    courseCode: "SE",
-    department: "Software Engineering",
-    subject: "Database Systems",
-    roomCode: "DBSQL-88",
-    durationMinutes: 120,
-    questionCount: 40,
-    createdAt: "2026-08-01T09:00:00",
-    startDate: "2026-12-01T09:00:00",
-  },
-  {
-    id: "demo-4",
-    title: "Cybersecurity Essentials Quiz 2",
-    courseCode: "CYB",
-    department: "Cybersecurity",
-    subject: "Cybersecurity Essentials",
-    roomCode: "SEC-QUIZ",
-    durationMinutes: 45,
-    questionCount: 15,
-    createdAt: "2026-08-05T09:00:00",
-    status: "scheduled",
-  },
-  {
-    id: "demo-5",
-    title: "Web Development Fundamentals - HTML/CSS",
-    courseCode: "WEB",
-    department: "Web Development",
-    subject: "Web Development Fundamentals",
-    roomCode: "WEB-POP1",
-    durationMinutes: 30,
-    questionCount: 20,
-    createdAt: "2026-05-10T09:00:00",
-    endDate: "2026-05-15T18:00:00",
-  },
-  {
-    id: "demo-6",
-    title: "Algorithms & Data Structures Pop Quiz",
-    courseCode: "CS",
-    department: "Computer Science",
-    subject: "Data Structures & Algorithms",
-    roomCode: "ALGO-PASSED",
-    durationMinutes: 40,
-    questionCount: 10,
-    createdAt: "2026-04-01T09:00:00",
-    status: "completed",
-  },
-];
-
-// ----------------------------------------------------------------------
-// DYNAMIC STATUS RESOLVER
-// ----------------------------------------------------------------------
 function getExamStatus(
   exam: Exam & { status?: ExamCard["status"] }
 ): "active" | "scheduled" | "completed" {
   if (exam.isEnded) return "completed";
-
   if (
     exam.status === "active" ||
     exam.status === "scheduled" ||
@@ -120,7 +39,6 @@ function getExamStatus(
   ) {
     return exam.status;
   }
-
   return exam.isLaunched ? "active" : "scheduled";
 }
 
@@ -134,13 +52,11 @@ function formatCreatedDate(iso?: string) {
     year: "numeric",
   });
 }
+
 function formatStartDateTime(iso?: string) {
   if (!iso) return "Not set";
-
   const d = new Date(iso);
-
   if (isNaN(d.getTime())) return "Not set";
-
   return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -149,23 +65,21 @@ function formatStartDateTime(iso?: string) {
     minute: "2-digit",
   });
 }
+
 const STATUS_BADGE: Record<ExamCard["status"], "info" | "warning" | "success"> = {
   active: "info",
   scheduled: "warning",
   completed: "success",
 };
 
-// Wording for the small status badge shown on each exam card
 const STATUS_LABEL: Record<ExamCard["status"], string> = {
   active: "Live",
   scheduled: "Upcoming",
   completed: "Completed",
 };
 
-// Tab order: exams not yet run first, then active, then completed
 const TAB_ORDER = ["scheduled", "active", "completed"] as const;
 
-// Wording for the tab buttons themselves (renamed "scheduled" -> "Upcoming")
 const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   scheduled: "Upcoming",
   active: "Active",
@@ -174,38 +88,42 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
 
 export default function MyExamsPage() {
   const router = useRouter();
-
   const storeExams = useExamStore((state) => state.exams) || [];
   const deleteExam = useExamStore((state) => state.deleteExam);
   const launchExam = useExamStore((state) => state.launchExam);
+  const fetchExams = useExamStore((state) => state.fetchExams);
+  
+  const [launchedRoomCode, setLaunchedRoomCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const rawExams = storeExams.length > 0 ? storeExams : (DEMO_MOCK_EXAMS as Exam[]);
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
 
   const [examPendingDelete, setExamPendingDelete] = useState<ExamCard | null>(null);
   const [activeTab, setActiveTab] = useState<"active" | "scheduled" | "completed">("scheduled");
-  useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const tab = params.get("tab");
 
-  if (tab === "active" || tab === "scheduled" || tab === "completed") {
-    setActiveTab(tab);
-  } else {
-    setActiveTab("scheduled");
-  }
-}, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (tab === "active" || tab === "scheduled" || tab === "completed") {
+      setActiveTab(tab);
+    } else {
+      setActiveTab("scheduled");
+    }
+  }, []);
+
   const [examSearch, setExamSearch] = useState("");
 
-  const mappedExams: ExamCard[] = rawExams.map((exam) => ({
+  const mappedExams: ExamCard[] = storeExams.map((exam) => ({
     ...exam,
     status: getExamStatus(exam),
   }));
 
   const filteredExams = mappedExams.filter((exam) => {
     if (exam.status !== activeTab) return false;
-
     const q = examSearch.trim().toLowerCase();
     if (!q) return true;
-
     return (
       exam.title.toLowerCase().includes(q) ||
       exam.department?.toLowerCase().includes(q) ||
@@ -220,8 +138,8 @@ export default function MyExamsPage() {
     completed: mappedExams.filter((e) => e.status === "completed").length,
   };
 
-  const handleConfirmDelete = () => {
-    if (examPendingDelete) deleteExam?.(examPendingDelete.id);
+  const handleConfirmDelete = async () => {
+    if (examPendingDelete) await deleteExam?.(examPendingDelete.id);
     setExamPendingDelete(null);
   };
 
@@ -231,7 +149,6 @@ export default function MyExamsPage() {
         title="Exams Repository"
         description="Manage your created examinations, launch live proctoring, or create new assessments."
       />
-
       <main className="p-6 space-y-6">
         {/* PAGE ACTION ROW */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -245,7 +162,6 @@ export default function MyExamsPage() {
               className="w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400"
             />
           </div>
-
           <Button onClick={() => router.push("/teacher-exams/new")}>
             <Plus size={16} />
             Create New Exam
@@ -276,13 +192,11 @@ export default function MyExamsPage() {
               <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center mx-auto mb-2 border border-slate-200">
                 <FileText className="w-6 h-6" />
               </div>
-
               <p className="text-sm font-medium text-slate-400">
                 {examSearch.trim()
                   ? `No ${TAB_LABELS[activeTab]} exams match "${examSearch}".`
                   : `No ${TAB_LABELS[activeTab]} exams available in repository.`}
               </p>
-
               {activeTab === "active" && !examSearch.trim() && (
                 <button
                   onClick={() => router.push("/teacher-exams/new")}
@@ -307,7 +221,6 @@ export default function MyExamsPage() {
                     >
                       {exam.department || "EXAM"}
                     </span>
-
                     <Badge
                       variant={
                         exam.status === "active" && !exam.isStarted
@@ -322,33 +235,27 @@ export default function MyExamsPage() {
                         : STATUS_LABEL[exam.status]}
                     </Badge>
                   </div>
-
                   <h3 className="text-sm font-semibold text-navy-900">{exam.title}</h3>
-
                   {exam.subject && (
                     <p className="text-xs text-slate-500 font-medium">{exam.subject}</p>
                   )}
-
                   <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
                       {exam.durationMinutes} mins
                     </span>
-
                     <span className="flex items-center gap-1">
                       <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
                       {exam.questions?.length ?? exam.questionCount ?? 0} Questions
                     </span>
-
                     <span className="flex items-center gap-1">
-  <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-  Created {formatCreatedDate(exam.createdAt)}
-</span>
-
-<span className="flex items-center gap-1">
-  <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-  Start: {exam.startDate ? formatStartDateTime(exam.startDate) : "Not set"}
-</span>
+                      <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                      Created {formatCreatedDate(exam.createdAt)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                      Start: {exam.startDate ? formatStartDateTime(exam.startDate) : "Not set"}
+                    </span>
                   </div>
                 </div>
 
@@ -366,7 +273,6 @@ export default function MyExamsPage() {
                       Edit Exam
                     </Button>
                   )}
-
                   {exam.status === "completed" && (
                     <Button
                       variant="outline"
@@ -377,20 +283,22 @@ export default function MyExamsPage() {
                       View Details
                     </Button>
                   )}
-
                   {exam.status === "scheduled" && (
                     <Button
                       size="sm"
-                      onClick={() => {
-                        launchExam(exam.id);
-                        router.push(`/teacher-exams/${exam.roomCode}`);
+                      onClick={async () => {
+                        const result = await launchExam(exam.id);
+                        if (result.success && result.roomCode) {
+                          setLaunchedRoomCode(result.roomCode);
+                        } else {
+                          alert(result.message || "Failed to launch exam.");
+                        }
                       }}
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       Launch Exam
                     </Button>
                   )}
-
                   {exam.status === "active" && (
                     <Button
                       size="sm"
@@ -404,7 +312,6 @@ export default function MyExamsPage() {
                       {exam.isStarted ? "Manage Live Exam" : "Resume Setup"}
                     </Button>
                   )}
-
                   <button
                     onClick={() => setExamPendingDelete(exam)}
                     className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors cursor-pointer"
@@ -432,6 +339,57 @@ export default function MyExamsPage() {
           confirmLabel="Delete Exam"
         />
       </main>
+
+      {/* LAUNCH SUCCESS MODAL — shows room code */}
+      <Dialog open={!!launchedRoomCode} onClose={() => setLaunchedRoomCode(null)}>
+        <DialogHeader title="Exam Launched!" onClose={() => setLaunchedRoomCode(null)} />
+        <div className="px-6 py-5 text-center space-y-5">
+          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto border border-emerald-200">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <p className="text-xs text-slate-500 -mt-2 font-medium">
+            Share this access code with your students to let them join the exam.
+          </p>
+          <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-5 rounded-2xl flex flex-col items-center justify-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              Room Code
+            </span>
+            <span className="text-3xl font-extrabold font-mono tracking-widest text-navy-900">
+              {launchedRoomCode}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (launchedRoomCode) {
+                  navigator.clipboard.writeText(launchedRoomCode);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }
+              }}
+              className={`mt-1 text-xs font-semibold px-4 py-2 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+                copied
+                  ? "bg-emerald-600 text-white"
+                  : "bg-white border border-slate-200 text-navy-900 hover:bg-slate-100"
+              }`}
+            >
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? "Copied!" : "Copy Code"}</span>
+            </button>
+          </div>
+          <Button
+            className="w-full"
+            onClick={() => {
+              const code = launchedRoomCode;
+              setLaunchedRoomCode(null);
+              if (code) {
+                router.push(`/teacher-exams/${code}`);
+              }
+            }}
+          >
+            Go to Exam Lobby
+          </Button>
+        </div>
+      </Dialog>
     </>
   );
 }

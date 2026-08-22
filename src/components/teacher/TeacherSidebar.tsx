@@ -1,6 +1,5 @@
 "use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -14,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { EsameLogo } from "@/components/organization/EsameLogo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useTeacherStore } from "@/store/useTeacherStore";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/teacher-dashboard", icon: LayoutDashboard },
@@ -28,8 +28,21 @@ export function TeacherSidebar() {
   const router = useRouter();
   const [logoutOpen, setLogoutOpen] = useState(false);
 
-  function handleLogout() {
-    // TODO: clear real auth session/token here once backend auth is wired up
+  const profile = useTeacherStore((state) => state.profile);
+  const fetchProfile = useTeacherStore((state) => state.fetchProfile);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  const teacherName = profile?.name || "Teacher";
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
     router.push("/login");
   }
 
@@ -38,12 +51,10 @@ export function TeacherSidebar() {
       <div className="flex items-center px-6 h-16 bg-white border-b border-slate-100">
         <EsameLogo height={26} />
       </div>
-
       <div className="px-6 pt-5 pb-2">
         <p className="text-xs uppercase tracking-wide text-white/40">Instructor</p>
-        <p className="text-sm font-medium truncate">Dr. Alan Grant</p>
+        <p className="text-sm font-medium truncate">{teacherName}</p>
       </div>
-
       <nav className="flex-1 px-3 py-4 space-y-1">
         {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
           const active =
@@ -66,7 +77,6 @@ export function TeacherSidebar() {
           );
         })}
       </nav>
-
       <div className="px-3 py-4 border-t border-white/10">
         <button
           onClick={() => setLogoutOpen(true)}
@@ -76,7 +86,6 @@ export function TeacherSidebar() {
           Log out
         </button>
       </div>
-
       <ConfirmDialog
         open={logoutOpen}
         onClose={() => setLogoutOpen(false)}

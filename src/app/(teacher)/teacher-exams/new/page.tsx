@@ -1,9 +1,7 @@
 "use client";
-
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useExamStore } from "@/store/useExamStore";
-import { TEACHER_ASSIGNMENTS } from "@/lib/teacher-assignments-data";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -111,10 +109,10 @@ function blankQuestion(type: QuestionType): Question {
 function ExamBuilderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const createExam = useExamStore((state) => state.createExam);
   const updateExam = useExamStore((state) => state.updateExam);
   const exams = useExamStore((state) => state.exams);
+  const fetchExams = useExamStore((state) => state.fetchExams);
 
   const editId = searchParams.get("edit");
   const tabParam = searchParams.get("tab");
@@ -122,19 +120,48 @@ function ExamBuilderContent() {
 
   const [step, setStep] = useState<1 | 2>(1);
 
+  // --- TEACHER ASSIGNMENTS (fetched from API) ---
+  const [teacherAssignments, setTeacherAssignments] = useState<
+    Array<{ department: string; subjects: string[] }>
+  >([]);
+
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
+
+  useEffect(() => {
+    async function fetchAssignments() {
+      try {
+        const res = await fetch("/api/teacher/assignments");
+        if (res.ok) {
+          const data = await res.json();
+          const assignments = data.assignments || [];
+          setTeacherAssignments(assignments);
+          if (assignments.length > 0) {
+            setExamData((prev) => ({
+              ...prev,
+              department: prev.department || assignments[0].department,
+              subject: prev.subject || assignments[0].subjects[0] || "",
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch assignments:", error);
+      }
+    }
+    fetchAssignments();
+  }, []);
+
   // --- EXAM PARAMETERS STATE ---
   const [examData, setExamData] = useState({
     title: "",
     description: "",
-    department: TEACHER_ASSIGNMENTS[0]?.department || "",
-    subject: TEACHER_ASSIGNMENTS[0]?.subjects[0] || "",
+    department: "",
+    subject: "",
     duration: 60,
     startDate: "",
   });
 
-  const [isLaunched, setIsLaunched] = useState(false);
-  const [accessCode, setAccessCode] = useState("");
-  const [isCopied, setIsCopied] = useState(false);
 
   // --- SECTIONS & QUESTIONS STATE ---
   const [parts, setParts] = useState<ExamPart[]>([]);
@@ -142,12 +169,10 @@ function ExamBuilderContent() {
   const [stagedQuestions, setStagedQuestions] = useState<Question[]>([]);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editingSource, setEditingSource] = useState<"staged" | "part" | null>(null);
-
   const [newPartTitle, setNewPartTitle] = useState("");
   const [newPartMarks, setNewPartMarks] = useState<string>("");
   const [newPartType, setNewPartType] = useState<QuestionType>("mcq");
   const [form, setForm] = useState<Question>(blankQuestion("mcq"));
-
   const [cancelConfirm, setCancelConfirm] = useState<{
     open: boolean;
     target: "question" | "exam";
@@ -156,13 +181,12 @@ function ExamBuilderContent() {
     target: "question",
   });
   const [deleteConfirm, setDeleteConfirm] = useState<{
-  source: "staged" | "part";
-  questionId: string;
-  partId?: string;
-} | null>(null);
-  // Scroll target for the question builder — used to auto-scroll up when editing a question.
-  const formSectionRef = useRef<HTMLDivElement>(null);
+    source: "staged" | "part";
+    questionId: string;
+    partId?: string;
+  } | null>(null);
 
+  const formSectionRef = useRef<HTMLDivElement>(null);
   const activePart = parts.find((p) => p.id === activePartId);
   const currentFormat = activePart?.allowedType || "mcq";
 
@@ -178,7 +202,6 @@ function ExamBuilderContent() {
         router.push("/teacher-exams");
         return;
       }
-
       setExamData({
         title: editingExam.title,
         description: "",
@@ -187,7 +210,6 @@ function ExamBuilderContent() {
         duration: editingExam.durationMinutes,
         startDate: editingExam.startDate || "",
       });
-
       if (Array.isArray(editingExam.parts)) {
         setParts(editingExam.parts as ExamPart[]);
       }
@@ -199,18 +221,11 @@ function ExamBuilderContent() {
       setStep(1);
       return;
     }
-
     if (tabParam === "questions") {
       setStep(2);
     }
   }, [editId, tabParam]);
 
-  const handleCopyCode = () => {
-    if (!accessCode) return;
-    navigator.clipboard.writeText(accessCode);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
 
   const isSettingsFormComplete = () =>
     examData.title.trim() !== "" &&
@@ -218,49 +233,41 @@ function ExamBuilderContent() {
     examData.subject.trim() !== "" &&
     examData.duration > 0;
 
-  // The exam must be tagged with a department + subject THIS teacher is
-  // actually assigned to (set by the org) — never a free-typed value, and
-  // never a department/subject the teacher doesn't teach.
   const subjectsInSelectedDepartment =
-    TEACHER_ASSIGNMENTS.find((a) => a.department === examData.department)?.subjects || [];
+    teacherAssignments.find((a) => a.department === examData.department)?.subjects || [];
 
   const handleDepartmentChange = (department: string) => {
-    const match = TEACHER_ASSIGNMENTS.find((a) => a.department === department);
+    const match = teacherAssignments.find((a) => a.department === department);
     setExamData({
       ...examData,
       department,
-      // Reset subject when the department changes since the old subject may not belong to it.
       subject: match?.subjects[0] || "",
     });
   };
-
   const handleCreatePart = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPartTitle.trim()) return;
-
-    const newPart: ExamPart = {
-      id: Date.now().toString(),
-      title: newPartTitle,
-      marks: parseInt(newPartMarks) || 10,
-      description: `Format restricted to ${QUESTION_TYPE_LABELS[newPartType]}.`,
-      allowedType: newPartType,
-      questions: [],
-    };
-
-    setParts((prev) => [newPart, ...prev]);
-    setActivePartId(newPart.id);
-    setStagedQuestions([]);
-    setForm(blankQuestion(newPartType));
-    setNewPartTitle("");
-    setNewPartMarks("");
+  e.preventDefault();
+  if (!newPartTitle.trim()) return;
+  const newPart: ExamPart = {
+    id: Date.now().toString(),
+    title: newPartTitle,
+    marks: parseInt(newPartMarks) || 10,
+    description: `Format restricted to ${QUESTION_TYPE_LABELS[newPartType]}.`,
+    allowedType: newPartType,
+    questions: [],
   };
+  setParts((prev) => [...prev, newPart]);
+  setActivePartId(newPart.id);
+  setStagedQuestions([]);
+  setForm(blankQuestion(newPartType));
+  setNewPartTitle("");
+  setNewPartMarks("");
+};
 
   const buildQuestionFromForm = (): Question | null => {
     if (!form.text.trim()) {
       alert("Please enter the question text prompt before continuing!");
       return null;
     }
-
     return {
       ...form,
       id: editingQuestionId || Date.now().toString(),
@@ -268,11 +275,9 @@ function ExamBuilderContent() {
     };
   };
 
-  // Stage the current form as a question and open a blank form for the next one
   const handleNextQuestion = () => {
     const q = buildQuestionFromForm();
     if (!q) return;
-
     if (editingSource === "part" && activePartId) {
       setParts((prev) =>
         prev.map((part) =>
@@ -293,24 +298,19 @@ function ExamBuilderContent() {
     } else {
       setStagedQuestions((prev) => [...prev, q]);
     }
-
     setEditingQuestionId(null);
     setEditingSource(null);
     setForm(blankQuestion(currentFormat));
   };
 
-  // Finalize the staged questions into the active section
   const handleAddSection = () => {
     let finalStaged = stagedQuestions;
-
-    // If there's an unfinished question sitting in the form, stage it first
     if (form.text.trim()) {
       const q: Question = {
         ...form,
         id: editingQuestionId || Date.now().toString(),
         type: currentFormat,
       };
-
       if (editingSource === "part" && activePartId) {
         setParts((prev) =>
           prev.map((part) =>
@@ -329,12 +329,10 @@ function ExamBuilderContent() {
             : [...stagedQuestions, q];
       }
     }
-
     if (finalStaged.length === 0 && !activePartId) {
       alert("Add at least one question before saving the section.");
       return;
     }
-
     if (activePartId) {
       setParts((prev) =>
         prev.map((part) =>
@@ -344,7 +342,6 @@ function ExamBuilderContent() {
         )
       );
     }
-
     setStagedQuestions([]);
     setActivePartId("");
     setEditingQuestionId(null);
@@ -356,8 +353,6 @@ function ExamBuilderContent() {
     setForm(q);
     setEditingQuestionId(q.id);
     setEditingSource(source);
-
-    // Auto-scroll up to the question builder so the person sees the loaded question.
     requestAnimationFrame(() => {
       formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -376,35 +371,34 @@ function ExamBuilderContent() {
       )
     );
   };
+
   const openDeleteConfirmation = (payload: {
-  source: "staged" | "part";
-  questionId: string;
-  partId?: string;
-}) => {
-  setDeleteConfirm(payload);
-};
+    source: "staged" | "part";
+    questionId: string;
+    partId?: string;
+  }) => {
+    setDeleteConfirm(payload);
+  };
 
-const closeDeleteConfirmation = () => {
-  setDeleteConfirm(null);
-};
+  const closeDeleteConfirmation = () => {
+    setDeleteConfirm(null);
+  };
 
-const handleConfirmDeleteQuestion = () => {
-  if (!deleteConfirm) return;
+  const handleConfirmDeleteQuestion = () => {
+    if (!deleteConfirm) return;
+    if (deleteConfirm.source === "staged") {
+      handleDeleteStaged(deleteConfirm.questionId);
+    } else if (deleteConfirm.partId) {
+      handleDeleteQuestion(deleteConfirm.partId, deleteConfirm.questionId);
+    }
+    if (editingQuestionId === deleteConfirm.questionId) {
+      setEditingQuestionId(null);
+      setEditingSource(null);
+      setForm(blankQuestion(currentFormat));
+    }
+    setDeleteConfirm(null);
+  };
 
-  if (deleteConfirm.source === "staged") {
-    handleDeleteStaged(deleteConfirm.questionId);
-  } else if (deleteConfirm.partId) {
-    handleDeleteQuestion(deleteConfirm.partId, deleteConfirm.questionId);
-  }
-
-  if (editingQuestionId === deleteConfirm.questionId) {
-    setEditingQuestionId(null);
-    setEditingSource(null);
-    setForm(blankQuestion(currentFormat));
-  }
-
-  setDeleteConfirm(null);
-};
   const openCancelConfirmation = (target: "question" | "exam") => {
     setCancelConfirm({
       open: true,
@@ -421,12 +415,10 @@ const handleConfirmDeleteQuestion = () => {
 
   const handleDiscardConfirmed = () => {
     const target = cancelConfirm.target;
-
     setCancelConfirm((prev) => ({
       ...prev,
       open: false,
     }));
-
     if (target === "question") {
       setForm(blankQuestion(currentFormat));
       setEditingQuestionId(null);
@@ -439,41 +431,22 @@ const handleConfirmDeleteQuestion = () => {
   const countTotalQuestions = () =>
     parts.reduce((acc, part) => acc + part.questions.length, 0) + stagedQuestions.length;
 
-  const handleSaveExam = () => {
-    if (parts.length === 0) {
-      alert("Please create and save at least one section before saving.");
-      return;
-    }
+  // Replace the handleSaveExam function with this:
+const handleSaveExam = async () => {
+  if (parts.length === 0) {
+    alert("Please create and save at least one section before saving.");
+    return;
+  }
+  const totalQCount = parts.reduce((acc, part) => acc + part.questions.length, 0);
+  if (totalQCount === 0) {
+    alert("Please add at least one question to a section before saving.");
+    return;
+  }
 
-    const totalQCount = parts.reduce((acc, part) => acc + part.questions.length, 0);
-
-    if (totalQCount === 0) {
-      alert("Please add at least one question to a section before saving.");
-      return;
-    }
-
-    if (editId) {
-      const result = updateExam(editId, {
-        title: examData.title || "Untitled Examination",
-        department: examData.department,
-        subject: examData.subject,
-        durationMinutes: examData.duration,
-        parts,
-        questionCount: totalQCount,
-        startDate: examData.startDate || undefined,
-      });
-
-      if (!result.success) {
-        alert(result.message || "This exam cannot be edited.");
-        return;
-      }
-
-      router.push("/teacher-exams?tab=scheduled");
-      return;
-    }
-
-    const { roomCode } = createExam({
+  if (editId) {
+    const result = await updateExam(editId, {
       title: examData.title || "Untitled Examination",
+      description: examData.description,
       department: examData.department,
       subject: examData.subject,
       durationMinutes: examData.duration,
@@ -481,10 +454,31 @@ const handleConfirmDeleteQuestion = () => {
       questionCount: totalQCount,
       startDate: examData.startDate || undefined,
     });
+    if (!result.success) {
+      alert(result.message || "This exam cannot be edited.");
+      return;
+    }
+    router.push("/teacher-exams");
+    return;
+  }
 
-    setAccessCode(roomCode);
-    setIsLaunched(true);
-  };
+  const result = await createExam({
+    title: examData.title || "Untitled Examination",
+    department: examData.department,
+    subject: examData.subject,
+    durationMinutes: examData.duration,
+    parts,
+    questionCount: totalQCount,
+    startDate: examData.startDate || undefined,
+  });
+
+  if (!result.id) {
+    alert(result.message || "Failed to create exam.");
+    return;
+  }
+
+  router.push("/teacher-exams");
+};
 
   return (
     <>
@@ -496,7 +490,6 @@ const handleConfirmDeleteQuestion = () => {
             : "Organize questionnaire sections and configure multi-format rules."
         }
       />
-
       <main className="p-6 space-y-6">
         {/* STEP CONTROLS */}
         <Card className="p-4 flex justify-end">
@@ -510,7 +503,6 @@ const handleConfirmDeleteQuestion = () => {
             >
               1. Parameters
             </button>
-
             <button
               type="button"
               disabled={!isSettingsFormComplete()}
@@ -533,7 +525,6 @@ const handleConfirmDeleteQuestion = () => {
                   General Information
                 </span>
               </div>
-
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -548,7 +539,6 @@ const handleConfirmDeleteQuestion = () => {
                     required
                   />
                 </div>
-
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                     Instructions & Description
@@ -561,7 +551,6 @@ const handleConfirmDeleteQuestion = () => {
                     className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400 resize-none"
                   />
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -573,10 +562,10 @@ const handleConfirmDeleteQuestion = () => {
                       className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all cursor-pointer bg-white"
                       required
                     >
-                      {TEACHER_ASSIGNMENTS.length === 0 ? (
+                      {teacherAssignments.length === 0 ? (
                         <option value="">No departments assigned yet</option>
                       ) : (
-                        TEACHER_ASSIGNMENTS.map((a) => (
+                        teacherAssignments.map((a) => (
                           <option key={a.department} value={a.department}>
                             {a.department}
                           </option>
@@ -587,7 +576,6 @@ const handleConfirmDeleteQuestion = () => {
                       Only your organization-assigned departments show up here.
                     </p>
                   </div>
-
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Subject *
@@ -614,7 +602,6 @@ const handleConfirmDeleteQuestion = () => {
                     </p>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -631,7 +618,6 @@ const handleConfirmDeleteQuestion = () => {
                       required
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Exam Start Date
@@ -648,22 +634,20 @@ const handleConfirmDeleteQuestion = () => {
                   </div>
                 </div>
               </div>
-
               <div className="flex justify-end gap-2.5 pt-5 border-t border-slate-100">
                 <Button
-  variant="outline"
-  onClick={() => {
-    if (editId) {
-      openCancelConfirmation("exam");
-    } else {
-      router.push("/teacher-exams?tab=scheduled");
-    }
-  }}
-  className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
->
-  Cancel
-</Button>
-
+                  variant="outline"
+                  onClick={() => {
+                    if (editId) {
+                      openCancelConfirmation("exam");
+                    } else {
+                      router.push("/teacher-exams?tab=scheduled");
+                    }
+                  }}
+                  className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+                >
+                  Cancel
+                </Button>
                 <Button
                   onClick={() => {
                     if (isSettingsFormComplete()) {
@@ -689,7 +673,6 @@ const handleConfirmDeleteQuestion = () => {
                 <span className="text-xs font-bold text-navy-900 uppercase tracking-wider block mb-3">
                   Exam Sections Hierarchy
                 </span>
-
                 <form
                   onSubmit={handleCreatePart}
                   className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/70 p-4 rounded-xl border border-slate-200"
@@ -707,7 +690,6 @@ const handleConfirmDeleteQuestion = () => {
                       required
                     />
                   </div>
-
                   <div className="md:col-span-4">
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Section Format Rule
@@ -724,7 +706,6 @@ const handleConfirmDeleteQuestion = () => {
                       ))}
                     </select>
                   </div>
-
                   <div className="md:col-span-3">
                     <Button type="submit" className="w-full">
                       <Plus className="w-4 h-4" /> Add Section
@@ -737,7 +718,6 @@ const handleConfirmDeleteQuestion = () => {
                   <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">
                     Saved Sections:
                   </span>
-
                   {parts.length === 0 ? (
                     <span className="text-xs font-medium text-slate-400 italic">
                       No sections saved yet. Create one above to begin.
@@ -759,7 +739,7 @@ const handleConfirmDeleteQuestion = () => {
               </CardContent>
             </Card>
 
-            {/* QUESTION BUILDER AREA — only while an active (unsaved) section is selected */}
+            {/* QUESTION BUILDER AREA */}
             {!activePartId ? (
               <Card className="border-dashed p-12 text-center space-y-3">
                 <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center mx-auto border border-slate-200">
@@ -794,7 +774,6 @@ const handleConfirmDeleteQuestion = () => {
                           className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400"
                         />
                       </div>
-
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                           Media Attachment
@@ -812,7 +791,6 @@ const handleConfirmDeleteQuestion = () => {
                           <option value="video">Video URL</option>
                         </select>
                       </div>
-
                       {form.mediaType !== "none" && (
                         <div className="md:col-span-2">
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -849,7 +827,6 @@ const handleConfirmDeleteQuestion = () => {
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                           Multiple Choice Options (Select correct answer)
                         </label>
-
                         <div className="space-y-2.5">
                           {(form.mcqOptions || []).map((opt, i) => (
                             <div key={i} className="flex items-center gap-3">
@@ -866,7 +843,6 @@ const handleConfirmDeleteQuestion = () => {
                                   <span className="w-2 h-2 rounded-full bg-sky-500" />
                                 )}
                               </button>
-
                               <input
                                 type="text"
                                 value={opt}
@@ -877,7 +853,6 @@ const handleConfirmDeleteQuestion = () => {
                                 }}
                                 className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
                               />
-
                               <button
                                 type="button"
                                 onClick={() =>
@@ -894,7 +869,6 @@ const handleConfirmDeleteQuestion = () => {
                             </div>
                           ))}
                         </div>
-
                         <button
                           type="button"
                           onClick={() =>
@@ -919,7 +893,6 @@ const handleConfirmDeleteQuestion = () => {
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                           Checkbox Options (Check all correct answers)
                         </label>
-
                         <div className="space-y-2.5">
                           {(form.multiOptions || []).map((opt, i) => (
                             <div key={i} className="flex items-center gap-3">
@@ -933,7 +906,6 @@ const handleConfirmDeleteQuestion = () => {
                                 }}
                                 className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer"
                               />
-
                               <input
                                 type="text"
                                 value={opt}
@@ -944,7 +916,6 @@ const handleConfirmDeleteQuestion = () => {
                                 }}
                                 className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
                               />
-
                               <button
                                 type="button"
                                 onClick={() => {
@@ -962,7 +933,6 @@ const handleConfirmDeleteQuestion = () => {
                             </div>
                           ))}
                         </div>
-
                         <button
                           type="button"
                           onClick={() =>
@@ -988,7 +958,6 @@ const handleConfirmDeleteQuestion = () => {
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                           Correct Key Answer
                         </label>
-
                         <div className="flex gap-3">
                           <button
                             type="button"
@@ -1001,7 +970,6 @@ const handleConfirmDeleteQuestion = () => {
                           >
                             True
                           </button>
-
                           <button
                             type="button"
                             onClick={() => setForm({ ...form, tfCorrect: false })}
@@ -1023,7 +991,6 @@ const handleConfirmDeleteQuestion = () => {
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                           Accepted Answer Variants (Auto-grading)
                         </label>
-
                         {(form.shortAnswers || []).map((ans, i) => (
                           <div key={i} className="flex items-center gap-3">
                             <input
@@ -1037,7 +1004,6 @@ const handleConfirmDeleteQuestion = () => {
                               }}
                               className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
                             />
-
                             {(form.shortAnswers || []).length > 1 && (
                               <button
                                 type="button"
@@ -1054,7 +1020,6 @@ const handleConfirmDeleteQuestion = () => {
                             )}
                           </div>
                         ))}
-
                         <button
                           type="button"
                           onClick={() => setForm({ ...form, shortAnswers: [...(form.shortAnswers || []), ""] })}
@@ -1094,12 +1059,10 @@ const handleConfirmDeleteQuestion = () => {
                             className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
                           />
                         </div>
-
                         <div className="space-y-2">
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Answer Key
                           </label>
-
                           {(form.answerKey || []).map((row, i) => (
                             <div key={i} className="flex items-center gap-2">
                               <input
@@ -1112,9 +1075,7 @@ const handleConfirmDeleteQuestion = () => {
                                 }}
                                 className="w-14 border border-slate-200 rounded-xl px-2 py-2 text-xs text-center font-bold text-navy-900 outline-none focus:border-sky-400"
                               />
-
                               <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-
                               <input
                                 type="text"
                                 placeholder="Answer"
@@ -1126,7 +1087,6 @@ const handleConfirmDeleteQuestion = () => {
                                 }}
                                 className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
                               />
-
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1141,7 +1101,6 @@ const handleConfirmDeleteQuestion = () => {
                               </button>
                             </div>
                           ))}
-
                           <button
                             type="button"
                             onClick={() =>
@@ -1169,7 +1128,6 @@ const handleConfirmDeleteQuestion = () => {
                             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                               Left Items (numbered)
                             </label>
-
                             {(form.matchLeft || []).map((item, i) => (
                               <div key={i} className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-navy-900 w-5">{i + 1}.</span>
@@ -1185,7 +1143,6 @@ const handleConfirmDeleteQuestion = () => {
                                 />
                               </div>
                             ))}
-
                             <button
                               type="button"
                               onClick={() => setForm({ ...form, matchLeft: [...(form.matchLeft || []), ""] })}
@@ -1194,12 +1151,10 @@ const handleConfirmDeleteQuestion = () => {
                               + Add Item
                             </button>
                           </div>
-
                           <div className="space-y-2">
                             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                               Right Items (lettered)
                             </label>
-
                             {(form.matchRight || []).map((item, i) => (
                               <div key={i} className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-navy-900 w-5">
@@ -1217,7 +1172,6 @@ const handleConfirmDeleteQuestion = () => {
                                 />
                               </div>
                             ))}
-
                             <button
                               type="button"
                               onClick={() => setForm({ ...form, matchRight: [...(form.matchRight || []), ""] })}
@@ -1227,12 +1181,10 @@ const handleConfirmDeleteQuestion = () => {
                             </button>
                           </div>
                         </div>
-
                         <div className="space-y-2">
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Correct Mapping (e.g. 1 → C)
                           </label>
-
                           {(form.matchAnswers || []).map((row, i) => (
                             <div key={i} className="flex items-center gap-2">
                               <select
@@ -1250,9 +1202,7 @@ const handleConfirmDeleteQuestion = () => {
                                   </option>
                                 ))}
                               </select>
-
                               <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-
                               <select
                                 value={row.right}
                                 onChange={(e) => {
@@ -1268,7 +1218,6 @@ const handleConfirmDeleteQuestion = () => {
                                   </option>
                                 ))}
                               </select>
-
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1283,7 +1232,6 @@ const handleConfirmDeleteQuestion = () => {
                               </button>
                             </div>
                           ))}
-
                           <button
                             type="button"
                             onClick={() =>
@@ -1306,7 +1254,6 @@ const handleConfirmDeleteQuestion = () => {
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                           Target Sequence Order (Top to Bottom)
                         </label>
-
                         {(form.orderingItems || []).map((item, i) => (
                           <div key={i} className="flex items-center gap-3">
                             <span className="text-xs font-bold text-navy-900">{i + 1}.</span>
@@ -1322,7 +1269,6 @@ const handleConfirmDeleteQuestion = () => {
                             />
                           </div>
                         ))}
-
                         <button
                           type="button"
                           onClick={() =>
@@ -1353,12 +1299,10 @@ const handleConfirmDeleteQuestion = () => {
                           Cancel Edit
                         </Button>
                       )}
-
                       <Button variant="outline" onClick={handleNextQuestion}>
                         <Plus className="w-4 h-4" />
                         {editingQuestionId ? "Save & Next Question" : "Next Question"}
                       </Button>
-
                       <Button onClick={handleAddSection}>
                         <Check className="w-4 h-4" />
                         Add Section
@@ -1376,7 +1320,6 @@ const handleConfirmDeleteQuestion = () => {
                   <h2 className="text-xs font-bold text-navy-900 uppercase tracking-wider">
                     Staged Questions ({stagedQuestions.length}) — will be saved when you click &ldquo;Add Section&rdquo;
                   </h2>
-
                   {stagedQuestions.map((q, idx) => (
                     <div
                       key={q.id}
@@ -1386,28 +1329,25 @@ const handleConfirmDeleteQuestion = () => {
                         <span className="text-xs font-bold text-navy-900 mr-1.5">Q{idx + 1}.</span>
                         <span className="text-xs font-medium text-slate-800">{q.text}</span>
                       </div>
-
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="info">{q.marks} pts</Badge>
-
                         <button
                           onClick={() => handleEditQuestion(q, "staged")}
                           className="text-slate-500 hover:text-navy-900 cursor-pointer"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-
                         <button
-  onClick={() =>
-    openDeleteConfirmation({
-      source: "staged",
-      questionId: q.id,
-    })
-  }
-  className="text-rose-500 hover:text-rose-700 cursor-pointer"
->
-  <Trash2 className="w-3.5 h-3.5" />
-</button>
+                          onClick={() =>
+                            openDeleteConfirmation({
+                              source: "staged",
+                              questionId: q.id,
+                            })
+                          }
+                          className="text-rose-500 hover:text-rose-700 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1431,7 +1371,6 @@ const handleConfirmDeleteQuestion = () => {
                     pts
                   </Badge>
                 </div>
-
                 {parts.every((p) => p.questions.length === 0) ? (
                   <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                     <p className="text-xs text-slate-400 font-semibold">No sections saved yet.</p>
@@ -1446,17 +1385,36 @@ const handleConfirmDeleteQuestion = () => {
                           className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3"
                         >
                           <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
-                            <div className="flex items-center gap-2">
-                              <Badge>{part.title}</Badge>
-                              <Badge variant="neutral">
-                                {QUESTION_TYPE_LABELS[part.allowedType]}
-                              </Badge>
-                            </div>
-                            <span className="text-xs font-medium text-slate-500">
-                              {part.questions.length} items
-                            </span>
-                          </div>
-
+  <div className="flex items-center gap-2">
+    <Badge>{part.title}</Badge>
+    <Badge variant="neutral">
+      {QUESTION_TYPE_LABELS[part.allowedType]}
+    </Badge>
+  </div>
+  <div className="flex items-center gap-3">
+    <span className="text-xs font-medium text-slate-500">
+      {part.questions.length} items
+    </span>
+    <button
+      type="button"
+      onClick={() => {
+        // Re-activate this section so new questions are added INTO it
+        setActivePartId(part.id);
+        setStagedQuestions([]);
+        setEditingQuestionId(null);
+        setEditingSource(null);
+        setForm(blankQuestion(part.allowedType));
+        requestAnimationFrame(() => {
+          formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }}
+      className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+    >
+      <Plus className="w-3.5 h-3.5" />
+      Add Question
+    </button>
+  </div>
+</div>
                           <div className="space-y-2.5 pt-0.5">
                             {part.questions.map((q, idx) => (
                               <div
@@ -1469,10 +1427,8 @@ const handleConfirmDeleteQuestion = () => {
                                   </span>
                                   <span className="text-xs font-medium text-slate-800">{q.text}</span>
                                 </div>
-
                                 <div className="flex items-center gap-3 shrink-0">
                                   <Badge variant="info">{q.marks} pts</Badge>
-
                                   <button
                                     onClick={() => {
                                       setActivePartId(part.id);
@@ -1482,19 +1438,18 @@ const handleConfirmDeleteQuestion = () => {
                                   >
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
-
                                   <button
-  onClick={() =>
-    openDeleteConfirmation({
-      source: "part",
-      partId: part.id,
-      questionId: q.id,
-    })
-  }
-  className="text-rose-500 hover:text-rose-700 cursor-pointer"
->
-  <Trash2 className="w-3.5 h-3.5" />
-</button>
+                                    onClick={() =>
+                                      openDeleteConfirmation({
+                                        source: "part",
+                                        partId: part.id,
+                                        questionId: q.id,
+                                      })
+                                    }
+                                    className="text-rose-500 hover:text-rose-700 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -1509,7 +1464,6 @@ const handleConfirmDeleteQuestion = () => {
                   <Button variant="outline" onClick={() => setStep(1)} className="mr-auto">
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to Parameters
                   </Button>
-
                   <Button onClick={handleSaveExam}>{editId ? "Update Exam" : "Save Exam"}</Button>
                 </div>
               </CardContent>
@@ -1519,149 +1473,96 @@ const handleConfirmDeleteQuestion = () => {
       </main>
 
       {/* CANCEL / DISCARD CONFIRMATION MODAL */}
-<Dialog open={cancelConfirm.open} onClose={closeCancelConfirmation}>
-  <DialogHeader
-    title={
-      cancelConfirm.target === "question"
-        ? "Cancel editing this question?"
-        : "Discard exam changes?"
-    }
-    onClose={closeCancelConfirmation}
-  />
-
-  <div className="px-6 py-5 space-y-5">
-    <div className="flex items-start gap-3 rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
-      <div className="w-10 h-10 rounded-xl bg-white border border-sky-100 text-sky-600 flex items-center justify-center shrink-0">
-        <AlertTriangle className="w-5 h-5" />
-      </div>
-
-      <div className="space-y-1">
-        <p className="text-sm font-bold text-navy-900">
-          {cancelConfirm.target === "question"
-            ? "You have unsaved question changes."
-            : "You have unsaved exam changes."}
-        </p>
-
-        <p className="text-xs leading-5 text-slate-500 font-medium">
-          {cancelConfirm.target === "question"
-            ? "If you discard, the original question will be kept and your current edits will be removed."
-            : "If you discard, the original exam will remain unchanged and you will return to the exams page."}
-        </p>
-      </div>
-    </div>
-
-    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={closeCancelConfirmation}
-        className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
-      >
-        Keep editing
-      </Button>
-
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleDiscardConfirmed}
-        className="bg-white border-rose-300 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-      >
-        Discard
-      </Button>
-    </div>
-  </div>
-</Dialog>
-{/* DELETE QUESTION CONFIRMATION MODAL */}
-<Dialog open={!!deleteConfirm} onClose={closeDeleteConfirmation}>
-  <DialogHeader
-    title="Delete this question?"
-    onClose={closeDeleteConfirmation}
-  />
-
-  <div className="px-6 py-5 space-y-5">
-    <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
-      <div className="w-10 h-10 rounded-xl bg-white border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-        <Trash2 className="w-5 h-5" />
-      </div>
-
-      <div className="space-y-1">
-        <p className="text-sm font-bold text-navy-900">
-          This question will be removed.
-        </p>
-
-        <p className="text-xs leading-5 text-slate-500 font-medium">
-          This action cannot be undone.
-        </p>
-      </div>
-    </div>
-
-    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={closeDeleteConfirmation}
-        className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
-      >
-        Cancel
-      </Button>
-
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleConfirmDeleteQuestion}
-        className="bg-white border-rose-300 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-      >
-        Delete Question
-      </Button>
-    </div>
-  </div>
-</Dialog>
-      {/* LAUNCHED SUCCESS MODAL */}
-      <Dialog open={isLaunched} onClose={() => setIsLaunched(false)}>
-        <DialogHeader title="Exam Saved" onClose={() => setIsLaunched(false)} />
-
-        <div className="px-6 py-5 text-center space-y-5">
-          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto border border-emerald-200">
-            <CheckCircle2 className="w-6 h-6" />
+      <Dialog open={cancelConfirm.open} onClose={closeCancelConfirmation}>
+        <DialogHeader
+          title={
+            cancelConfirm.target === "question"
+              ? "Cancel editing this question?"
+              : "Discard exam changes?"
+          }
+          onClose={closeCancelConfirmation}
+        />
+        <div className="px-6 py-5 space-y-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-sky-100 bg-sky-50/50 p-4">
+            <div className="w-10 h-10 rounded-xl bg-white border border-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-navy-900">
+                {cancelConfirm.target === "question"
+                  ? "You have unsaved question changes."
+                  : "You have unsaved exam changes."}
+              </p>
+              <p className="text-xs leading-5 text-slate-500 font-medium">
+                {cancelConfirm.target === "question"
+                  ? "If you discard, the original question will be kept and your current edits will be removed."
+                  : "If you discard, the original exam will remain unchanged and you will return to the exams page."}
+              </p>
+            </div>
           </div>
-
-          <p className="text-xs text-slate-500 -mt-2 font-medium">
-            Provide this access code to students when you&apos;re ready to launch.
-          </p>
-
-          <div className="bg-slate-50 border-2 border-dashed border-slate-200 p-5 rounded-2xl flex flex-col items-center justify-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Access Code
-            </span>
-            <span className="text-3xl font-extrabold font-mono tracking-widest text-navy-900">
-              {accessCode}
-            </span>
-
-            <button
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
+            <Button
               type="button"
-              onClick={handleCopyCode}
-              className={`mt-1 text-xs font-semibold px-4 py-2 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
-                isCopied
-                  ? "bg-emerald-600 text-white"
-                  : "bg-white border border-slate-200 text-navy-900 hover:bg-slate-100"
-              }`}
+              variant="outline"
+              onClick={closeCancelConfirmation}
+              className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
             >
-              {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{isCopied ? "Copied!" : "Copy Code"}</span>
-            </button>
+              Keep editing
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDiscardConfirmed}
+              className="bg-white border-rose-300 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+            >
+              Discard
+            </Button>
           </div>
-
-          <Button
-            className="w-full"
-            onClick={() => {
-  setIsLaunched(false);
-  router.push("/teacher-exams");
-}}
-          >
-            Done & View All Exams
-          </Button>
         </div>
       </Dialog>
+
+      {/* DELETE QUESTION CONFIRMATION MODAL */}
+      <Dialog open={!!deleteConfirm} onClose={closeDeleteConfirmation}>
+        <DialogHeader
+          title="Delete this question?"
+          onClose={closeDeleteConfirmation}
+        />
+        <div className="px-6 py-5 space-y-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
+            <div className="w-10 h-10 rounded-xl bg-white border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-navy-900">
+                This question will be removed.
+              </p>
+              <p className="text-xs leading-5 text-slate-500 font-medium">
+                This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDeleteConfirmation}
+              className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleConfirmDeleteQuestion}
+              className="bg-white border-rose-300 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+            >
+              Delete Question
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      
     </>
   );
 }

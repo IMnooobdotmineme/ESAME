@@ -37,6 +37,7 @@ type DashboardExamRow = {
   id: string;
   title: string;
   status: "scheduled" | "in_progress" | "completed" | "locked";
+  gradingStatus: "in_progress" | "complete";
   teacherId: string;
   subjectId: string;
   createdAt: Date;
@@ -93,7 +94,7 @@ export async function GET() {
 
   const [teacherRows, departmentRows, subjectRows, examRows, analyticsRows, activityRows] =
     (await Promise.all([
-      db
+        db
         .select({
           id: teachers.id,
           name: teachers.name,
@@ -111,6 +112,7 @@ export async function GET() {
           id: exams.id,
           title: exams.title,
           status: exams.status,
+          gradingStatus: exams.gradingStatus,
           teacherId: exams.teacherId,
           subjectId: exams.subjectId,
           createdAt: exams.createdAt,
@@ -226,7 +228,10 @@ export async function GET() {
       name: exam.title,
       subject: subject?.name ?? "—",
       teacher: teacher?.name ?? teacher?.email ?? "—",
-      status: mapExamStatus(exam.status),
+            status:
+        exam.status === "completed" && exam.gradingStatus === "in_progress"
+          ? "In Progress"
+          : mapExamStatus(exam.status),
       participants,
       avgScore: analytics?.averageScore != null ? `${analytics.averageScore}%` : "—",
     };

@@ -1,126 +1,73 @@
 "use client";
-
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
+import { useNotificationStore, type NotificationItem } from "@/store/useNotificationStore";
 import {
   AlertTriangle,
   UserCheck,
   FileCheck2,
-  Clock,
   CheckCircle2,
-  Radio,
   CheckCheck,
   Archive,
   ArchiveRestore,
-  ArrowRight,
+  ChevronDown,
 } from "lucide-react";
 
-interface NotificationItem {
-  id: string;
-  icon: React.ElementType;
-  iconColor: string;
-  title: string;
-  description: string;
-  detail: string;
-  category: string;
-  actor: string;
-  timestamp: string;
-  time: string;
-  read: boolean;
-  archived: boolean;
-  href?: string;
-  hrefLabel?: string;
+const NOTIF_ICON_MAP: Record<string, { icon: React.ElementType; iconColor: string }> = {
+  violation: { icon: AlertTriangle, iconColor: "text-red-600 bg-red-50" },
+  request: { icon: UserCheck, iconColor: "text-sky-600 bg-sky-50" },
+  info: { icon: FileCheck2, iconColor: "text-emerald-600 bg-emerald-50" },
+};
+
+const NOTIF_CATEGORY_MAP: Record<string, string> = {
+  violation: "Exam Security",
+  request: "Exam Access",
+  info: "General",
+};
+
+function formatTimeAgo(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? "s" : ""} ago`;
+  if (diffDays === 1) return "Yesterday";
+  return date.toLocaleDateString();
 }
 
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "1",
-    icon: AlertTriangle,
-    iconColor: "text-red-600 bg-red-50",
-    title: "Tab Switch Detected",
-    description: "Marcus Vance triggered a tab-switch warning during \"CS101 Midterm\".",
-    detail: "Marcus Vance switched away from the exam tab during \"Introduction to Computer Science (Midterm)\". Their session has been automatically locked and is awaiting your permission to continue. Review the incident and grant permission from the Live Monitoring page if appropriate.",
-    category: "Exam Security",
-    actor: "System — Anti-Cheating Monitor",
-    timestamp: "Aug 10, 2026 · 9:41 AM",
-    time: "8 min ago",
-    read: false,
-    archived: false,
-    href: "/teacher/monitor",
-    hrefLabel: "Go to Monitoring",
-  },
-  {
-    id: "2",
-    icon: UserCheck,
-    iconColor: "text-sky-600 bg-sky-50",
-    title: "New Join Request",
-    description: "Sophia Chen requested to join \"CS101 Midterm\" using room code CS101-MID.",
-    detail: "Sophia Chen submitted her name and student ID to join the exam session using room code CS101-MID. Approve or reject her request from the exam's approval list before the session begins.",
-    category: "Exam Access",
-    actor: "Sophia Chen",
-    timestamp: "Aug 10, 2026 · 9:22 AM",
-    time: "27 min ago",
-    read: false,
-    archived: false,
-    href: "/teacher/exams",
-  },
-  {
-    id: "3",
-    icon: FileCheck2,
-    iconColor: "text-emerald-600 bg-emerald-50",
-    title: "Submissions Ready for Grading",
-    description: "12 essay responses from \"European History Final\" are awaiting review.",
-    detail: "\"European History Final\" has closed with all enrolled students submitting. Multiple-choice and true/false questions were graded automatically. 12 written responses require manual review before final scores can be released to students.",
-    category: "Grading",
-    actor: "System",
-    timestamp: "Aug 10, 2026 · 8:05 AM",
-    time: "1 hr ago",
-    read: true,
-    archived: false,
-    href: "/teacher/grading",
-  },
-  {
-    id: "4",
-    icon: Radio,
-    iconColor: "text-navy-700 bg-navy-50",
-    title: "Exam Session Started",
-    description: "\"Sensor Technology Quiz\" is now live with 24 students connected.",
-    detail: "\"Sensor Technology Quiz\" opened as scheduled and is now accepting student submissions. 24 students have joined so far. Monitor live activity, tab-switch flags, and progress from the Live Monitoring page.",
-    category: "Exam Management",
-    actor: "System",
-    timestamp: "Aug 10, 2026 · 7:30 AM",
-    time: "2 hrs ago",
-    read: true,
-    archived: false,
-    href: "/teacher/monitor",
-  },
-  {
-    id: "5",
-    icon: Clock,
-    iconColor: "text-amber-600 bg-amber-50",
-    title: "Exam Closing Soon",
-    description: "\"Advanced Physics II\" closes in 15 minutes — 6 students still in progress.",
-    detail: "\"Advanced Physics II\" is scheduled to close in 15 minutes. 6 of 30 enrolled students have not yet submitted. Unanswered questions will be automatically scored as zero once the timer ends.",
-    category: "Exam Management",
-    actor: "System",
-    timestamp: "Aug 9, 2026 · 4:50 PM",
-    time: "Yesterday",
-    read: true,
-    archived: false,
-    href: "/teacher/monitor",
-  },
-];
+function formatFullDate(isoString: string): string {
+  return new Date(isoString).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 const FILTERS = ["All", "Unread", "Archived"] as const;
 
 export default function TeacherNotificationsPage() {
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const {
+    notifications,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead,
+    archiveNotification,
+  } = useNotificationStore();
+
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
-  const [selected, setSelected] = useState<NotificationItem | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.read && !n.archived).length;
   const archivedCount = notifications.filter((n) => n.archived).length;
@@ -132,28 +79,25 @@ export default function TeacherNotificationsPage() {
     return true;
   });
 
-  function markAllRead() {
-    setNotifications((prev) => prev.map((n) => (n.archived ? n : { ...n, read: true })));
+  async function handleRowClick(n: NotificationItem) {
+    if (expandedId === n.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(n.id);
+    if (!n.read) await markAsRead(n.id);
   }
 
-  function markRead(id: string) {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  }
-
-  function toggleArchive(id: string, archived: boolean) {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, archived } : n)));
-  }
-
-  function openDetail(n: NotificationItem) {
-    markRead(n.id);
-    setSelected({ ...n, read: true });
+  async function handleArchive(n: NotificationItem) {
+    await archiveNotification(n.id, !n.archived);
+    if (expandedId === n.id) setExpandedId(null);
   }
 
   return (
     <>
       <TeacherTopbar title="Notifications" description="Stay up to date with your exams and classes" />
-
       <main className="p-6 space-y-5">
+        {/* FILTERS + MARK ALL READ */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex gap-2">
             {FILTERS.map((f) => (
@@ -173,38 +117,88 @@ export default function TeacherNotificationsPage() {
             ))}
           </div>
           {filter !== "Archived" && (
-            <Button variant="outline" size="sm" onClick={markAllRead} disabled={unreadCount === 0}>
+            <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={unreadCount === 0}>
               <CheckCheck size={15} />
               Mark all as read
             </Button>
           )}
         </div>
 
+        {/* NOTIFICATION LIST */}
         <Card className="overflow-hidden">
-          <ul className="divide-y divide-slate-50">
-            {filtered.map((n) => (
-              <li key={n.id}>
-                <button
-                  type="button"
-                  onClick={() => openDetail(n)}
-                  className={`w-full text-left flex items-start gap-4 px-5 py-4 hover:bg-slate-50/70 transition-colors ${
-                    !n.read ? "bg-sky-50/40" : ""
+          <ul className="divide-y divide-slate-100">
+            {filtered.map((n) => {
+              const iconData = NOTIF_ICON_MAP[n.type] || NOTIF_ICON_MAP.info;
+              const Icon = iconData.icon;
+              const isExpanded = expandedId === n.id;
+              return (
+                <li
+                  key={n.id}
+                  className={`transition-colors ${
+                    isExpanded ? "bg-slate-50/70" : !n.read ? "bg-sky-50/40" : "hover:bg-slate-50/50"
                   }`}
                 >
-                  <div className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center ${n.iconColor}`}>
-                    <n.icon size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-navy-900">{n.title}</p>
-                      {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />}
+                  <div className="px-5 py-4">
+                    <div className="flex items-start gap-3">
+                      {/* Main clickable area */}
+                      <button
+                        type="button"
+                        onClick={() => handleRowClick(n)}
+                        className="flex-1 min-w-0 text-left flex items-start gap-4"
+                      >
+                        <div className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center ${iconData.iconColor}`}>
+                          <Icon size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-navy-900">{n.title}</p>
+                            {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />}
+                          </div>
+                          <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{n.message}</p>
+                          <p className="text-xs text-slate-400 mt-1">{formatTimeAgo(n.timestamp)}</p>
+                        </div>
+                      </button>
+
+                      {/* Right side: archive icon + chevron */}
+                      <div className="flex items-center gap-1 shrink-0 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleArchive(n)}
+                          title={n.archived ? "Unarchive" : "Archive"}
+                          className="h-8 w-8 rounded-full flex items-center justify-center text-slate-400 hover:text-navy-900 hover:bg-slate-200/70 transition-colors"
+                        >
+                          {n.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                        </button>
+                        <ChevronDown
+                          size={16}
+                          className={`text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                        />
+                      </div>
                     </div>
-                    <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{n.description}</p>
-                    <p className="text-xs text-slate-400 mt-1">{n.time}</p>
+
+                    {/* NEW inline detail panel (no modal, no View Details button) */}
+                    {isExpanded && (
+                      <div className="mt-4 ml-12 rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+                        <span className="inline-block rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-0.5">
+                          {NOTIF_CATEGORY_MAP[n.type] || "General"}
+                        </span>
+                        <p className="text-sm text-navy-900 leading-relaxed">{n.message}</p>
+                        <dl className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-3 text-sm">
+                          <div>
+                            <dt className="text-xs text-slate-400">Triggered by</dt>
+                            <dd className="text-navy-900 font-medium mt-0.5">System</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-slate-400">Date &amp; Time</dt>
+                            <dd className="text-navy-900 font-medium mt-0.5">{formatFullDate(n.timestamp)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    )}
                   </div>
-                </button>
-              </li>
-            ))}
+                </li>
+              );
+            })}
             {filtered.length === 0 && (
               <li className="px-5 py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
                 <CheckCircle2 size={22} className="text-slate-300" />
@@ -214,72 +208,6 @@ export default function TeacherNotificationsPage() {
           </ul>
         </Card>
       </main>
-
-      {/* Detail modal */}
-      <Dialog open={!!selected} onClose={() => setSelected(null)} className="max-w-lg">
-        {selected && (
-          <>
-            <DialogHeader title={selected.title} onClose={() => setSelected(null)} />
-            <div className="px-6 py-5 space-y-5">
-              <div className="flex items-center gap-3">
-                <div className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center ${selected.iconColor}`}>
-                  <selected.icon size={20} />
-                </div>
-                <div>
-                  <span className="inline-block rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-0.5">
-                    {selected.category}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-sm text-navy-900 leading-relaxed">{selected.detail}</p>
-
-              <dl className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm">
-                <div>
-                  <dt className="text-xs text-slate-400">Triggered by</dt>
-                  <dd className="text-navy-900 font-medium mt-0.5">{selected.actor}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-slate-400">Date &amp; Time</dt>
-                  <dd className="text-navy-900 font-medium mt-0.5">{selected.timestamp}</dd>
-                </div>
-              </dl>
-            </div>
-            <DialogFooter>
-              {!selected.archived ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    toggleArchive(selected.id, true);
-                    setSelected(null);
-                  }}
-                >
-                  <Archive size={15} />
-                  Archive
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    toggleArchive(selected.id, false);
-                    setSelected(null);
-                  }}
-                >
-                  <ArchiveRestore size={15} />
-                  Unarchive
-                </Button>
-              )}
-              {selected.href && (
-                <Link href={selected.href}>
-                  <Button onClick={() => setSelected(null)}>
-                    {selected.hrefLabel ?? "View Details"} <ArrowRight size={15} />
-                  </Button>
-                </Link>
-              )}
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
     </>
   );
 }

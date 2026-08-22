@@ -166,7 +166,7 @@ export async function POST(req: Request) {
       }).catch((err) => console.error(`Failed to log ${userType}_login_success:`, err));
     }
 
-    const redirect = userType === "org" ? "/dashboard" : "/teacher/dashboard";
+    const redirect = userType === "org" ? "/dashboard" : "/teacher-dashboard";
     const res = NextResponse.json({ ok: true, purpose: record.purpose, redirect });
     setSessionCookie(res, token, expiresAt);
     return res;
