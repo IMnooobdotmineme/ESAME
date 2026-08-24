@@ -54,6 +54,8 @@ export interface Exam {
   gradingStatus?: GradingStatus;
   requests: StudentRequest[];
   parts?: unknown[];
+  endedAt?: string | null;
+  endTime?: string | null;
 }
 
 export interface CreateExamInput {

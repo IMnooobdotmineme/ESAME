@@ -262,6 +262,7 @@ export const examQuestions = pgTable("exam_questions", {
   points: integer("points").notNull().default(1),
   questionOrder: integer("question_order").notNull(),
   explanation: text("explanation"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}), // ← ADD
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

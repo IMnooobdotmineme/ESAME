@@ -1,0 +1,542 @@
+// src/components/student/ExamQuestionCard.tsx
+"use client";
+
+import React, { useLayoutEffect, useRef, useState } from "react";
+import { ExamQuestion } from "@/lib/student-exam-content";
+
+interface Props {
+  question: ExamQuestion;
+  questionNumber: number;
+  answer: string | undefined;
+  onAnswer: (questionId: string, value: string) => void;
+}
+
+const optionButtonClass = (selected: boolean) =>
+  `w-full flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm text-left transition ${
+    selected
+      ? "border-sky-400 bg-sky-50 text-navy-900"
+      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+  }`;
+
+export function ExamQuestionCard({ question, questionNumber, answer, onAnswer }: Props) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      {"marks" in question ? (
+        <p className="text-sm font-semibold text-navy-900 mb-3">
+          <span className="text-black mr-1.5">{questionNumber}.</span>
+          {question.prompt} ({question.marks} Marks)
+        </p>
+      ) : (
+        <p className="text-sm font-semibold text-navy-900 mb-3">
+          <span className="text-black mr-1.5">{questionNumber}.</span>
+          {question.prompt}
+        </p>
+      )}
+
+      {question.type === "mcq" && (
+        <div className="space-y-2">
+          {question.options.map((option) => {
+            const selected = answer === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onAnswer(question.id, option.id)}
+                className={optionButtonClass(selected)}
+              >
+                <span className="font-semibold text-navy-900">{option.label}</span>
+                {option.text}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {question.type === "multi_select" && (
+        <div className="space-y-2">
+          {question.options.map((option) => {
+            const selectedIds = (answer ?? "").split(",").filter(Boolean);
+            const selected = selectedIds.includes(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  const next = selected
+                    ? selectedIds.filter((id) => id !== option.id)
+                    : [...selectedIds, option.id];
+                  onAnswer(question.id, next.join(","));
+                }}
+                className={optionButtonClass(selected)}
+              >
+                <span
+                  className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
+                    selected ? "bg-sky-500 border-sky-500" : "border-slate-300"
+                  }`}
+                >
+                  {selected && <span className="w-2 h-2 bg-white rounded-sm" />}
+                </span>
+                <span className="font-semibold text-navy-900">{option.label}</span>
+                {option.text}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {question.type === "true_false" && (
+        <div className="flex gap-3">
+          {(["true", "false"] as const).map((value) => {
+            const selected = answer === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => onAnswer(question.id, value)}
+                className={`flex-1 rounded-xl border py-2.5 text-sm font-medium transition ${
+                  selected
+                    ? "border-sky-400 bg-sky-50 text-navy-900"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {value === "true" ? "True" : "False"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {question.type === "short_answer" && (
+        <input
+          type="text"
+          value={answer ?? ""}
+          onChange={(e) => onAnswer(question.id, e.target.value)}
+          placeholder="Type your answer..."
+          className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+        />
+      )}
+
+      {question.type === "fill_blank" && (
+        <FillBlankInput question={question} answer={answer} onAnswer={onAnswer} />
+      )}
+
+      {question.type === "long_answer" && (
+        <textarea
+          value={answer ?? ""}
+          onChange={(e) => onAnswer(question.id, e.target.value)}
+          rows={5}
+          className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+        />
+      )}
+
+      {question.type === "coding" && (
+        <CodeEditorInput question={question} answer={answer} onAnswer={onAnswer} />
+      )}
+
+      {question.type === "matching" && (
+        <MatchingInput question={question} answer={answer} onAnswer={onAnswer} />
+      )}
+
+      {question.type === "ordering" && (
+        <OrderingInput question={question} answer={answer} onAnswer={onAnswer} />
+      )}
+    </div>
+  );
+}
+
+function FillBlankInput({
+  question,
+  answer,
+  onAnswer,
+}: {
+  question: Extract<ExamQuestion, { type: "fill_blank" }>;
+  answer: string | undefined;
+  onAnswer: (questionId: string, value: string) => void;
+}) {
+  let values: Record<string, string> = {};
+  try {
+    values = answer ? JSON.parse(answer) : {};
+  } catch {
+    values = {};
+  }
+
+  function setBlank(blankId: string, value: string) {
+    const next = { ...values, [blankId]: value };
+    onAnswer(question.id, JSON.stringify(next));
+  }
+
+  return (
+    <p className="text-sm text-navy-900 leading-loose">
+      {question.segments.map((segment, i) => (
+        <React.Fragment key={i}>
+          {segment}
+          {i < question.blanks.length && (
+            <input
+              type="text"
+              value={values[question.blanks[i].id] ?? ""}
+              onChange={(e) => setBlank(question.blanks[i].id, e.target.value)}
+              className="inline-block w-28 mx-2 my-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-navy-900 text-center outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 align-middle"
+            />
+          )}
+        </React.Fragment>
+      ))}
+    </p>
+  );
+}
+
+function CodeEditorInput({
+  question,
+  answer,
+  onAnswer,
+}: {
+  question: Extract<ExamQuestion, { type: "coding" }>;
+  answer: string | undefined;
+  onAnswer: (questionId: string, value: string) => void;
+}) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+    const target = e.currentTarget;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const current = answer ?? "";
+    const next = `${current.slice(0, start)}  ${current.slice(end)}`;
+    onAnswer(question.id, next);
+    requestAnimationFrame(() => {
+      target.selectionStart = target.selectionEnd = start + 2;
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between bg-slate-900 px-4 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+        </div>
+        <span className="text-[11px] font-mono text-slate-400">
+          {question.language ?? "Code"}
+        </span>
+      </div>
+      <textarea
+        value={answer ?? ""}
+        onChange={(e) => onAnswer(question.id, e.target.value)}
+        onKeyDown={handleKeyDown}
+        rows={10}
+        spellCheck={false}
+        placeholder="// Write your code here"
+        className="w-full bg-black text-white font-mono text-[13px] leading-relaxed px-4 py-3 outline-none resize-y placeholder-gray-500"
+        style={{ color: "white", backgroundColor: "black", caretColor: "white" }}
+      />
+    </div>
+  );
+}
+
+interface Line {
+  key: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+function MatchingInput({
+  question,
+  answer,
+  onAnswer,
+}: {
+  question: Extract<ExamQuestion, { type: "matching" }>;
+  answer: string | undefined;
+  onAnswer: (questionId: string, value: string) => void;
+}) {
+  let pairs: Record<string, string> = {};
+  try {
+    pairs = answer ? JSON.parse(answer) : {};
+  } catch {
+    pairs = {};
+  }
+
+  const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const leftRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const rightRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [lines, setLines] = useState<Line[]>([]);
+
+  function commit(next: Record<string, string>) {
+    onAnswer(question.id, JSON.stringify(next));
+  }
+
+  function handleLeftClick(leftId: string) {
+    setSelectedLeft((prev) => (prev === leftId ? null : leftId));
+  }
+
+  function handleRightClick(rightId: string) {
+    if (!selectedLeft) return;
+    const next = { ...pairs };
+    for (const key of Object.keys(next)) {
+      if (next[key] === rightId) delete next[key];
+    }
+    next[selectedLeft] = rightId;
+    commit(next);
+    setSelectedLeft(null);
+  }
+
+  function removePair(leftId: string) {
+    const next = { ...pairs };
+    delete next[leftId];
+    commit(next);
+  }
+
+  useLayoutEffect(() => {
+    function recalc() {
+      if (!containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const next: Line[] = Object.entries(pairs)
+        .map(([leftId, rightId]) => {
+          const leftEl = leftRefs.current[leftId];
+          const rightEl = rightRefs.current[rightId];
+          if (!leftEl || !rightEl) return null;
+          const lr = leftEl.getBoundingClientRect();
+          const rr = rightEl.getBoundingClientRect();
+          return {
+            key: `${leftId}-${rightId}`,
+            x1: lr.right - containerRect.left,
+            y1: lr.top + lr.height / 2 - containerRect.top,
+            x2: rr.left - containerRect.left,
+            y2: rr.top + rr.height / 2 - containerRect.top,
+          };
+        })
+        .filter((l): l is Line => l !== null);
+      setLines(next);
+    }
+    recalc();
+    window.addEventListener("resize", recalc);
+    return () => window.removeEventListener("resize", recalc);
+  }, [answer]);
+
+  return (
+    <div>
+      <div ref={containerRef} className="relative flex gap-10 sm:gap-16">
+        <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+          <defs>
+            <marker
+              id={`arrow-${question.id}`}
+              markerWidth="8"
+              markerHeight="8"
+              refX="6"
+              refY="4"
+              orient="auto"
+            >
+              <path d="M0,0 L8,4 L0,8 z" className="fill-sky-500" />
+            </marker>
+          </defs>
+          {lines.map((l) => (
+            <line
+              key={l.key}
+              x1={l.x1}
+              y1={l.y1}
+              x2={l.x2}
+              y2={l.y2}
+              strokeWidth={2}
+              className="stroke-sky-500"
+              markerEnd={`url(#arrow-${question.id})`}
+            />
+          ))}
+        </svg>
+
+        <div className="flex-1 space-y-2">
+          {question.left.map((item, i) => {
+            const matched = Boolean(pairs[item.id]);
+            const isSelected = selectedLeft === item.id;
+            return (
+              <button
+                key={item.id}
+                ref={(el) => {
+                  leftRefs.current[item.id] = el;
+                }}
+                type="button"
+                onClick={() => handleLeftClick(item.id)}
+                className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm text-left transition ${
+                  isSelected
+                    ? "border-sky-400 bg-sky-50"
+                    : matched
+                    ? "border-emerald-300 bg-emerald-50"
+                    : "border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                <span className="w-6 h-6 shrink-0 rounded-full bg-navy-900 text-white text-xs font-bold flex items-center justify-center font-mono">
+                  {i + 1}
+                </span>
+                <span className="flex-1 text-navy-900">{item.text}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex-1 space-y-2">
+          {question.right.map((item, i) => {
+            const letter = String.fromCharCode(65 + i);
+            const isMatched = Object.values(pairs).includes(item.id);
+            return (
+              <button
+                key={item.id}
+                ref={(el) => {
+                  rightRefs.current[item.id] = el;
+                }}
+                type="button"
+                onClick={() => handleRightClick(item.id)}
+                className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm text-left transition ${
+                  isMatched
+                    ? "border-emerald-300 bg-emerald-50"
+                    : "border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                <span className="w-6 h-6 shrink-0 rounded-full bg-slate-700 text-white text-xs font-bold flex items-center justify-center font-mono">
+                  {letter}
+                </span>
+                <span className="flex-1 text-navy-900">{item.text}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedLeft && (
+        <p className="mt-3 text-xs font-medium text-sky-600">
+          Now click a lettered box on the right to connect it.
+        </p>
+      )}
+
+      {Object.keys(pairs).length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {question.left.map((item, i) => {
+            const rightId = pairs[item.id];
+            if (!rightId) return null;
+            const rIndex = question.right.findIndex((r) => r.id === rightId);
+            if (rIndex === -1) return null;
+            const letter = String.fromCharCode(65 + rIndex);
+            return (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-navy-900 font-mono"
+              >
+                {i + 1} → {letter}
+                <button
+                  type="button"
+                  onClick={() => removePair(item.id)}
+                  className="text-slate-400 hover:text-rose-500"
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderingInput({
+  question,
+  answer,
+  onAnswer,
+}: {
+  question: Extract<ExamQuestion, { type: "ordering" }>;
+  answer: string | undefined;
+  onAnswer: (questionId: string, value: string) => void;
+}) {
+  const order = answer ? answer.split(",").filter(Boolean) : question.items.map((i) => i.id);
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const previousTops = useRef<Record<string, number>>({});
+
+  useLayoutEffect(() => {
+    const currentOrder = answer
+      ? answer.split(",").filter(Boolean)
+      : question.items.map((item) => item.id);
+    const nextTops: Record<string, number> = {};
+    const animations: number[] = [];
+
+    currentOrder.forEach((id) => {
+      const element = itemRefs.current[id];
+      if (!element) return;
+
+      const top = element.getBoundingClientRect().top;
+      nextTops[id] = top;
+      const previousTop = previousTops.current[id];
+      if (previousTop === undefined || previousTop === top) return;
+
+      element.style.willChange = "transform";
+      element.style.transition = "none";
+      element.style.transform = `translateY(${previousTop - top}px)`;
+      animations.push(
+        requestAnimationFrame(() => {
+          element.style.transition = "transform 260ms ease";
+          element.style.transform = "translateY(0)";
+          element.addEventListener(
+            "transitionend",
+            () => {
+              element.style.transition = "";
+              element.style.transform = "";
+              element.style.willChange = "";
+            },
+            { once: true }
+          );
+        })
+      );
+    });
+
+    previousTops.current = nextTops;
+    return () => animations.forEach((animation) => cancelAnimationFrame(animation));
+  }, [answer, question.items]);
+
+  function move(index: number, direction: -1 | 1) {
+    const next = [...order];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    onAnswer(question.id, next.join(","));
+  }
+
+  return (
+    <div className="space-y-2">
+      {order.map((id, index) => {
+        const item = question.items.find((i) => i.id === id);
+        if (!item) return null;
+        return (
+          <div
+            key={id}
+            ref={(element) => {
+              itemRefs.current[id] = element;
+            }}
+            className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-2.5"
+          >
+            <span className="w-6 h-6 shrink-0 rounded-full bg-navy-900 text-white text-xs font-bold flex items-center justify-center">
+              {index + 1}
+            </span>
+            <span className="flex-1 text-sm text-navy-900">{item.text}</span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => move(index, -1)}
+                disabled={index === 0}
+                className="w-7 h-7 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() => move(index, 1)}
+                disabled={index === order.length - 1}
+                className="w-7 h-7 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none"
+              >
+                ↓
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

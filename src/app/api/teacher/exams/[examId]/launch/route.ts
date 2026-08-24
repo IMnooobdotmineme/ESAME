@@ -3,48 +3,31 @@ import { requireTeacherSession } from "@/lib/session";
 import { db } from "@/db";
 import { exams } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { materializeExamQuestions } from "@/lib/exam-materialize";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ examId: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ examId: string }> }) {
   const session = await requireTeacherSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   try {
     const { examId } = await params;
-    const teacherId = session.userId;
+    const examRows = await db.select().from(exams).where(and(eq(exams.id, examId), eq(exams.teacherId, session.userId)));
+    const exam = examRows[0];
+    if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    if (exam.status === "completed") return NextResponse.json({ error: "Exam already ended" }, { status: 400 });
 
-    const [existing] = await db.select().from(exams)
-      .where(and(eq(exams.id, examId), eq(exams.teacherId, teacherId)));
-    if (!existing) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
-
-    if (existing.isLaunched) {
-      return NextResponse.json({
-        success: true,
-        roomCode: existing.examCode,
-      });
-    }
-
-    // Generate unique 6-char room code
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let roomCode = "";
-    let isUnique = false;
-    while (!isUnique) {
-      roomCode = "";
-      for (let i = 0; i < 6; i++) {
-        roomCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    let roomCode = exam.examCode;
+    if (!roomCode || roomCode === "DRAFT") {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let isUnique = false;
+      while (!isUnique) {
+        roomCode = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+        const existing = await db.select().from(exams).where(eq(exams.examCode, roomCode));
+        isUnique = existing.length === 0;
       }
-      const [dup] = await db.select().from(exams).where(eq(exams.examCode, roomCode));
-      isUnique = !dup;
     }
 
-    await db.update(exams).set({
-      examCode: roomCode,
-      isLaunched: true,
-      updatedAt: new Date(),
-    }).where(and(eq(exams.id, examId), eq(exams.teacherId, teacherId)));
-
+    const { totalQuestions, totalPoints } = await materializeExamQuestions(examId, (exam.parts as unknown[]) || []);
+    await db.update(exams).set({ examCode: roomCode, isLaunched: true, totalQuestions, totalPoints, updatedAt: new Date() }).where(eq(exams.id, examId));
     return NextResponse.json({ success: true, roomCode });
   } catch (error) {
     console.error("Launch exam error:", error);

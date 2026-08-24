@@ -9,19 +9,24 @@ export async function POST(
   { params }: { params: Promise<{ examId: string }> }
 ) {
   const session = await requireTeacherSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const { examId } = await params;
     const now = new Date();
 
-    const [exam] = await db
+    const examRows = await db
       .select()
       .from(exams)
       .where(and(eq(exams.id, examId), eq(exams.teacherId, session.userId)));
-    if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    const exam = examRows[0];
+    if (!exam) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    }
 
-    // 1. Mark the exam completed
+    // 1. Mark exam completed + save the "done" date
     await db
       .update(exams)
       .set({ status: "completed", isPaused: false, endTime: now, updatedAt: now })
@@ -45,10 +50,11 @@ export async function POST(
         .set({ completedAt: now })
         .where(eq(examStudents.id, s.id));
 
-      const [attempt] = await db
+      const attemptRows = await db
         .select()
         .from(studentExamAttempts)
         .where(eq(studentExamAttempts.examStudentId, s.id));
+      const attempt = attemptRows[0];
 
       if (attempt) {
         await db

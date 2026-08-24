@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherExamRealtime } from "@/hooks/useTeacherExamRealtime";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useExamStore, StudentRequest } from "@/store/useExamStore";
@@ -14,8 +15,9 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogHeader } from "@/components/ui/dialog";
 
 type Tab = "all" | "attention" | "rejected" | "finished";
-
 export default function TeacherLiveMonitorPage() {
+  useTeacherExamRealtime(true, 2000);
+
   const router = useRouter();
   const exams = useExamStore((state) => state.exams);
   const endExam = useExamStore((state) => state.endExam);

@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherExamRealtime } from "@/hooks/useTeacherExamRealtime";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Search, ArrowLeft, Download, FileSpreadsheet, Users, FileCheck2, ShieldAlert } from "lucide-react";
@@ -8,8 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useExamStore, StudentRequest, Exam } from "@/store/useExamStore";
 import { examStats, submissionStatus, scoreSummary, effectiveGradingStatus } from "@/lib/grading-utils";
-
+function formatSubmitted(iso?: string) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 export default function GradingDetailPage() {
+  useTeacherExamRealtime(true, 2000);
+
   const router = useRouter();
   const params = useParams();
   const examId = params.examId as string;
@@ -314,7 +328,9 @@ export default function GradingDetailPage() {
                         ({req.studentId})
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-600">{req.submittedAt || "—"}</td>
+                    <td className="px-5 py-3.5 text-slate-600 whitespace-nowrap">
+  {formatSubmitted(req.submittedAt)}
+</td>
                     <td className="px-5 py-3.5">
                       <Badge variant={status.variant}>{status.label}</Badge>
                     </td>

@@ -1,57 +1,49 @@
-import type { Exam, StudentRequest, GradingStatus } from "@/store/useExamStore";
+import type { Exam,GradingStatus, StudentRequest, GradedAnswer } from "@/store/useExamStore";
 
-export const PASS_THRESHOLD = 50; // percent
-
-/**
- * The grading status to treat a submission as, even if the teacher hasn't
- * explicitly set one yet: submissions with nothing left needing manual
- * grading default to "complete", everything else defaults to "in-progress".
- * A submission with no remaining manual questions is always complete.
- */
-export function effectiveGradingStatus(req: StudentRequest): GradingStatus {
-  const needsReview = (req.answers || []).some((a) => a.needsManualGrading);
-  if (!needsReview) return "complete";
-  return req.gradingStatus ?? "in-progress";
-}
-
-export function gradingStatusMeta(
-  status: GradingStatus
-): { label: string; variant: "success" | "info" } {
-  if (status === "complete") return { label: "Complete", variant: "success" };
-  return { label: "In Progress", variant: "info" };
-}
-
-export function examStats(exam: Exam) {
-  const submitted = exam.requests.filter((r) => r.isSubmitted);
-  const forced = exam.requests.filter((r) => r.isForcedSubmit);
-  const pending = submitted.filter((r) => effectiveGradingStatus(r) !== "complete");
-  return {
-    examinees: exam.requests.filter((r) => r.status === "approved").length,
-    submitted: submitted.length,
-    forced: forced.length,
-    pending: pending.length,
-  };
-}
-
-export function submissionStatus(
-  req: StudentRequest
-): { label: string; variant: "success" | "warning" | "danger" | "neutral" } {
-  if (!req.isSubmitted) return { label: "In Progress", variant: "neutral" };
-  if (req.isForcedSubmit) return { label: "Forced Submit", variant: "danger" };
-  return { label: "Submitted", variant: "success" };
-}
-
-export function formatExamDate(iso?: string) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+export function effectivePoints(a: GradedAnswer): number {
+  if (a.manualScore !== undefined && a.manualScore !== null) return a.manualScore;
+  return a.autoScore ?? 0;
 }
 
 export function scoreSummary(req: StudentRequest) {
-  const total = (req.answers || []).reduce((sum, a) => sum + (a.autoScore ?? a.manualScore ?? 0), 0);
-  const max = req.totalMaxPoints ?? (req.answers || []).reduce((sum, a) => sum + a.maxPoints, 0);
+  const answers = req.answers || [];
+  const max = answers.reduce((s, a) => s + a.maxPoints, 0) || req.totalMaxPoints || 0;
+  const total = answers.reduce((s, a) => s + effectivePoints(a), 0);
   const percentage = max > 0 ? Math.round((total / max) * 100) : 0;
-  const fullyGraded = !(req.answers || []).some((a) => a.needsManualGrading);
-  return { total, max, percentage, pass: percentage >= PASS_THRESHOLD, fullyGraded };
+  return { total, max, percentage, pass: percentage >= 50 };
+}
+
+export function effectiveGradingStatus(req: StudentRequest): "in-progress" | "complete" {
+  if (req.gradingStatus) return req.gradingStatus;
+  return (req.answers || []).some((a) => a.needsManualGrading) ? "in-progress" : "complete";
+}
+export function gradingStatusMeta(status: GradingStatus): {
+  label: string;
+  variant: "info" | "success" | "warning" | "danger" | "neutral";
+} {
+  return status === "complete"
+    ? { label: "Complete", variant: "success" }
+    : { label: "In Progress", variant: "warning" };
+}
+export function examStats(exam: Exam) {
+  const approved = exam.requests.filter((r) => r.status === "approved");
+  const submitted = approved.filter((r) => r.isSubmitted || r.isForcedSubmit);
+  const pending = submitted.filter((r) => effectiveGradingStatus(r) !== "complete").length;
+  const forced = approved.filter((r) => r.isForcedSubmit).length;
+  return { examinees: approved.length, submitted: submitted.length, pending, forced };
+}
+
+export function submissionStatus(req: StudentRequest): { label: string; variant: "info" | "success" | "warning" | "danger" } {
+  if (req.isRejectedLive) return { label: "Rejected", variant: "danger" };
+  if (req.isForcedSubmit) return { label: "Force Submitted", variant: "warning" };
+  if (req.isSubmitted) return { label: "Submitted", variant: "success" };
+  if (req.isLocked) return { label: "Locked", variant: "danger" };
+  return { label: "In Progress", variant: "info" };
+}
+
+export function formatExamDate(iso?: string) {
+  if (!iso) return "Not scheduled";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "Not scheduled";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }

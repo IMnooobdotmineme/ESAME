@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherExamRealtime } from "@/hooks/useTeacherExamRealtime";
 import React, { useState, useEffect } from "react";
 import { Copy, Check, CheckCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -87,6 +88,7 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
 };
 
 export default function MyExamsPage() {
+  useTeacherExamRealtime(true, 2000); 
   const router = useRouter();
   const storeExams = useExamStore((state) => state.exams) || [];
   const deleteExam = useExamStore((state) => state.deleteExam);

@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Filter, Search } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
@@ -7,10 +8,52 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { GradingStatusDropdown } from "@/components/teacher/GradingStatusDropdown";
 import { GradingStatus, useExamStore } from "@/store/useExamStore";
-import { examStats, formatExamDate } from "@/lib/grading-utils";
+import { examStats } from "@/lib/grading-utils";
+import { useTeacherExamRealtime } from "@/hooks/useTeacherExamRealtime";
 
 const selectClass =
   "rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 cursor-pointer";
+
+function getExamDoneDate(exam: any): string | null {
+  return (
+    exam.endedAt ??
+    exam.endTime ??
+    exam.completedAt ??
+    exam.finishedAt ??
+    null
+  );
+}
+
+function getExamDoneTime(exam: any): number {
+  const raw = exam.endedAt ?? exam.endTime ?? exam.completedAt ?? exam.createdAt;
+  if (!raw) return 0;
+  const time = new Date(raw).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function formatDoneDate(exam: any) {
+  const doneDate = getExamDoneDate(exam);
+
+  if (!doneDate) return "Not ended";
+
+  const date = new Date(doneDate);
+  if (Number.isNaN(date.getTime())) return "Not ended";
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function isToday(date: Date) {
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
 
 export default function GradingPage() {
   const router = useRouter();
@@ -18,38 +61,64 @@ export default function GradingPage() {
   const fetchExams = useExamStore((s) => s.fetchExams);
   const setExamGradingStatus = useExamStore((s) => s.setExamGradingStatus);
 
-  useEffect(() => {
-    fetchExams();
-  }, [fetchExams]);
-
-  const gradableExams = exams.filter((e) => e.isEnded);
   const [dateFilter, setDateFilter] = useState("all");
   const [examSearch, setExamSearch] = useState("");
 
-  const visibleExams = gradableExams.filter((e) => {
-    if (dateFilter !== "all") {
-      const createdAt = new Date(e.createdAt);
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const ageInDays = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
-      if (dateFilter === "new" && createdAt < startOfToday) return false;
-      if (dateFilter === "7-days" && (ageInDays < 0 || ageInDays > 7)) return false;
-      if (dateFilter === "30-days" && (ageInDays < 0 || ageInDays > 30)) return false;
-    }
-    const q = examSearch.trim().toLowerCase();
-    if (
-      q &&
-      ![e.title, e.department, e.subject].some((value) =>
-        value.toLowerCase().includes(q)
-      )
-    ) {
-      return false;
-    }
-    return true;
-  });
+  // Initial load
+  useEffect(() => {
+    fetchExams(true);
+  }, [fetchExams]);
+
+  // Realtime updates for new submissions / finished exams
+  useTeacherExamRealtime(true, 2000);
+
+  // Newest ended exam first
+  const gradableExams = useMemo(() => {
+    return exams
+      .filter((e) => e.isEnded)
+      .slice()
+      .sort((a, b) => getExamDoneTime(b) - getExamDoneTime(a));
+  }, [exams]);
+
+  const visibleExams = useMemo(() => {
+    return gradableExams.filter((e) => {
+      const doneDateRaw = getExamDoneDate(e);
+      const doneDate = doneDateRaw ? new Date(doneDateRaw) : null;
+
+      if (dateFilter !== "all") {
+        if (!doneDate || Number.isNaN(doneDate.getTime())) return false;
+
+        const now = new Date();
+        const ageInDays =
+          (now.getTime() - doneDate.getTime()) / (1000 * 60 * 60 * 24);
+
+        if (dateFilter === "new" && !isToday(doneDate)) return false;
+        if (dateFilter === "7-days" && (ageInDays < 0 || ageInDays > 7)) return false;
+        if (dateFilter === "30-days" && (ageInDays < 0 || ageInDays > 30)) return false;
+      }
+
+      const q = examSearch.trim().toLowerCase();
+
+      if (
+        q &&
+        ![
+          e.title,
+          e.department,
+          e.subject,
+          e.courseCode,
+          e.roomCode,
+        ].some((v) => (v || "").toLowerCase().includes(q))
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [gradableExams, dateFilter, examSearch]);
 
   const handleExamStatusChange = async (examId: string, status: GradingStatus) => {
     await setExamGradingStatus(examId, status);
+    await fetchExams(true);
   };
 
   return (
@@ -58,6 +127,7 @@ export default function GradingPage() {
         title="Grading & Results"
         description="Select an exam session to review submissions and score manual questions."
       />
+
       <main className="p-6 space-y-5">
         {/* EXAM SEARCH */}
         <div className="relative max-w-sm">
@@ -77,6 +147,7 @@ export default function GradingPage() {
             <Filter className="w-3.5 h-3.5" />
             Filter:
           </span>
+
           <div className="relative inline-flex">
             <select
               value={dateFilter}
@@ -88,8 +159,10 @@ export default function GradingPage() {
               <option value="7-days">Last 7 days</option>
               <option value="30-days">Last 30 days</option>
             </select>
+
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 w-3.5 h-3.5 -translate-y-1/2 text-slate-400" />
           </div>
+
           {dateFilter !== "all" && (
             <button
               onClick={() => setDateFilter("all")}
@@ -107,47 +180,72 @@ export default function GradingPage() {
                 <th className="px-5 py-3 font-medium">Exam</th>
                 <th className="px-5 py-3 font-medium text-center">Department</th>
                 <th className="px-5 py-3 font-medium">Subject</th>
-                <th className="px-5 py-3 font-medium text-center">Date</th>
+                <th className="px-5 py-3 font-medium text-center">Done Date</th>
                 <th className="px-5 py-3 font-medium text-center">Examinees</th>
                 <th className="px-5 py-3 font-medium text-center">Submitted</th>
                 <th className="px-5 py-3 font-medium text-center">Review Status</th>
                 <th className="px-5 py-3 font-medium text-right">&nbsp;</th>
               </tr>
             </thead>
+
             <tbody>
               {visibleExams.map((exam) => {
                 const stats = examStats(exam);
+
                 return (
                   <tr
                     key={exam.id}
                     onClick={() => router.push(`/grading/${exam.id}`)}
                     className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 cursor-pointer"
                   >
-                    <td className="px-5 py-3.5 text-center">
-                      <p className="font-medium text-navy-900">{exam.title}</p>
-                    </td>
                     <td className="px-5 py-3.5">
+                      <p className="font-medium text-navy-900">{exam.title}</p>
+                      {exam.roomCode && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Room: {exam.roomCode}
+                        </p>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-3.5 text-center">
                       <Badge variant="info" className="whitespace-nowrap">
                         {exam.department || "—"}
                       </Badge>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-600">{exam.subject || "—"}</td>
-                    <td className="px-5 py-3.5 text-center text-slate-600 whitespace-nowrap">
-                      {formatExamDate(exam.createdAt)}
+
+                    <td className="px-5 py-3.5 text-slate-600">
+                      {exam.subject || "—"}
                     </td>
-                    <td className="px-5 py-3.5 text-center text-slate-600">{stats.examinees}</td>
-                    <td className="px-5 py-3.5 text-center text-slate-600">{stats.submitted}</td>
+
+                    <td className="px-5 py-3.5 text-center text-slate-600 whitespace-nowrap">
+                      {formatDoneDate(exam)}
+                    </td>
+
+                    <td className="px-5 py-3.5 text-center text-slate-600">
+                      {stats.examinees}
+                    </td>
+
+                    <td className="px-5 py-3.5 text-center text-slate-600">
+                      {stats.submitted}
+                    </td>
+
                     <td className="px-5 py-3.5 text-center">
-                      <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
+                      <div
+                        className="flex justify-center"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <GradingStatusDropdown
                           status={
                             exam.gradingStatus ??
                             (stats.pending > 0 ? "in-progress" : "complete")
                           }
-                          onChange={(status) => handleExamStatusChange(exam.id, status)}
+                          onChange={(status) =>
+                            handleExamStatusChange(exam.id, status)
+                          }
                         />
                       </div>
                     </td>
+
                     <td className="px-5 py-3.5 text-right">
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-600">
                         Open <ChevronRight size={13} />
@@ -156,9 +254,13 @@ export default function GradingPage() {
                   </tr>
                 );
               })}
+
               {visibleExams.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-5 py-10 text-center text-slate-400 text-sm">
+                  <td
+                    colSpan={8}
+                    className="px-5 py-10 text-center text-slate-400 text-sm"
+                  >
                     {gradableExams.length === 0
                       ? "No completed exams yet. Exams appear here once they've ended."
                       : "No exams match your search or filters."}

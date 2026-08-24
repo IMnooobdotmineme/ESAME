@@ -21,10 +21,11 @@ type ExamRow = {
   durationMinutes: number;
   totalQuestions: number;
   status: "scheduled" | "in_progress" | "completed" | "locked";
-  gradingStatus: "in_progress" | "complete"; // ← ADD THIS LINE
+  gradingStatus: "in_progress" | "complete";
   isLaunched: boolean;
   isPaused: boolean;
   scheduledDate: Date | null;
+  endTime: Date | null; // ← ADD THIS LINE
   createdAt: Date;
   parts: unknown[];
   departmentId: string;
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
         isPaused: exams.isPaused,
         scheduledDate: exams.scheduledDate,
         createdAt: exams.createdAt,
+        endTime: exams.endTime,
         parts: exams.parts,
         departmentId: exams.departmentId,
         subjectId: exams.subjectId,
@@ -175,6 +177,8 @@ export async function GET(req: NextRequest) {
           isStarted: exam.status === "in_progress" || exam.status === "completed",
           isEnded: exam.status === "completed",
           createdAt: exam.createdAt?.toISOString() || "",
+          endedAt: exam.endTime ? exam.endTime.toISOString() : null,
+          endTime: exam.endTime ? exam.endTime.toISOString() : null,  
           startDate: exam.scheduledDate?.toISOString() || undefined,
           department: exam.departmentName || "",
           subject: exam.subjectName || "",

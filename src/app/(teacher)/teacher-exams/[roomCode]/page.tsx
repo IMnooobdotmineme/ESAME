@@ -8,9 +8,10 @@ import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
+import { useTeacherExamRealtime } from "@/hooks/useTeacherExamRealtime";
 export default function TeacherExamLobbyPage() {
   const params = useParams();
+  useTeacherExamRealtime(true, 2000);
   const router = useRouter();
   const roomCode = (params.roomCode as string)?.toUpperCase();
   const exam = useExamStore((state) => state.exams.find((e) => e.roomCode.toUpperCase() === roomCode));
