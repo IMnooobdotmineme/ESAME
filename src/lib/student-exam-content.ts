@@ -55,7 +55,9 @@ export interface CodingQuestion extends QuestionBase {
 
 export interface FillBlankQuestion extends QuestionBase {
   type: "fill_blank";
-  correctAnswer: string;
+  /** Text segments; blanks sit between them. segments.length === blanks.length + 1 */
+  segments: string[];
+  blanks: { id: string; correctAnswer: string }[];
 }
 
 export interface MatchingQuestion extends QuestionBase {
@@ -84,6 +86,18 @@ export type ExamQuestion =
 
 // Types that require a teacher to review, rather than being auto-graded.
 const MANUAL_GRADE_TYPES: QuestionType[] = ["short_answer", "long_answer", "coding"];
+
+export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
+  mcq: "MULTIPLE CHOICE",
+  multi_select: "MULTIPLE SELECT",
+  true_false: "TRUE / FALSE",
+  short_answer: "SHORT ANSWER",
+  long_answer: "LONG ANSWER",
+  coding: "CODING CHALLENGE",
+  fill_blank: "FILL IN THE BLANK",
+  matching: "MATCHING PAIRS",
+  ordering: "SEQUENCE / ORDERING",
+};
 
 export interface ExamPage {
   id: string;
@@ -185,8 +199,41 @@ export function getMockExamContent(): MockExamContent {
           {
             id: "q-fill-1",
             type: "fill_blank",
-            prompt: "The capital of France is ______.",
-            correctAnswer: "Paris",
+            prompt: "Complete the paragraph below.",
+            segments: [
+              "The mitochondria is the ",
+              " of the cell, while the ",
+              " controls the cell's activities, and ",
+              " is the process plants use to make food from sunlight.",
+            ],
+            blanks: [
+              { id: "b1", correctAnswer: "powerhouse" },
+              { id: "b2", correctAnswer: "nucleus" },
+              { id: "b3", correctAnswer: "photosynthesis" },
+            ],
+          },
+          {
+            id: "q-fill-2",
+            type: "fill_blank",
+            prompt: "Complete the sentence below.",
+            segments: ["The capital of France is ", "."],
+            blanks: [{ id: "b1", correctAnswer: "Paris" }],
+          },
+          {
+            id: "q-fill-3",
+            type: "fill_blank",
+            prompt: "Complete the sentence below.",
+            segments: [
+              "Water freezes at ",
+              "°C and boils at ",
+              "°C at sea level, and its chemical formula is ",
+              ".",
+            ],
+            blanks: [
+              { id: "b1", correctAnswer: "0" },
+              { id: "b2", correctAnswer: "100" },
+              { id: "b3", correctAnswer: "H2O" },
+            ],
           },
         ]),
       ],
@@ -285,9 +332,12 @@ export function getMockExamContent(): MockExamContent {
 }
 
 // Questions without explicit `marks` (mcq, multi_select, true_false,
-// short_answer, fill_blank, matching, ordering) are worth 1 point each.
-function questionPoints(q: ExamQuestion): number {
-  return "marks" in q ? q.marks : 1;
+// short_answer, matching, ordering) are worth 1 point each. Fill-in-the-blank
+// is worth 1 point per blank.
+export function questionPoints(q: ExamQuestion): number {
+  if ("marks" in q) return q.marks;
+  if (q.type === "fill_blank") return q.blanks.length;
+  return 1;
 }
 
 export function totalQuestionCount(exam: MockExamContent): number {
@@ -323,8 +373,13 @@ export interface ScoreResult {
   totalQuestions: number;
   autoGradedQuestions: number;
   correctCount: number;
+  incorrectCount: number; // auto-graded, answered, but wrong
   manualGradeCount: number;
+  unansweredCount: number; // across the whole exam, auto + manual
   percentage: number; // out of auto-graded questions only
+  earnedPoints: number; // points earned on auto-graded questions
+  autoTotalPoints: number; // total possible points across auto-graded questions
+  totalPoints: number; // total possible points across the whole exam
 }
 
 function isAnswerCorrect(question: ExamQuestion, given: string | undefined): boolean {
@@ -335,8 +390,18 @@ function isAnswerCorrect(question: ExamQuestion, given: string | undefined): boo
       return given === question.correctOptionId;
     case "true_false":
       return given === question.correctValue;
-    case "fill_blank":
-      return given.trim().toLowerCase() === question.correctAnswer.trim().toLowerCase();
+    case "fill_blank": {
+      try {
+        const givenMap = JSON.parse(given) as Record<string, string>;
+        return question.blanks.every(
+          (b) =>
+            (givenMap[b.id] ?? "").trim().toLowerCase() ===
+            b.correctAnswer.trim().toLowerCase()
+        );
+      } catch {
+        return false;
+      }
+    }
     case "multi_select": {
       const givenIds = given.split(",").filter(Boolean).sort();
       const correctIds = [...question.correctOptionIds].sort();
@@ -374,18 +439,33 @@ export function computeMockScore(
   let totalQuestions = 0;
   let autoGradedQuestions = 0;
   let correctCount = 0;
+  let incorrectCount = 0;
   let manualGradeCount = 0;
+  let unansweredCount = 0;
+  let earnedPoints = 0;
+  let autoTotalPoints = 0;
 
   for (const section of exam.sections) {
     for (const page of section.pages) {
       for (const q of page.questions) {
         totalQuestions++;
+        const given = answers[q.id];
+        const isUnanswered = given === undefined || given === "";
+        if (isUnanswered) unansweredCount++;
+
         if (MANUAL_GRADE_TYPES.includes(q.type)) {
           manualGradeCount++;
           continue;
         }
         autoGradedQuestions++;
-        if (isAnswerCorrect(q, answers[q.id])) correctCount++;
+        const points = questionPoints(q);
+        autoTotalPoints += points;
+        if (isAnswerCorrect(q, given)) {
+          correctCount++;
+          earnedPoints += points;
+        } else if (!isUnanswered) {
+          incorrectCount++;
+        }
       }
     }
   }
@@ -395,5 +475,53 @@ export function computeMockScore(
       ? Math.round((correctCount / autoGradedQuestions) * 100)
       : 0;
 
-  return { totalQuestions, autoGradedQuestions, correctCount, manualGradeCount, percentage };
+  return {
+    totalQuestions,
+    autoGradedQuestions,
+    correctCount,
+    incorrectCount,
+    manualGradeCount,
+    unansweredCount,
+    percentage,
+    earnedPoints,
+    autoTotalPoints,
+    totalPoints: totalMaxScore(exam),
+  };
+}
+
+export interface SectionBreakdown {
+  id: string;
+  title: string;
+  type: QuestionType;
+  totalQuestions: number;
+  answeredCount: number;
+  correctCount: number;
+  isManual: boolean;
+}
+
+export function computeSectionBreakdown(
+  exam: MockExamContent,
+  answers: Record<string, string>
+): SectionBreakdown[] {
+  return exam.sections.map((section) => {
+    const questions = section.pages.flatMap((p) => p.questions);
+    const type = questions[0]?.type ?? "short_answer";
+    const isManual = MANUAL_GRADE_TYPES.includes(type);
+    const answeredCount = questions.filter(
+      (q) => answers[q.id] !== undefined && answers[q.id] !== ""
+    ).length;
+    const correctCount = isManual
+      ? 0
+      : questions.filter((q) => isAnswerCorrect(q, answers[q.id])).length;
+
+    return {
+      id: section.id,
+      title: section.title,
+      type,
+      totalQuestions: questions.length,
+      answeredCount,
+      correctCount,
+      isManual,
+    };
+  });
 }

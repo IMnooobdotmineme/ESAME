@@ -2,12 +2,15 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Clock, AlertTriangle, Check } from "lucide-react";
+import { Clock, AlertTriangle, Check, ShieldAlert, Send } from "lucide-react";
 import { useExamStore } from "@/store/useExamStore";
 import { ExamQuestionCard } from "@/components/student/ExamQuestionCard";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   getMockExamContent,
   examHasManualGrading,
+  QUESTION_TYPE_LABEL,
+  totalQuestionCount,
 } from "@/lib/student-exam-content";
 
 interface StudentSession {
@@ -54,6 +57,7 @@ export default function StudentExamPage() {
 
   const [violationMessage, setViolationMessageInput] = useState("");
   const [violationMessageSent, setViolationMessageSent] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   // Load the student's own session to know which request is theirs
   useEffect(() => {
@@ -123,7 +127,7 @@ export default function StudentExamPage() {
     }
   }, [isAuthorized, currentExam, secondsRemaining]);
 
-  function handleSubmit() {
+  function handleSubmit(reason: "manual" | "timeout" = "manual") {
     const hasManualGrading = examHasManualGrading(examContent);
     sessionStorage.setItem(
       "esame_exam_result",
@@ -131,16 +135,17 @@ export default function StudentExamPage() {
         answers,
         hasEssay: hasManualGrading,
         submittedAt: new Date().toISOString(),
+        reason,
       })
     );
-    router.push("/student/score");
+    router.push(reason === "timeout" ? "/student/time-up" : "/student/score");
   }
 
   // Countdown + auto-submit on timeout
   useEffect(() => {
     if (secondsRemaining === null || isLocked) return;
     if (secondsRemaining <= 0) {
-      handleSubmit();
+      handleSubmit("timeout");
       return;
     }
     const interval = setInterval(() => {
@@ -171,16 +176,20 @@ export default function StudentExamPage() {
 
   const isLastSection = sectionIndex === examContent.sections.length - 1;
 
+  const totalAnsweredCount = useMemo(
+    () => Object.values(answers).filter((v) => v !== undefined && v !== "").length,
+    [answers]
+  );
+  const totalExamQuestions = useMemo(() => totalQuestionCount(examContent), [examContent]);
+  const totalUnanswered = totalExamQuestions - totalAnsweredCount;
+
   function handleAnswer(questionId: string, value: string) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   }
 
   function handlePrimaryAction() {
     if (isLastSection) {
-      const confirmed = window.confirm(
-        "Are you sure you want to submit the exam? This cannot be undone."
-      );
-      if (confirmed) handleSubmit();
+      setShowSubmitConfirm(true);
     } else {
       setSectionIndex((i) => i + 1);
     }
@@ -231,57 +240,104 @@ export default function StudentExamPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <ConfirmDialog
+        open={showSubmitConfirm}
+        onClose={() => setShowSubmitConfirm(false)}
+        onConfirm={() => {
+          setShowSubmitConfirm(false);
+          handleSubmit();
+        }}
+        title="Submit your exam?"
+        description={
+          totalUnanswered > 0
+            ? `You still have ${totalUnanswered} unanswered question${
+                totalUnanswered !== 1 ? "s" : ""
+              }. Once submitted, you cannot make any more changes.`
+            : "You've answered every question. Once submitted, you cannot make any more changes."
+        }
+        confirmLabel="Submit Exam"
+        variant="submit"
+      />
+
       {/* Lock overlay — blocks the exam until the teacher grants permission */}
       {isLocked && (
         <div className="fixed inset-0 z-50 bg-navy-900/95 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center space-y-4 shadow-2xl">
-            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
-              <AlertTriangle size={26} />
+          <div
+            key={myRequest?.lastLockedAt}
+            className="alert-shake max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-2xl"
+          >
+            {/* Icon with pulsing alert ring */}
+            <div className="relative w-16 h-16 mx-auto mb-5">
+              <span className="absolute inset-0 rounded-full bg-amber-400/40 animate-ping" />
+              <div className="relative w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center border-2 border-amber-100">
+                <ShieldAlert size={28} />
+              </div>
             </div>
+
+            <span className="inline-block text-[10px] font-black tracking-widest text-amber-600 mb-1.5">
+              SECURITY ALERT
+            </span>
             <h2 className="text-lg font-bold text-slate-900">Exam Locked</h2>
-            <p className="text-sm text-slate-500">
+            <p className="mt-1.5 text-sm text-slate-500 leading-relaxed">
               We detected you switched away from this tab. Your exam has been
               paused and flagged for your teacher.
             </p>
 
-            {violationMessageSent ? (
-              <div className="flex items-center justify-center gap-2 pt-2">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-xs font-medium text-amber-700">
-                  Message sent — waiting for teacher approval...
-                </span>
-              </div>
-            ) : (
-              <div className="text-left space-y-1.5 pt-1">
-                <label className="text-xs font-semibold text-slate-600">
-                  Explain what happened (optional)
-                </label>
-                <textarea
-                  value={violationMessage}
-                  onChange={(e) =>
-                    setViolationMessageInput(e.target.value.slice(0, VIOLATION_MESSAGE_MAX_CHARS))
-                  }
-                  maxLength={VIOLATION_MESSAGE_MAX_CHARS}
-                  rows={3}
-                  placeholder="e.g. My notification popped up and I clicked it by accident..."
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 resize-none"
-                />
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
-                    {violationMessage.length}/{VIOLATION_MESSAGE_MAX_CHARS} characters
-                  </span>
-                </div>
-                <button
-                  onClick={handleSendViolationMessage}
-                  disabled={!violationMessage.trim()}
-                  className="w-full py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
-                >
-                  Request Permission to Continue
-                </button>
-              </div>
+            {(myRequest?.tabSwitches ?? 0) > 1 && (
+              <span className="inline-block mt-3 rounded-full bg-red-50 text-red-600 px-3 py-1 text-[11px] font-bold">
+                Violation #{myRequest?.tabSwitches}
+              </span>
             )}
 
-            <p className="text-xs text-slate-400">
+            <div className="mt-5 border-t border-slate-100 pt-5">
+              {violationMessageSent ? (
+                <div className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 py-3">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-xs font-medium text-amber-700">
+                    Message sent — waiting for teacher approval...
+                  </span>
+                </div>
+              ) : (
+                <div className="text-left space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Explain what happened (optional)
+                  </label>
+                  <textarea
+                    value={violationMessage}
+                    onChange={(e) =>
+                      setViolationMessageInput(e.target.value.slice(0, VIOLATION_MESSAGE_MAX_CHARS))
+                    }
+                    maxLength={VIOLATION_MESSAGE_MAX_CHARS}
+                    rows={3}
+                    placeholder="e.g. My notification popped up and I clicked it by accident..."
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 resize-none"
+                  />
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <div className="flex-1 h-1 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full bg-sky-400 transition-all"
+                        style={{
+                          width: `${(violationMessage.length / VIOLATION_MESSAGE_MAX_CHARS) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-slate-400 shrink-0">
+                      {violationMessage.length}/{VIOLATION_MESSAGE_MAX_CHARS}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleSendViolationMessage}
+                    disabled={!violationMessage.trim()}
+                    className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+                  >
+                    <Send size={14} />
+                    Request Permission to Continue
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <p className="mt-5 text-xs text-slate-400">
               Stay on this page — you will be able to continue once your teacher
               grants permission.
             </p>
@@ -316,6 +372,24 @@ export default function StudentExamPage() {
         </div>
       </div>
 
+      {/* Progress bar */}
+      <div className="bg-white border-b border-slate-200 px-6 py-3">
+        <div className="max-w-5xl mx-auto flex items-center gap-3">
+          <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+            {totalAnsweredCount}/{totalExamQuestions} answered
+          </span>
+          <div className="relative flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-sky-500 transition-all duration-500 ease-out"
+              style={{ width: `${(totalAnsweredCount / totalExamQuestions) * 100}%` }}
+            />
+          </div>
+          <span className="text-[11px] font-bold text-navy-900 shrink-0">
+            {Math.round((totalAnsweredCount / totalExamQuestions) * 100)}%
+          </span>
+        </div>
+      </div>
+
       <main className="max-w-5xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-6">
         {/* Section sidebar */}
         <div className="md:w-60 shrink-0">
@@ -329,7 +403,7 @@ export default function StudentExamPage() {
                 <button
                   key={s.id}
                   onClick={() => setSectionIndex(i)}
-                  className={`shrink-0 md:w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                  className={`shrink-0 md:w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-300 hover:translate-x-1 hover:shadow-lg ${
                     isCurrent
                       ? "bg-navy-900 text-white"
                       : sectionComplete
@@ -356,6 +430,12 @@ export default function StudentExamPage() {
                 </button>
               );
             })}
+            <button
+              onClick={() => setShowSubmitConfirm(true)}
+              className="shrink-0 md:w-full px-6 py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold transition-all duration-300 hover:bg-navy-800 hover:translate-x-1 hover:shadow-lg"
+            >
+              Submit Exam
+            </button>
           </div>
         </div>
 
@@ -381,12 +461,25 @@ export default function StudentExamPage() {
             </div>
           </div>
 
+          {/* Section type label — stated once, not per question */}
+          {sectionQuestions.length > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="inline-block rounded-full bg-sky-50 text-sky-700 px-3 py-1 text-xs font-bold tracking-wide">
+                {QUESTION_TYPE_LABEL[sectionQuestions[0].type]}
+              </span>
+              <span className="text-xs text-slate-400">
+                {sectionQuestions.length} question{sectionQuestions.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+
           {/* Questions — the whole section scrolls down, no per-section pagination */}
           <div className="space-y-5">
-            {sectionQuestions.map((q) => (
+            {sectionQuestions.map((q, idx) => (
               <ExamQuestionCard
                 key={q.id}
                 question={q}
+                questionNumber={idx + 1}
                 answer={answers[q.id]}
                 onAnswer={handleAnswer}
               />
@@ -403,12 +496,14 @@ export default function StudentExamPage() {
                 Previous
               </button>
             )}
-            <button
-              onClick={handlePrimaryAction}
-              className="px-6 py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition"
-            >
-              {isLastSection ? "Submit Exam" : "Next Section"}
-            </button>
+            {!isLastSection && (
+              <button
+                onClick={handlePrimaryAction}
+                className="px-6 py-2.5 rounded-full bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition"
+              >
+                Next Section
+              </button>
+            )}
           </div>
         </div>
       </main>

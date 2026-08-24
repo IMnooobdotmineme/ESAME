@@ -37,10 +37,28 @@ input, textarea, select {
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes blob-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-16px, 20px) scale(1.05); }
+  66% { transform: translate(14px, -14px) scale(0.97); }
+}
+
+.animate-blob {
+  animation: blob-float 9s ease-in-out infinite;
+}
+
+.animate-blob-delay {
+  animation-delay: -4.5s;
 }
 
 @keyframes check-pop {
@@ -60,4 +78,37 @@ body {
 
 .check-pop {
   animation: check-pop 0.35s ease-out;
+}
+
+@keyframes alert-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.alert-shake {
+  animation: alert-shake 0.5s ease-in-out;
+}
+
+@keyframes progress-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.progress-shimmer {
+  animation: progress-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-blob,
+  .check-pop,
+  .alert-shake,
+  .progress-shimmer {
+    animation: none;
+  }
 }

@@ -135,7 +135,7 @@ export const useExamStore = create<ExamStore>((set, get) => ({
       department: "Computer Science",
       subject: "Orientation Demo Session",
       title: "Demo Exam Session",
-      durationMinutes: 60,
+      durationMinutes: 30,
       questionCount: 5,
       roomCode: "DEMO123",
       isLaunched: true,
