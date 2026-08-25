@@ -299,7 +299,7 @@ export default function Home() {
                 educational institutions.
               </p>
 
-              <div className="flex flex-wrap gap-3 pt-2">
+              <div className="flex flex-wrap gap-3 pt-2 mb-20">
                 <Link href="/sign-up">
                   <button className="px-8 py-3.5 bg-[#1f385c] text-white rounded-full font-semibold transition-all duration-300 hover:bg-[#152a48] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-[#1f385c]/20">
                     Get Started As Organization
@@ -311,47 +311,6 @@ export default function Home() {
                 >
                   See how it works
                 </a>
-              </div>
-
-              <div className="flex flex-wrap gap-x-12 gap-y-6 pt-6">
-                <div className="flex items-start gap-2">
-                  <svg
-                    className="w-5 h-5 text-emerald-400 mt-1 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="3"
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Anti-Cheating Logs</h4>
-                    <p className="text-sm text-slate-600 mt-1">Tab, copy-paste, & focus detection</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <svg
-                    className="w-5 h-5 text-emerald-400 mt-1 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="3"
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  <div>
-                    <h4 className="font-bold text-slate-900">AI Assistant</h4>
-                    <p className="text-sm text-slate-600 mt-1">Smart question bank generations</p>
-                  </div>
-                </div>
               </div>
             </Reveal>
 

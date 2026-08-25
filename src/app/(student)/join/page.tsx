@@ -11,6 +11,18 @@ export default function StudentJoinPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // ✅ Helper: try fullscreen, then navigate (SSR-safe + client-only)
+  const enterFullscreenThenGo = async (next: string) => {
+    if (typeof document !== "undefined" && document.documentElement.requestFullscreen) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        // Fullscreen denied by browser or user — continue anyway
+      }
+    }
+    router.push(next);
+  };
+
   const isComplete =
     studentName.trim() !== "" && studentId.trim() !== "" && roomCode.trim() !== "";
 
@@ -47,7 +59,8 @@ export default function StudentJoinPage() {
           submittedAt: new Date().toISOString(),
         })
       );
-      router.push("waiting-approval");
+      // ✅ Fullscreen enters right on the confirm click — before navigating to waiting-approval
+      await enterFullscreenThenGo("waiting-approval");
     } catch {
       setError("Network error. Please try again.");
     } finally {

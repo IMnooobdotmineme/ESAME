@@ -6,7 +6,18 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users } from "lucide-react";
-
+function formatDateTime(iso?: string) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 interface TeacherApprovalListProps {
   roomCode: string;
 }
@@ -82,7 +93,7 @@ export default function TeacherApprovalList({ roomCode }: TeacherApprovalListPro
                     </span>
                   </p>
                   <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                    Requested at {req.timestamp}
+                    Requested at {formatDateTime(req.timestamp)}
                   </p>
                 </div>
 

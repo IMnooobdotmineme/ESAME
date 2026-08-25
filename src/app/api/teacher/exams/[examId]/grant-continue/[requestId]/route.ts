@@ -9,7 +9,9 @@ export async function POST(
   { params }: { params: Promise<{ examId: string; requestId: string }> }
 ) {
   const session = await requireTeacherSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const { examId, requestId } = await params;
@@ -18,16 +20,27 @@ export async function POST(
       .select()
       .from(exams)
       .where(and(eq(exams.id, examId), eq(exams.teacherId, session.userId)));
-    if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    if (!exam) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    }
 
-    // Unlock the student so they can continue the exam
+    const [student] = await db
+      .select()
+      .from(examStudents)
+      .where(and(eq(examStudents.id, requestId), eq(examStudents.examId, examId)));
+    if (!student) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    // ✅ Unlock the student AND wipe the old violation message
     await db
       .update(examStudents)
-      .set({ isLocked: false })
-      .where(and(eq(examStudents.id, requestId), eq(examStudents.examId, examId)));
+      .set({ isLocked: false, violationMessage: null })
+      .where(eq(examStudents.id, requestId));
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("Grant continue error:", error);
     return NextResponse.json({ error: "Failed to grant continue" }, { status: 500 });
   }
 }

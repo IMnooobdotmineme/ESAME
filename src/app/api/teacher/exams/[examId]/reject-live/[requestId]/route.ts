@@ -9,7 +9,9 @@ export async function POST(
   { params }: { params: Promise<{ examId: string; requestId: string }> }
 ) {
   const session = await requireTeacherSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const { examId, requestId } = await params;
@@ -19,15 +21,29 @@ export async function POST(
       .select()
       .from(exams)
       .where(and(eq(exams.id, examId), eq(exams.teacherId, session.userId)));
-    if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    if (!exam) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    }
 
-    // 1. Mark student rejected + finished (auto-submit)
+    const [student] = await db
+      .select()
+      .from(examStudents)
+      .where(and(eq(examStudents.id, requestId), eq(examStudents.examId, examId)));
+    if (!student) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    // ✅ Reject + force submit + wipe the old violation message
     await db
       .update(examStudents)
-      .set({ isRejectedLive: true, isLocked: false, completedAt: now })
-      .where(and(eq(examStudents.id, requestId), eq(examStudents.examId, examId)));
+      .set({
+        isRejectedLive: true,
+        isLocked: false,
+        completedAt: now,
+        violationMessage: null,
+      })
+      .where(eq(examStudents.id, requestId));
 
-    // 2. Force-submit their attempt (create one if it doesn't exist)
     const [attempt] = await db
       .select()
       .from(studentExamAttempts)
@@ -50,7 +66,7 @@ export async function POST(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Reject live student error:", error);
+    console.error("Reject live error:", error);
     return NextResponse.json({ error: "Failed to reject student" }, { status: 500 });
   }
 }

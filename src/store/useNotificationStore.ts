@@ -22,12 +22,18 @@ interface NotificationStore {
   markAllAsRead: () => Promise<void>;
   archiveNotification: (id: string, archived: boolean) => Promise<void>;
   clearAll: () => void;
+  removeNotification: (id: string) => void;
+  
 }
 
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: [],
   isLoading: false,
-
+  removeNotification: (id: string) => {
+    set((state) => ({
+      notifications: state.notifications.filter((n) => n.id !== id),
+    }));
+  },
   fetchNotifications: async () => {
     set({ isLoading: true });
     try {

@@ -24,8 +24,11 @@ type ExamRow = {
   gradingStatus: "in_progress" | "complete";
   isLaunched: boolean;
   isPaused: boolean;
+  pausedAt: Date | null;
+  pausedTotalSeconds: number;
   scheduledDate: Date | null;
-  endTime: Date | null; // ← ADD THIS LINE
+  endTime: Date | null;
+  startTime: Date | null; // ✅ FIX 1 — add startTime
   createdAt: Date;
   parts: unknown[];
   departmentId: string;
@@ -65,6 +68,9 @@ export async function GET(req: NextRequest) {
         scheduledDate: exams.scheduledDate,
         createdAt: exams.createdAt,
         endTime: exams.endTime,
+        startTime: exams.startTime,
+        pausedAt: exams.pausedAt,               
+        pausedTotalSeconds: exams.pausedTotalSeconds,
         parts: exams.parts,
         departmentId: exams.departmentId,
         subjectId: exams.subjectId,
@@ -86,7 +92,6 @@ export async function GET(req: NextRequest) {
 
         const studentIds = studentRows.map((s: StudentRow) => s.id);
 
-        // Attempts for all students of this exam
         const attemptRows: AttemptRow[] =
           studentIds.length > 0
             ? await db
@@ -99,7 +104,6 @@ export async function GET(req: NextRequest) {
           attemptRows.map((a: AttemptRow): [string, AttemptRow] => [a.examStudentId, a])
         );
 
-        // All answers (+question) for those attempts
         const attemptIds = attemptRows.map((a: AttemptRow) => a.id);
         const answerRows: AnswerRow[] =
           attemptIds.length > 0
@@ -110,7 +114,6 @@ export async function GET(req: NextRequest) {
                 .where(inArray(studentAnswers.attemptId, attemptIds))
             : [];
 
-        // Options for MCQ correct-answer text
         const questionIds = Array.from(
           new Set(answerRows.map((r: AnswerRow) => r.answer.questionId))
         );
@@ -127,11 +130,15 @@ export async function GET(req: NextRequest) {
             .filter((r: AnswerRow) => r.answer.attemptId === attemptId)
             .map((r: AnswerRow) => {
               const qType = r.question?.questionType;
+              const qPayload = (r.question?.payload ?? {}) as any;
               const isAuto =
-                qType === "mcq" ||
-                qType === "multiple_select" ||
-                qType === "true_false" ||
-                qType === "fill_in_blank";
+                (qType === "mcq" ||
+                  qType === "multiple_select" ||
+                  qType === "true_false" ||
+                  qType === "fill_in_blank" ||
+                  qType === "matching" ||
+                  qType === "ordering") &&
+                qPayload.autoGrade !== false;
               const opts = optionRows.filter(
                 (o: OptionRow) => o.questionId === (r.question?.id ?? "")
               );
@@ -171,14 +178,17 @@ export async function GET(req: NextRequest) {
           durationMinutes: exam.durationMinutes,
           questionCount: exam.totalQuestions,
           status: exam.status,
-          gradingStatus: exam.gradingStatus, // ← ADD THIS LINE
+          gradingStatus: exam.gradingStatus,
           isLaunched: exam.isLaunched,
           isPaused: exam.isPaused,
+          pausedAt: exam.pausedAt ? exam.pausedAt.toISOString() : undefined,
+          pausedTotalSeconds: exam.pausedTotalSeconds ?? 0,
           isStarted: exam.status === "in_progress" || exam.status === "completed",
           isEnded: exam.status === "completed",
           createdAt: exam.createdAt?.toISOString() || "",
           endedAt: exam.endTime ? exam.endTime.toISOString() : null,
-          endTime: exam.endTime ? exam.endTime.toISOString() : null,  
+          endTime: exam.endTime ? exam.endTime.toISOString() : null,
+          startedAt: exam.startTime ? exam.startTime.toISOString() : undefined, // ✅ FIX 3 — was `startTime: exams.startTime` (wrong schema reference)
           startDate: exam.scheduledDate?.toISOString() || undefined,
           department: exam.departmentName || "",
           subject: exam.subjectName || "",
@@ -294,6 +304,9 @@ export async function POST(req: NextRequest) {
         status: "scheduled",
         isLaunched: false,
         isPaused: false,
+        // ✅ FIX 4 — removed the bogus `startTime: Date | null;` and `ndTime: Date | null;`
+        // (those were type annotations inside .values(), which is invalid JavaScript).
+        // startTime is written later by /start and /end routes.
       })
       .returning();
 

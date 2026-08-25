@@ -32,7 +32,10 @@ export async function buildResultSummary(examStudentId: string) {
 
   for (const q of questionRows as any[]) {
     const payload = (q.payload ?? {}) as any;
-    const isManual = MANUAL.includes(q.questionType) || (q.questionType === "short_answer" && !(payload.acceptedVariants ?? []).length);
+        const isManual =
+      MANUAL.includes(q.questionType) ||
+      (q.questionType === "short_answer" && !(payload.acceptedVariants ?? []).length) ||
+      payload.autoGrade === false;
     const a = answerByQuestion.get(q.id);
     const answered = !!a && a.answerText !== "";
     if (!answered) unansweredCount++;

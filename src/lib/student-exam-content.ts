@@ -1,8 +1,4 @@
 // src/lib/student-exam-content.ts
-//
-// Mirrors the question types teachers can build in the exam builder
-// (app/teacher/exams/new/page.tsx). Each section here holds exactly one
-// question type — matching how a teacher's "part" has a single allowedType.
 
 export type QuestionType =
   | "mcq"
@@ -19,6 +15,7 @@ interface QuestionBase {
   id: string;
   type: QuestionType;
   prompt: string;
+  media?: { type: "image" | "audio" | "video"; url: string } | null;
 }
 
 export interface McqQuestion extends QuestionBase {

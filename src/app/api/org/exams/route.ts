@@ -11,7 +11,7 @@ import {
   subjects,
   teachers,
 } from "@/db/schema";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm"; // ← added sql
 import { requireOrgSession } from "@/lib/session";
 
 type ExamStatus = "Scheduled" | "In Progress" | "Completed" | "Locked";
@@ -28,7 +28,6 @@ type ExamListRow = {
   endTime: Date | null;
   durationMinutes: number;
   status: "scheduled" | "in_progress" | "completed" | "locked";
-  gradingStatus: "in_progress" | "complete";
   totalQuestions: number;
   totalPoints: number;
   createdAt: Date;
@@ -72,15 +71,12 @@ type AttemptRow = {
 
 type Trend = { value: string; direction: "up" | "down" };
 
-function mapExamStatus(
-  status: ExamListRow["status"],
-  gradingStatus?: ExamListRow["gradingStatus"] | null
-): ExamStatus {
+function mapExamStatus(status: ExamListRow["status"]): ExamStatus {
   switch (status) {
     case "in_progress":
       return "In Progress";
     case "completed":
-      return gradingStatus === "in_progress" ? "In Progress" : "Completed";
+      return "Completed";
     case "locked":
       return "Locked";
     default:
@@ -168,9 +164,6 @@ function isScheduledWithin24Hours(exam: ExamListRow) {
   return time >= now && time <= now + 24 * 60 * 60 * 1000;
 }
 
-// ---------- Month-over-month trend helpers ----------
-
-/** monthsAgo=0 -> current calendar month, monthsAgo=1 -> previous calendar month */
 function getMonthRange(monthsAgo: number) {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
@@ -184,7 +177,6 @@ function isWithinRange(date: Date | null, start: Date, end: Date) {
   return t >= start.getTime() && t < end.getTime();
 }
 
-/** Returns undefined when there's nothing to compare (both periods empty) — caller should omit the badge. */
 function computeTrend(current: number, previous: number): Trend | undefined {
   if (current === 0 && previous === 0) return undefined;
   if (previous === 0) return { value: "New", direction: "up" };
@@ -192,8 +184,6 @@ function computeTrend(current: number, previous: number): Trend | undefined {
   return { value: `${pct >= 0 ? "+" : ""}${pct}%`, direction: pct >= 0 ? "up" : "down" };
 }
 
-// Org exam views only ever show In Progress / Completed exams —
-// Scheduled and Locked are excluded at the query level.
 const VISIBLE_EXAM_STATUSES = ["in_progress", "completed"] as const;
 
 async function loadExamRows(orgId: string, examId?: string) {
@@ -217,7 +207,6 @@ async function loadExamRows(orgId: string, examId?: string) {
       endTime: exams.endTime,
       durationMinutes: exams.durationMinutes,
       status: exams.status,
-      gradingStatus: exams.gradingStatus,
       totalQuestions: exams.totalQuestions,
       totalPoints: exams.totalPoints,
       createdAt: exams.createdAt,
@@ -232,7 +221,8 @@ async function loadExamRows(orgId: string, examId?: string) {
     .innerJoin(departments, eq(exams.departmentId, departments.id))
     .innerJoin(subjects, eq(exams.subjectId, subjects.id))
     .where(conditions)
-    .orderBy(desc(exams.createdAt))) as ExamListRow[];
+    // ✅ NEWEST FIRST: done date (or created date if still live), newest on top
+    .orderBy(desc(sql`COALESCE(${exams.endTime}, ${exams.createdAt})`))) as ExamListRow[];
 }
 
 async function loadRelatedRows(examIds: string[]) {
@@ -355,7 +345,7 @@ function buildExamPayload(
     date: formatDate(exam.scheduledDate ?? exam.startTime ?? exam.createdAt),
     time: formatTimeRange(exam.startTime, exam.endTime),
     duration: formatDuration(exam.durationMinutes),
-    status: mapExamStatus(exam.status, exam.gradingStatus),
+    status: mapExamStatus(exam.status),
     totalQuestions: exam.totalQuestions || questions.length,
     totalStudents: students.length,
     questions,
@@ -385,7 +375,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ exam: examsPayload[0] ?? null });
   }
 
-  // --- Trend: Active Exams = in_progress exams created this month vs last month ---
   const thisMonth = getMonthRange(0);
   const lastMonth = getMonthRange(1);
 
@@ -396,7 +385,6 @@ export async function GET(req: Request) {
     (exam) => exam.status === "in_progress" && isWithinRange(exam.createdAt, lastMonth.start, lastMonth.end)
   ).length;
 
-  // --- Trend: Total Submissions = latest submitted attempts, bucketed by submittedAt month ---
   const allLatestAttempts = Array.from(latestAttempts.values());
   const submittedThisMonth = allLatestAttempts.filter(
     (attempt) => attempt.submittedAt && isWithinRange(attempt.submittedAt, thisMonth.start, thisMonth.end)

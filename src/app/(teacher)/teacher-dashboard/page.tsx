@@ -95,11 +95,15 @@ export default function TeacherDashboardPage() {
     [exams]
   );
 
-  const upcomingExams = useMemo(
+    const upcomingExams = useMemo(
     () =>
       exams
-        .filter((e) => e.startDate && !e.isLaunched && !e.isStarted && !e.isEnded)
-        .sort((a, b) => new Date(a.startDate!).getTime() - new Date(b.startDate!).getTime())
+        .filter((e) => !e.isLaunched && !e.isStarted && !e.isEnded)
+        .sort((a, b) => {
+          const da = a.startDate ? new Date(a.startDate).getTime() : new Date(a.createdAt).getTime();
+          const db = b.startDate ? new Date(b.startDate).getTime() : new Date(b.createdAt).getTime();
+          return da - db;
+        })
         .slice(0, 4),
     [exams]
   );

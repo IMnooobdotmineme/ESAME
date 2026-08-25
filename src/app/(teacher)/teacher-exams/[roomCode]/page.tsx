@@ -9,6 +9,18 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTeacherExamRealtime } from "@/hooks/useTeacherExamRealtime";
+function formatDateTime(iso?: string) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 export default function TeacherExamLobbyPage() {
   const params = useParams();
   useTeacherExamRealtime(true, 2000);

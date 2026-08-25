@@ -2,43 +2,130 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { examSections, examPages, examQuestions, examQuestionOptions } from "@/db/schema";
 
-const VALID_TYPES = ["mcq","multiple_select","true_false","short_answer","essay","coding","fill_in_blank"] as const;
+const VALID_TYPES = [
+  "mcq", "multiple_select", "true_false", "short_answer",
+  "essay", "coding", "fill_in_blank", "matching", "ordering",
+] as const;
 type TeacherType = (typeof VALID_TYPES)[number];
 
-function asArray(v: unknown): any[] { return Array.isArray(v) ? v : []; }
+function asArray(v: unknown): any[] {
+  return Array.isArray(v) ? v : [];
+}
+
+function shuffled<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 export function normalizeRawQuestion(raw: any, fallbackType: string) {
   const rawType = String(raw?.type ?? fallbackType ?? "mcq");
-  const type: TeacherType = (VALID_TYPES as readonly string[]).includes(rawType) ? (rawType as TeacherType) : "mcq";
-  const prompt = String(raw?.prompt ?? raw?.text ?? raw?.questionText ?? "");
-  const options = asArray(raw?.options).map((o: any, i: number) => ({
-    id: String(o?.id ?? `opt-${i + 1}`),
-    text: String(o?.text ?? o?.optionText ?? o?.label ?? ""),
-    isCorrect: Boolean(o?.isCorrect ?? o?.correct ?? false),
-  }));
-  const correctAnswers = asArray(raw?.correctAnswers ?? (raw?.correctAnswer != null ? [raw.correctAnswer] : [])).map((v: any) => String(v));
 
-  let segments = asArray(raw?.segments).map(String);
-  let blanks = asArray(raw?.blanks).map((b: any, i: number) => ({
-    id: String(b?.id ?? `b${i + 1}`),
-    correctAnswer: String(b?.correctAnswer ?? correctAnswers[i] ?? ""),
-  }));
-  if (type === "fill_in_blank" && segments.length === 0) {
-    segments = prompt.split("___");
-    blanks = correctAnswers.map((c, i) => ({ id: `b${i + 1}`, correctAnswer: c }));
-  }
-
-  const acceptedVariants = asArray(raw?.acceptedVariants ?? raw?.acceptedAnswers ?? correctAnswers).map((v: any) => String(v));
-  const correctValue = raw?.correctValue != null
-    ? String(raw.correctValue).toLowerCase()
-    : options.length ? (options.find((o) => o.isCorrect)?.text || "true").toLowerCase() : "true";
-  const points = Number(raw?.points ?? raw?.marks ?? (type === "fill_in_blank" ? Math.max(1, blanks.length) : 1)) || 1;
+  // ✅ Map the BUILDER's type names → DB enum names
+  const TYPE_MAP: Record<string, TeacherType> = {
+    mcq: "mcq",
+    multi_select: "multiple_select",
+    multiple_select: "multiple_select",
+    true_false: "true_false",
+    short_answer: "short_answer",
+    long_answer: "essay",
+    essay: "essay",
+    coding: "coding",
+    fill_blank: "fill_in_blank",
+    fill_in_blank: "fill_in_blank",
+    matching: "matching",
+    ordering: "ordering",
+  };
+  const type: TeacherType = TYPE_MAP[rawType] ?? "mcq";
+  const prompt = String(raw?.text ?? raw?.prompt ?? raw?.questionText ?? "");
 
   const payload: Record<string, unknown> = {};
-  if (type === "true_false") payload.correctValue = correctValue === "false" ? "false" : "true";
-  if (type === "fill_in_blank") { payload.segments = segments; payload.blanks = blanks; }
-  if (type === "short_answer" && acceptedVariants.length) payload.acceptedVariants = acceptedVariants;
-  if (type === "coding") payload.language = raw?.language ?? "JavaScript";
+  let options: { id: string; text: string; isCorrect: boolean }[] = [];
+
+  // 📎 Media attachment (image / audio / video)
+  if (raw?.mediaType && raw.mediaType !== "none" && raw?.mediaUrl) {
+    payload.media = { type: raw.mediaType, url: raw.mediaUrl };
+  }
+  // 🎚 Auto-grading toggle (OFF → manual grading)
+  if (raw?.autoGrade === false) payload.autoGrade = false;
+
+  switch (type) {
+    case "mcq": {
+      options = asArray(raw?.mcqOptions).map((t: any, i: number) => ({
+        id: `opt-${i + 1}`,
+        text: String(t ?? ""),
+        isCorrect: i === Number(raw?.mcqCorrect ?? 0),
+      }));
+      break;
+    }
+    case "multiple_select": {
+      options = asArray(raw?.multiOptions).map((t: any, i: number) => ({
+        id: `opt-${i + 1}`,
+        text: String(t ?? ""),
+        isCorrect: Boolean(asArray(raw?.multiCorrect)[i]),
+      }));
+      break;
+    }
+    case "true_false": {
+      payload.correctValue = raw?.tfCorrect === false ? "false" : "true";
+      break;
+    }
+    case "fill_in_blank": {
+      // Builder stores "The capital of France is [1]." + answerKey rows
+      const text = String(raw?.blanksText ?? prompt);
+      const segments = text.split(/\[\d+\]/);
+      const blanks = asArray(raw?.answerKey)
+        .slice()
+        .sort((a: any, b: any) => Number(a?.number) - Number(b?.number))
+        .map((r: any, i: number) => ({ id: `b${i + 1}`, correctAnswer: String(r?.answer ?? "") }));
+      payload.segments = segments;
+      payload.blanks = blanks;
+      break;
+    }
+    case "matching": {
+      const left = asArray(raw?.matchLeft).map((t: any, i: number) => ({ id: `l${i + 1}`, text: String(t ?? "") }));
+      const right = asArray(raw?.matchRight).map((t: any, i: number) => ({ id: `r${i + 1}`, text: String(t ?? "") }));
+      const correctPairs: Record<string, string> = {};
+      for (const m of asArray(raw?.matchAnswers)) {
+        const li = Number(m?.left) - 1;
+        const ri = String(m?.right ?? "").toUpperCase().charCodeAt(0) - 65;
+        if (li >= 0 && li < left.length && ri >= 0 && ri < right.length) {
+          correctPairs[`l${li + 1}`] = `r${ri + 1}`;
+        }
+      }
+      payload.left = left;
+      payload.right = right;
+      payload.correctPairs = correctPairs; // kept server-side only
+      break;
+    }
+    case "ordering": {
+      const correctItems = asArray(raw?.orderingItems).map((t: any, i: number) => ({ id: `i${i + 1}`, text: String(t ?? "") }));
+      const correctOrder = correctItems.map((it: any) => it.id);
+      // ✅ Serve a shuffled display order so the answer isn't given away
+      let display = shuffled(correctItems);
+      if (display.map((d) => d.id).join(",") === correctOrder.join(",")) {
+        display = [...display.slice(1), display[0]];
+      }
+      payload.items = display;
+      payload.correctOrder = correctOrder; // kept server-side only
+      break;
+    }
+    case "coding": {
+      payload.language = raw?.language ?? "JavaScript";
+      break;
+    }
+    default:
+      break;
+  }
+
+  const points =
+    Number(
+      raw?.marks ?? raw?.points ??
+      (type === "fill_in_blank" ? Math.max(1, asArray(raw?.answerKey).length) : 1)
+    ) || 1;
 
   return { type, prompt, points, options, payload };
 }

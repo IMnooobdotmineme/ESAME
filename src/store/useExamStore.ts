@@ -56,6 +56,7 @@ export interface Exam {
   parts?: unknown[];
   endedAt?: string | null;
   endTime?: string | null;
+  startedAt?: string;
 }
 
 export interface CreateExamInput {

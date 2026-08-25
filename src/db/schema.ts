@@ -47,6 +47,7 @@ export const questionTypeEnum = pgEnum("question_type", [
   "essay",
   "coding",
   "fill_in_blank",
+  "matching", "ordering", 
 ]);
 
 export const reviewStatusEnum = pgEnum("review_status", [
@@ -219,14 +220,16 @@ export const exams = pgTable("exams", {
   endTime: timestamp("end_time", { withTimezone: true }),
   durationMinutes: integer("duration_minutes").notNull().default(60),
   status: examStatusEnum("status").notNull().default("scheduled"),
-  isLaunched: boolean("is_launched").notNull().default(false),  // ← ADD
-  isPaused: boolean("is_paused").notNull().default(false),      // ← ADD
+  isLaunched: boolean("is_launched").notNull().default(false), 
+  isPaused: boolean("is_paused").notNull().default(false),      
   totalQuestions: integer("total_questions").notNull().default(0),
   totalPoints: integer("total_points").notNull().default(0),
-  parts: jsonb("parts").$type<unknown[]>().notNull().default([]), // ← ADD
+  parts: jsonb("parts").$type<unknown[]>().notNull().default([]), 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  gradingStatus: gradingStatusEnum("grading_status").notNull().default("in_progress"), // ← ADD
+  gradingStatus: gradingStatusEnum("grading_status").notNull().default("in_progress"), 
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
+  pausedTotalSeconds: integer("paused_total_seconds").notNull().default(0),
 });
 
 // ---------- Exam Sections ----------
@@ -292,11 +295,17 @@ export const examStudents = pgTable("exam_students", {
   isRejectedLive: boolean("is_rejected_live").notNull().default(false),
   tabSwitches: integer("tab_switches").notNull().default(0),
   violationMessage: text("violation_message"),
+   fingerprint: text("fingerprint"),
+  ipAddress: text("ip_address"),
+  lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
+  questionStartedAt: timestamp("question_started_at", { withTimezone: true }),
   lastLockedAt: timestamp("last_locked_at", { withTimezone: true }),
   invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  progress: jsonb("progress").$type<Record<string, string>>().notNull().default({}),
+  progressUpdatedAt: timestamp("progress_updated_at", { withTimezone: true }),
 });
 
 // ---------- Student Exam Attempts ----------
@@ -412,4 +421,12 @@ export const admins = pgTable("admins", {
   passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const proctorEvents = pgTable("proctor_events", {
+  id: text("id").primaryKey(),
+  examStudentId: text("exam_student_id").notNull().references(() => examStudents.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  severity: text("severity").notNull().default("flag"),
+  details: jsonb("details").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

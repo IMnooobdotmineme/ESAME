@@ -64,3 +64,31 @@ body {
   animation: check-pop 0.35s ease-out;
 }
 }
+/* ===== Code editor (VS Code-like tokens) ===== */
+.code-editor pre,
+.code-editor textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  tab-size: 2;
+}
+
+/* Dark theme (VS Code Dark+) */
+.code-editor .token.comment, .code-editor .token.prolog, .code-editor .token.cdata { color: #6a9955; }
+.code-editor .token.string, .code-editor .token.char, .code-editor .token.template-string { color: #ce9178; }
+.code-editor .token.number, .code-editor .token.boolean { color: #b5cea8; }
+.code-editor .token.keyword, .code-editor .token.control, .code-editor .token.atrule { color: #c586c0; }
+.code-editor .token.function, .code-editor .token.function-name { color: #dcdcaa; }
+.code-editor .token.class-name, .code-editor .token.builtin { color: #4ec9b0; }
+.code-editor .token.constant, .code-editor .token.symbol { color: #4fc1ff; }
+.code-editor .token.operator, .code-editor .token.punctuation { color: #d4d4d4; }
+.code-editor .token.variable, .code-editor .token.property { color: #9cdcfe; }
+
+/* Light theme (VS Code Light+) */
+.code-editor.light .token.comment, .code-editor.light .token.prolog, .code-editor.light .token.cdata { color: #008000; }
+.code-editor.light .token.string, .code-editor.light .token.char, .code-editor.light .token.template-string { color: #a31515; }
+.code-editor.light .token.number, .code-editor.light .token.boolean { color: #098658; }
+.code-editor.light .token.keyword, .code-editor.light .token.control, .code-editor.light .token.atrule { color: #af00db; }
+.code-editor.light .token.function, .code-editor.light .token.function-name { color: #795e26; }
+.code-editor.light .token.class-name, .code-editor.light .token.builtin { color: #267f99; }
+.code-editor.light .token.constant, .code-editor.light .token.symbol { color: #0070c1; }
+.code-editor.light .token.operator, .code-editor.light .token.punctuation { color: #393a34; }
+.code-editor.light .token.variable, .code-editor.light .token.property { color: #001080; }

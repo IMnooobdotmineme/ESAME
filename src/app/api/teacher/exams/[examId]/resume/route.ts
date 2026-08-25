@@ -10,15 +10,27 @@ export async function POST(
 ) {
   const session = await requireTeacherSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { examId } = await params;
 
-  try {
-    const { examId } = await params;
-    await db
-      .update(exams)
-      .set({ isPaused: false, updatedAt: new Date() })
-      .where(and(eq(exams.id, examId), eq(exams.teacherId, session.userId)));
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to resume exam" }, { status: 500 });
-  }
+  const [exam] = await db
+    .select()
+    .from(exams)
+    .where(and(eq(exams.id, examId), eq(exams.teacherId, session.userId)));
+  if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+
+  const added = exam.pausedAt
+    ? Math.floor((Date.now() - new Date(exam.pausedAt).getTime()) / 1000)
+    : 0;
+
+  await db
+    .update(exams)
+    .set({
+      isPaused: false,
+      pausedAt: null,
+      pausedTotalSeconds: (exam.pausedTotalSeconds ?? 0) + added,
+      updatedAt: new Date(),
+    })
+    .where(eq(exams.id, examId));
+
+  return NextResponse.json({ success: true });
 }

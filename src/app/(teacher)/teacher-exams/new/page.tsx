@@ -16,6 +16,11 @@ import {
   Trash2,
   ArrowRight,
   AlertTriangle,
+  Paperclip,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Music,
+  FileText,
 } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Dialog, DialogHeader } from "@/components/ui/dialog";
@@ -47,6 +52,7 @@ interface Question {
   type: QuestionType;
   text: string;
   marks: number;
+  autoGrade?: boolean; // ✅ NEW — for MCQ/Multi/TF/Fill
   mediaType: "none" | "image" | "audio" | "video";
   mediaUrl?: string;
   mcqOptions?: string[];
@@ -54,7 +60,6 @@ interface Question {
   multiOptions?: string[];
   multiCorrect?: boolean[];
   tfCorrect?: boolean;
-  shortAnswers?: string[];
   blanksText?: string;
   answerKey?: AnswerKeyRow[];
   matchLeft?: string[];
@@ -84,19 +89,22 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   ordering: "Sequence / Ordering",
 };
 
+// ✅ NEW — which question types support the Auto-Grading toggle
+const AUTO_GRADABLE: QuestionType[] = ["mcq", "multi_select", "true_false", "fill_blank"];
+
 function blankQuestion(type: QuestionType): Question {
   return {
     id: "",
     type,
     text: "",
     marks: 5,
+    autoGrade: true,
     mediaType: "none",
-    mcqOptions: ["Option A", "Option B"],
+    mcqOptions: ["", ""],           // ✅ empty — teacher types the choice
     mcqCorrect: 0,
-    multiOptions: ["Option A", "Option B"],
-    multiCorrect: [true, false],
+    multiOptions: ["", ""],         // ✅ empty — teacher types the choice
+    multiCorrect: [false, false],
     tfCorrect: true,
-    shortAnswers: [""],
     blanksText: "The capital of France is [1].",
     answerKey: [{ number: "1", answer: "" }],
     matchLeft: ["", ""],
@@ -162,7 +170,6 @@ function ExamBuilderContent() {
     startDate: "",
   });
 
-
   // --- SECTIONS & QUESTIONS STATE ---
   const [parts, setParts] = useState<ExamPart[]>([]);
   const [activePartId, setActivePartId] = useState<string>("");
@@ -187,8 +194,38 @@ function ExamBuilderContent() {
   } | null>(null);
 
   const formSectionRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
   const activePart = parts.find((p) => p.id === activePartId);
   const currentFormat = activePart?.allowedType || "mcq";
+  const savedParts = parts.filter((p) => p.questions.length > 0);
+  async function handleMediaFile(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/teacher/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        alert(data.error || "Upload failed.");
+        return;
+      }
+      const kind = file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("audio/")
+        ? "audio"
+        : file.type.startsWith("video/")
+        ? "video"
+        : "none";
+      setForm((f) => ({ ...f, mediaType: kind as Question["mediaType"], mediaUrl: data.url }));
+    } catch {
+      alert("Upload failed. Please try a smaller file.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   // Pre-fill data when editing an existing exam
   useEffect(() => {
@@ -226,7 +263,6 @@ function ExamBuilderContent() {
     }
   }, [editId, tabParam]);
 
-
   const isSettingsFormComplete = () =>
     examData.title.trim() !== "" &&
     examData.department.trim() !== "" &&
@@ -244,24 +280,40 @@ function ExamBuilderContent() {
       subject: match?.subjects[0] || "",
     });
   };
-  const handleCreatePart = (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!newPartTitle.trim()) return;
-  const newPart: ExamPart = {
-    id: Date.now().toString(),
-    title: newPartTitle,
-    marks: parseInt(newPartMarks) || 10,
-    description: `Format restricted to ${QUESTION_TYPE_LABELS[newPartType]}.`,
-    allowedType: newPartType,
-    questions: [],
+
+    const handleCreatePart = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPartTitle.trim()) return;
+
+    // ✅ First, keep any staged questions of the current section (don't lose them)
+    let nextParts = parts;
+    if (activePartId && stagedQuestions.length > 0) {
+      nextParts = nextParts.map((p) =>
+        p.id === activePartId
+          ? { ...p, questions: [...p.questions, ...stagedQuestions] }
+          : p
+      );
+    }
+
+    const newPart: ExamPart = {
+      id: Date.now().toString(),
+      title: newPartTitle,
+      marks: parseInt(newPartMarks) || 10,
+      description: `Format restricted to ${QUESTION_TYPE_LABELS[newPartType]}.`,
+      allowedType: newPartType,
+      questions: [],
+    };
+
+    // ✅ Only keep sections that have questions — empty ones are thrown away
+    setParts([...nextParts.filter((p) => p.questions.length > 0), newPart]);
+    setActivePartId(newPart.id);
+    setStagedQuestions([]);
+    setEditingQuestionId(null);
+    setEditingSource(null);
+    setForm(blankQuestion(newPartType));
+    setNewPartTitle("");
+    setNewPartMarks("");
   };
-  setParts((prev) => [...prev, newPart]);
-  setActivePartId(newPart.id);
-  setStagedQuestions([]);
-  setForm(blankQuestion(newPartType));
-  setNewPartTitle("");
-  setNewPartMarks("");
-};
 
   const buildQuestionFromForm = (): Question | null => {
     if (!form.text.trim()) {
@@ -303,7 +355,7 @@ function ExamBuilderContent() {
     setForm(blankQuestion(currentFormat));
   };
 
-  const handleAddSection = () => {
+    const handleAddSection = () => {
     let finalStaged = stagedQuestions;
     if (form.text.trim()) {
       const q: Question = {
@@ -335,11 +387,14 @@ function ExamBuilderContent() {
     }
     if (activePartId) {
       setParts((prev) =>
-        prev.map((part) =>
-          part.id === activePartId
-            ? { ...part, questions: [...part.questions, ...finalStaged] }
-            : part
-        )
+        prev
+          .map((part) =>
+            part.id === activePartId
+              ? { ...part, questions: [...part.questions, ...finalStaged] }
+              : part
+          )
+          // ✅ A section is stored ONLY when it has at least one question
+          .filter((part) => part.questions.length > 0)
       );
     }
     setStagedQuestions([]);
@@ -431,54 +486,55 @@ function ExamBuilderContent() {
   const countTotalQuestions = () =>
     parts.reduce((acc, part) => acc + part.questions.length, 0) + stagedQuestions.length;
 
-  // Replace the handleSaveExam function with this:
-const handleSaveExam = async () => {
-  if (parts.length === 0) {
-    alert("Please create and save at least one section before saving.");
-    return;
-  }
-  const totalQCount = parts.reduce((acc, part) => acc + part.questions.length, 0);
-  if (totalQCount === 0) {
-    alert("Please add at least one question to a section before saving.");
-    return;
-  }
+    const handleSaveExam = async () => {
+    // ✅ Never save empty sections
+    const finalParts = parts.filter((p) => p.questions.length > 0);
+    if (finalParts.length === 0) {
+      alert("Please create at least one section with questions before saving.");
+      return;
+    }
+    const totalQCount = finalParts.reduce((acc, part) => acc + part.questions.length, 0);
+    if (totalQCount === 0) {
+      alert("Please add at least one question to a section before saving.");
+      return;
+    }
 
-  if (editId) {
-    const result = await updateExam(editId, {
+    if (editId) {
+      const result = await updateExam(editId, {
+        title: examData.title || "Untitled Examination",
+        description: examData.description,
+        department: examData.department,
+        subject: examData.subject,
+        durationMinutes: examData.duration,
+        parts: finalParts,
+        questionCount: totalQCount,
+        startDate: examData.startDate || undefined,
+      });
+      if (!result.success) {
+        alert(result.message || "This exam cannot be edited.");
+        return;
+      }
+      router.push("/teacher-exams");
+      return;
+    }
+
+    const result = await createExam({
       title: examData.title || "Untitled Examination",
-      description: examData.description,
       department: examData.department,
       subject: examData.subject,
       durationMinutes: examData.duration,
-      parts,
+      parts: finalParts,
       questionCount: totalQCount,
       startDate: examData.startDate || undefined,
     });
-    if (!result.success) {
-      alert(result.message || "This exam cannot be edited.");
+
+    if (!result.id) {
+      alert(result.message || "Failed to create exam.");
       return;
     }
+
     router.push("/teacher-exams");
-    return;
-  }
-
-  const result = await createExam({
-    title: examData.title || "Untitled Examination",
-    department: examData.department,
-    subject: examData.subject,
-    durationMinutes: examData.duration,
-    parts,
-    questionCount: totalQCount,
-    startDate: examData.startDate || undefined,
-  });
-
-  if (!result.id) {
-    alert(result.message || "Failed to create exam.");
-    return;
-  }
-
-  router.push("/teacher-exams");
-};
+  };
 
   return (
     <>
@@ -718,12 +774,12 @@ const handleSaveExam = async () => {
                   <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">
                     Saved Sections:
                   </span>
-                  {parts.length === 0 ? (
+                                    {savedParts.length === 0 ? (
                     <span className="text-xs font-medium text-slate-400 italic">
-                      No sections saved yet. Create one above to begin.
+                      No sections saved yet. A section is saved once it has at least one question.
                     </span>
                   ) : (
-                    parts.map((p) => (
+                    savedParts.map((p) => (
                       <Badge key={p.id} variant="neutral" className="text-xs">
                         {p.title}
                         <span className="opacity-70 font-mono text-[10px]">
@@ -761,7 +817,7 @@ const handleSaveExam = async () => {
                       <Badge variant="info">{QUESTION_TYPE_LABELS[currentFormat]}</Badge>
                     </div>
 
-                    {/* MARKS & MEDIA METADATA */}
+                    {/* ✅ MARKS + MEDIA GRID (Points back, upload from device) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -769,6 +825,7 @@ const handleSaveExam = async () => {
                         </label>
                         <input
                           type="number"
+                          min="1"
                           value={form.marks}
                           onChange={(e) => setForm({ ...form, marks: parseInt(e.target.value) || 1 })}
                           className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400"
@@ -778,33 +835,96 @@ const handleSaveExam = async () => {
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                           Media Attachment
                         </label>
-                        <select
-                          value={form.mediaType}
-                          onChange={(e) =>
-                            setForm({ ...form, mediaType: e.target.value as Question["mediaType"] })
-                          }
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900 outline-none focus:border-sky-400 cursor-pointer"
-                        >
-                          <option value="none">None</option>
-                          <option value="image">Image URL</option>
-                          <option value="audio">Audio URL</option>
-                          <option value="video">Video URL</option>
-                        </select>
-                      </div>
-                      {form.mediaType !== "none" && (
-                        <div className="md:col-span-2">
-                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                            {form.mediaType.toUpperCase()} Media URL
-                          </label>
-                          <input
-                            type="url"
-                            placeholder="https://example.com/media.png"
-                            value={form.mediaUrl || ""}
-                            onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400"
-                          />
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*,audio/*,video/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleMediaFile(file);
+                          }}
+                        />
+                        {form.mediaUrl ? (
+                          <div className="space-y-2">
+                            {form.mediaType === "image" && (
+                              <img
+                                src={form.mediaUrl}
+                                alt="Question media"
+                                className="max-h-36 rounded-xl border border-slate-200 object-contain bg-slate-50"
+                              />
+                            )}
+                            {form.mediaType === "video" && (
+                              <video
+                                src={form.mediaUrl}
+                                controls
+                                className="max-h-36 w-full rounded-xl border border-slate-200 bg-black"
+                              />
+                            )}
+                            {form.mediaType === "audio" && (
+                              <audio src={form.mediaUrl} controls className="w-full" />
+                            )}
+                            <div className="flex items-center gap-3">
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2.5 py-1">
+                                {form.mediaType === "image" ? (
+                                  <ImageIcon size={12} />
+                                ) : form.mediaType === "video" ? (
+                                  <VideoIcon size={12} />
+                                ) : (
+                                  <Music size={12} />
+                                )}
+                                {form.mediaType?.toUpperCase()}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={uploading}
+                                className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
+                              >
+                                Replace
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setForm({ ...form, mediaUrl: undefined, mediaType: "none" })}
+                                className="text-xs font-semibold text-rose-500 hover:underline cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading}
+                            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-3 text-xs font-semibold text-slate-600 hover:border-sky-400 hover:text-sky-700 hover:bg-sky-50/50 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {uploading ? (
+                              <>
+                                <span className="w-3.5 h-3.5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+                                Uploading...
+                              </>
+                            ) : (
+                              <>
+                                <Paperclip size={14} />
+                                Attach image, video, or audio from device
+                              </>
+                            )}
+                          </button>
+                        )}
+                        <div className="flex items-center gap-3 mt-2 text-slate-400">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold">
+                            <ImageIcon size={11} /> IMAGE
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold">
+                            <VideoIcon size={11} /> VIDEO
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold">
+                            <Music size={11} /> AUDIO
+                          </span>
+                          <span className="text-[10px]">· max 15MB</span>
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     {/* QUESTION PROMPT */}
@@ -821,7 +941,7 @@ const handleSaveExam = async () => {
                       />
                     </div>
 
-                    {/* 1. MCQ */}
+                    {/* ✅ 1. MCQ — auto letters, empty boxes */}
                     {currentFormat === "mcq" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -830,6 +950,9 @@ const handleSaveExam = async () => {
                         <div className="space-y-2.5">
                           {(form.mcqOptions || []).map((opt, i) => (
                             <div key={i} className="flex items-center gap-3">
+                              <span className="w-8 h-8 shrink-0 rounded-lg bg-navy-900 text-white text-xs font-bold flex items-center justify-center font-mono">
+                                {String.fromCharCode(65 + i)}
+                              </span>
                               <button
                                 type="button"
                                 onClick={() => setForm({ ...form, mcqCorrect: i })}
@@ -846,6 +969,7 @@ const handleSaveExam = async () => {
                               <input
                                 type="text"
                                 value={opt}
+                                placeholder="Type answer choice..."
                                 onChange={(e) => {
                                   const c = [...(form.mcqOptions || [])];
                                   c[i] = e.target.value;
@@ -874,10 +998,7 @@ const handleSaveExam = async () => {
                           onClick={() =>
                             setForm({
                               ...form,
-                              mcqOptions: [
-                                ...(form.mcqOptions || []),
-                                `Option ${String.fromCharCode(65 + (form.mcqOptions || []).length)}`,
-                              ],
+                              mcqOptions: [...(form.mcqOptions || []), ""],
                             })
                           }
                           className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
@@ -887,7 +1008,7 @@ const handleSaveExam = async () => {
                       </div>
                     )}
 
-                    {/* 2. MULTI SELECT */}
+                    {/* ✅ 2. MULTI SELECT — auto letters, empty boxes */}
                     {currentFormat === "multi_select" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -896,6 +1017,9 @@ const handleSaveExam = async () => {
                         <div className="space-y-2.5">
                           {(form.multiOptions || []).map((opt, i) => (
                             <div key={i} className="flex items-center gap-3">
+                              <span className="w-8 h-8 shrink-0 rounded-lg bg-navy-900 text-white text-xs font-bold flex items-center justify-center font-mono">
+                                {String.fromCharCode(65 + i)}
+                              </span>
                               <input
                                 type="checkbox"
                                 checked={(form.multiCorrect || [])[i] || false}
@@ -909,6 +1033,7 @@ const handleSaveExam = async () => {
                               <input
                                 type="text"
                                 value={opt}
+                                placeholder="Type answer choice..."
                                 onChange={(e) => {
                                   const c = [...(form.multiOptions || [])];
                                   c[i] = e.target.value;
@@ -938,10 +1063,7 @@ const handleSaveExam = async () => {
                           onClick={() =>
                             setForm({
                               ...form,
-                              multiOptions: [
-                                ...(form.multiOptions || []),
-                                `Option ${String.fromCharCode(65 + (form.multiOptions || []).length)}`,
-                              ],
+                              multiOptions: [...(form.multiOptions || []), ""],
                               multiCorrect: [...(form.multiCorrect || []), false],
                             })
                           }
@@ -985,48 +1107,24 @@ const handleSaveExam = async () => {
                       </div>
                     )}
 
-                    {/* 4. SHORT ANSWER */}
+                    {/* ✅ 4. SHORT ANSWER — no variants, manual grading info */}
                     {currentFormat === "short_answer" && (
-                      <div className="space-y-2.5">
-                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                          Accepted Answer Variants (Auto-grading)
-                        </label>
-                        {(form.shortAnswers || []).map((ans, i) => (
-                          <div key={i} className="flex items-center gap-3">
-                            <input
-                              type="text"
-                              placeholder="e.g. CPU, Central Processing Unit"
-                              value={ans}
-                              onChange={(e) => {
-                                const c = [...(form.shortAnswers || [])];
-                                c[i] = e.target.value;
-                                setForm({ ...form, shortAnswers: c });
-                              }}
-                              className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
-                            />
-                            {(form.shortAnswers || []).length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setForm({
-                                    ...form,
-                                    shortAnswers: (form.shortAnswers || []).filter((_, idx) => idx !== i),
-                                  })
-                                }
-                                className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
-                              >
-                                Delete
-                              </button>
-                            )}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 shrink-0 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center">
+                            <FileText size={15} />
                           </div>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => setForm({ ...form, shortAnswers: [...(form.shortAnswers || []), ""] })}
-                          className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
-                        >
-                          + Add Accepted Answer Variant
-                        </button>
+                          <div>
+                            <p className="text-sm font-semibold text-navy-900">
+                              Short Answer — Manually Graded
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                              Students will respond in a short text box. After the exam,
+                              you&apos;ll grade each response yourself from the grading page —
+                              no auto-grading variants needed here.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -1287,6 +1385,35 @@ const handleSaveExam = async () => {
                       </div>
                     )}
 
+                    {/* ✅ NEW: Auto-Grading toggle (styled like your screenshot) */}
+                    {AUTO_GRADABLE.includes(currentFormat) && (
+                      <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-navy-900">Auto-Grading</p>
+                          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                            {form.autoGrade !== false
+                              ? "Answers are graded automatically using your answer key and points are awarded instantly."
+                              : "Disabled — this question will wait for manual grading on the Grading page."}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={form.autoGrade !== false}
+                          onClick={() => setForm({ ...form, autoGrade: form.autoGrade === false })}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
+                            form.autoGrade !== false ? "bg-sky-500" : "bg-slate-300"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                              form.autoGrade !== false ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )}
+
                     {/* NEXT QUESTION / ADD SECTION CONTROLS */}
                     <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
                       {editingQuestionId && (
@@ -1331,6 +1458,11 @@ const handleSaveExam = async () => {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="info">{q.marks} pts</Badge>
+                        {AUTO_GRADABLE.includes(q.type) && (
+                          <Badge variant={q.autoGrade !== false ? "success" : "warning"}>
+                            {q.autoGrade !== false ? "Auto" : "Manual"}
+                          </Badge>
+                        )}
                         <button
                           onClick={() => handleEditQuestion(q, "staged")}
                           className="text-slate-500 hover:text-navy-900 cursor-pointer"
@@ -1385,36 +1517,35 @@ const handleSaveExam = async () => {
                           className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3"
                         >
                           <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
-  <div className="flex items-center gap-2">
-    <Badge>{part.title}</Badge>
-    <Badge variant="neutral">
-      {QUESTION_TYPE_LABELS[part.allowedType]}
-    </Badge>
-  </div>
-  <div className="flex items-center gap-3">
-    <span className="text-xs font-medium text-slate-500">
-      {part.questions.length} items
-    </span>
-    <button
-      type="button"
-      onClick={() => {
-        // Re-activate this section so new questions are added INTO it
-        setActivePartId(part.id);
-        setStagedQuestions([]);
-        setEditingQuestionId(null);
-        setEditingSource(null);
-        setForm(blankQuestion(part.allowedType));
-        requestAnimationFrame(() => {
-          formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      }}
-      className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline cursor-pointer inline-flex items-center gap-1"
-    >
-      <Plus className="w-3.5 h-3.5" />
-      Add Question
-    </button>
-  </div>
-</div>
+                            <div className="flex items-center gap-2">
+                              <Badge>{part.title}</Badge>
+                              <Badge variant="neutral">
+                                {QUESTION_TYPE_LABELS[part.allowedType]}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-medium text-slate-500">
+                                {part.questions.length} items
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActivePartId(part.id);
+                                  setStagedQuestions([]);
+                                  setEditingQuestionId(null);
+                                  setEditingSource(null);
+                                  setForm(blankQuestion(part.allowedType));
+                                  requestAnimationFrame(() => {
+                                    formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  });
+                                }}
+                                className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Add Question
+                              </button>
+                            </div>
+                          </div>
                           <div className="space-y-2.5 pt-0.5">
                             {part.questions.map((q, idx) => (
                               <div
@@ -1429,6 +1560,11 @@ const handleSaveExam = async () => {
                                 </div>
                                 <div className="flex items-center gap-3 shrink-0">
                                   <Badge variant="info">{q.marks} pts</Badge>
+                                  {AUTO_GRADABLE.includes(q.type) && (
+                                    <Badge variant={q.autoGrade !== false ? "success" : "warning"}>
+                                      {q.autoGrade !== false ? "Auto" : "Manual"}
+                                    </Badge>
+                                  )}
                                   <button
                                     onClick={() => {
                                       setActivePartId(part.id);
@@ -1561,8 +1697,6 @@ const handleSaveExam = async () => {
           </div>
         </div>
       </Dialog>
-
-      
     </>
   );
 }

@@ -15,6 +15,24 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogHeader } from "@/components/ui/dialog";
 
 type Tab = "all" | "attention" | "rejected" | "finished";
+
+type ConfirmAction =
+  | { kind: "end" }
+  | { kind: "reject"; student: StudentRequest };
+
+function formatDateTime(iso?: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function TeacherLiveMonitorPage() {
   useTeacherExamRealtime(true, 2000);
 
@@ -34,6 +52,7 @@ export default function TeacherLiveMonitorPage() {
   const [viewingMessageOf, setViewingMessageOf] = useState<StudentRequest | null>(null);
   const [pinnedExamId, setPinnedExamId] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null); // ✅ new modal state
 
   const liveExam = exams.find((e) => e.isStarted && !e.isEnded);
   const launchedNotStarted = exams.find((e) => e.isLaunched && !e.isStarted && !e.isEnded);
@@ -43,12 +62,34 @@ export default function TeacherLiveMonitorPage() {
     if (liveExam && liveExam.id !== pinnedExamId) setPinnedExamId(liveExam.id);
   }, [liveExam, pinnedExamId]);
 
-  const [secondsLeft, setSecondsLeft] = useState(activeExam ? activeExam.durationMinutes * 60 : 0);
+  // ✅ Authoritative remaining time: duration − elapsed + paused time
+  function computeSecondsLeft(exam: {
+    durationMinutes: number;
+    startedAt?: string;
+    isPaused?: boolean;
+    pausedAt?: string;
+    pausedTotalSeconds?: number;
+  } | undefined) {
+    if (!exam) return 0;
+    const total = (exam.durationMinutes || 60) * 60;
+    if (!exam.startedAt) return total;
+    const now = Date.now();
+    const paused =
+      (exam.pausedTotalSeconds || 0) +
+      (exam.isPaused && exam.pausedAt
+        ? Math.floor((now - new Date(exam.pausedAt).getTime()) / 1000)
+        : 0);
+    const elapsed =
+      Math.floor((now - new Date(exam.startedAt).getTime()) / 1000) - paused;
+    return Math.max(0, total - elapsed);
+  }
+
+  const [secondsLeft, setSecondsLeft] = useState(() => computeSecondsLeft(activeExam));
 
   useEffect(() => {
-    if (activeExam) setSecondsLeft(activeExam.durationMinutes * 60);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeExam?.id]);
+    if (!activeExam) return;
+    setSecondsLeft(computeSecondsLeft(activeExam));
+  }, [activeExam]);
 
   useEffect(() => {
     if (!activeExam || activeExam.isEnded || activeExam.isPaused) return;
@@ -128,12 +169,8 @@ export default function TeacherLiveMonitorPage() {
     activeTab === "finished" ? finishedStudents :
     activeStudents;
 
-  const handleStopExam = async () => {
-    if (!confirm("End session? This will force-submit all students who haven't finished.")) return;
-    setLoadingAction("end");
-    await endExam(activeExam.roomCode);
-    setLoadingAction(null);
-  };
+  // ✅ Open modal instead of browser confirm()
+  const handleStopExam = () => setConfirmAction({ kind: "end" });
 
   const handlePauseResume = async () => {
     setLoadingAction("pause");
@@ -142,18 +179,28 @@ export default function TeacherLiveMonitorPage() {
     setLoadingAction(null);
   };
 
-  const handleRejectLive = async (req: StudentRequest) => {
-    if (!confirm(`Reject & force submit ${req.name}? They won't be able to continue.`)) return;
-    setLoadingAction(req.id);
-    await rejectLiveStudent(activeExam.roomCode, req.id);
-    setLoadingAction(null);
-  };
+  const handleRejectLive = (req: StudentRequest) => setConfirmAction({ kind: "reject", student: req });
 
   const handleGrantContinue = async (req: StudentRequest) => {
     setLoadingAction(req.id);
     await grantContinue(activeExam.roomCode, req.id);
     setLoadingAction(null);
   };
+
+  // ✅ Runs after the teacher confirms in the modal
+  async function handleConfirmAction() {
+    if (!confirmAction || !activeExam) return;
+    if (confirmAction.kind === "end") {
+      setLoadingAction("end");
+      await endExam(activeExam.roomCode);
+      setLoadingAction(null);
+    } else {
+      setLoadingAction(confirmAction.student.id);
+      await rejectLiveStudent(activeExam.roomCode, confirmAction.student.id);
+      setLoadingAction(null);
+    }
+    setConfirmAction(null);
+  }
 
   const timeDisplay = `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(secondsLeft % 60).padStart(2, "0")}`;
 
@@ -320,7 +367,7 @@ export default function TeacherLiveMonitorPage() {
                           </span>
                         ) : <span className="text-slate-300">0</span>}
                       </td>
-                      <td className="px-5 py-3.5 text-slate-600">{student.timestamp}</td>
+                      <td className="px-5 py-3.5 text-slate-600 whitespace-nowrap">{formatDateTime(student.timestamp)}</td>
                       <td className="px-5 py-3.5 text-right space-x-2">
                         {student.isRejectedLive || student.isSubmitted || student.isForcedSubmit ? (
                           <span className="text-slate-300 text-xs">—</span>
@@ -352,6 +399,59 @@ export default function TeacherLiveMonitorPage() {
         </Card>
       </main>
 
+      {/* ✅ NEW: styled confirmation modal (replaces browser confirm) */}
+      <Dialog open={!!confirmAction} onClose={() => setConfirmAction(null)}>
+        <DialogHeader
+          title={confirmAction?.kind === "end" ? "End Exam Session" : "Reject & Force Submit"}
+          onClose={() => setConfirmAction(null)}
+        />
+        <div className="px-6 py-5 space-y-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
+            <div className="w-10 h-10 rounded-xl bg-white border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              {confirmAction?.kind === "end" ? (
+                <Square className="w-5 h-5 fill-current" />
+              ) : (
+                <UserX className="w-5 h-5" />
+              )}
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-navy-900">
+                {confirmAction?.kind === "end"
+                  ? "End this exam session?"
+                  : `Reject ${confirmAction?.kind === "reject" ? confirmAction.student.name : ""}?`}
+              </p>
+              <p className="text-xs leading-5 text-slate-500 font-medium">
+                {confirmAction?.kind === "end"
+                  ? "All students who haven't finished will be force-submitted immediately. This action cannot be undone."
+                  : "This student will be force-submitted and won't be able to continue the exam. This action cannot be undone."}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmAction(null)}
+              className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={handleConfirmAction}
+              disabled={loadingAction !== null}
+            >
+              {loadingAction !== null
+                ? "Please wait..."
+                : confirmAction?.kind === "end"
+                ? "End Session"
+                : "Reject & Force Submit"}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
       {/* VIOLATION MESSAGE DETAIL */}
       <Dialog open={!!viewingMessageOf} onClose={() => setViewingMessageOf(null)}>
         {viewingMessageOf && (
@@ -360,7 +460,7 @@ export default function TeacherLiveMonitorPage() {
             <div className="px-6 py-5 space-y-4">
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <ShieldAlert size={14} className="text-rose-500" />
-                <span>{viewingMessageOf.tabSwitches ?? 0} violation{(viewingMessageOf.tabSwitches ?? 0) === 1 ? "" : "s"} · flagged at {viewingMessageOf.lastLockedAt || "-"}</span>
+                <span>{viewingMessageOf.tabSwitches ?? 0} violation{(viewingMessageOf.tabSwitches ?? 0) === 1 ? "" : "s"} · flagged at {formatDateTime(viewingMessageOf.lastLockedAt)}</span>
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Student&apos;s message</p>

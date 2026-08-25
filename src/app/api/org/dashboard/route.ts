@@ -10,7 +10,7 @@ import {
   examAnalytics,
   activityLogs,
 } from "@/db/schema";
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm"; // ← added sql
 import { requireOrgSession } from "@/lib/session";
 import {
   assignmentKey,
@@ -94,7 +94,7 @@ export async function GET() {
 
   const [teacherRows, departmentRows, subjectRows, examRows, analyticsRows, activityRows] =
     (await Promise.all([
-        db
+      db
         .select({
           id: teachers.id,
           name: teachers.name,
@@ -119,7 +119,8 @@ export async function GET() {
         })
         .from(exams)
         .where(eq(exams.orgId, orgId))
-        .orderBy(desc(exams.createdAt)),
+        // ✅ NEWEST FIRST: done date (or created date if still live), newest on top
+        .orderBy(desc(sql`COALESCE(${exams.endTime}, ${exams.createdAt})`)),
       db
         .select({
           examId: examAnalytics.examId,
@@ -228,7 +229,7 @@ export async function GET() {
       name: exam.title,
       subject: subject?.name ?? "—",
       teacher: teacher?.name ?? teacher?.email ?? "—",
-            status:
+      status:
         exam.status === "completed" && exam.gradingStatus === "in_progress"
           ? "In Progress"
           : mapExamStatus(exam.status),

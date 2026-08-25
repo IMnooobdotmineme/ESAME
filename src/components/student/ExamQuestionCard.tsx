@@ -1,8 +1,9 @@
 // src/components/student/ExamQuestionCard.tsx
 "use client";
 
-import React, { useLayoutEffect, useRef, useState } from "react";
+import React, { useLayoutEffect, useRef, useState, useMemo } from "react";
 import { ExamQuestion } from "@/lib/student-exam-content";
+import { Sun, Moon } from "lucide-react";
 
 interface Props {
   question: ExamQuestion;
@@ -31,6 +32,21 @@ export function ExamQuestionCard({ question, questionNumber, answer, onAnswer }:
           <span className="text-black mr-1.5">{questionNumber}.</span>
           {question.prompt}
         </p>
+      )}
+
+      {/* 📎 Attached media (image / video / audio) uploaded by the teacher */}
+      {question.media?.url && (
+        <div className="mb-4 rounded-xl border border-slate-200 overflow-hidden bg-slate-50">
+          {question.media.type === "image" && (
+            <img src={question.media.url} alt="Question media" className="max-h-64 w-full object-contain" />
+          )}
+          {question.media.type === "video" && (
+            <video src={question.media.url} controls className="max-h-64 w-full bg-black" />
+          )}
+          {question.media.type === "audio" && (
+            <audio src={question.media.url} controls className="w-full" />
+          )}
+        </div>
       )}
 
       {question.type === "mcq" && (
@@ -184,6 +200,71 @@ function FillBlankInput({
   );
 }
 
+// ✅ Built-in multi-language highlighter (no dependencies)
+const KEYWORDS = new Set(
+  (
+    "const let var function return if else for while do class import from export default def print " +
+    "public private protected static void int float double char bool boolean string new try catch finally throw " +
+    "switch case break continue default in of type interface extends implements package struct enum fn impl pub use mod match loop " +
+    "async await yield lambda pass raise with as elif except global assert del not or and " +
+    "null undefined true false nil None True False self this super typeof instanceof delete " +
+    "SELECT FROM WHERE INSERT UPDATE DELETE CREATE TABLE JOIN LEFT RIGHT INNER OUTER ON AND OR NOT ORDER BY GROUP HAVING LIMIT VALUES SET INTO AS DISTINCT COUNT SUM AVG MIN MAX PRIMARY KEY FOREIGN REFERENCES"
+  ).split(/\s+/)
+);
+
+const BOOLEANS = new Set(["true", "false", "True", "False", "nil", "null", "undefined", "None"]);
+
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+const TOKEN_REGEX =
+  /(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`)|\b(\d+(?:\.\d+)?)\b|([A-Za-z_][A-Za-z0-9_]*)(?=\s*\()|([A-Za-z_][A-Za-z0-9_]*)/g;
+
+function highlightCode(code: string): string {
+  let html = "";
+  let last = 0;
+  for (const m of code.matchAll(TOKEN_REGEX)) {
+    const idx = m.index ?? 0;
+    html += escapeHtml(code.slice(last, idx));
+    const [full, comment, str, num, fn, word] = m;
+    let cls = "";
+    if (comment) cls = "tok-comment";
+    else if (str) cls = "tok-string";
+    else if (num) cls = "tok-number";
+    else if (fn) cls = KEYWORDS.has(fn) ? "tok-keyword" : "tok-function";
+    else if (word) {
+      if (BOOLEANS.has(word)) cls = "tok-boolean";
+      else if (KEYWORDS.has(word)) cls = "tok-keyword";
+    }
+    html += cls ? `<span class="${cls}">${escapeHtml(full)}</span>` : escapeHtml(full);
+    last = idx + full.length;
+  }
+  html += escapeHtml(code.slice(last));
+  return html;
+}
+
+const CODE_EDITOR_CSS = `
+.code-editor pre, .code-editor textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  tab-size: 2;
+}
+/* DARK (VS Code Dark+) */
+.code-editor .tok-comment { color: #6A9955; }
+.code-editor .tok-string  { color: #CE9178; }
+.code-editor .tok-number  { color: #B5CEA8; }
+.code-editor .tok-keyword { color: #569CD6; }
+.code-editor .tok-boolean { color: #569CD6; }
+.code-editor .tok-function{ color: #DCDCAA; }
+/* LIGHT (VS Code Light+) */
+.code-editor.light .tok-comment { color: #008000; }
+.code-editor.light .tok-string  { color: #A31515; }
+.code-editor.light .tok-number  { color: #098658; }
+.code-editor.light .tok-keyword { color: #0000FF; }
+.code-editor.light .tok-boolean { color: #0000FF; }
+.code-editor.light .tok-function{ color: #795E26; }
+`;
+
 function CodeEditorInput({
   question,
   answer,
@@ -193,42 +274,88 @@ function CodeEditorInput({
   answer: string | undefined;
   onAnswer: (questionId: string, value: string) => void;
 }) {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const value = answer ?? "";
+  
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== "Tab") return;
     e.preventDefault();
     const target = e.currentTarget;
     const start = target.selectionStart;
     const end = target.selectionEnd;
-    const current = answer ?? "";
-    const next = `${current.slice(0, start)}  ${current.slice(end)}`;
+    const next = `${value.slice(0, start)}  ${value.slice(end)}`;
     onAnswer(question.id, next);
     requestAnimationFrame(() => {
       target.selectionStart = target.selectionEnd = start + 2;
     });
   }
 
+  const highlighted = useMemo(() => highlightCode(value), [value]);
+
+  const dark = theme === "dark";
+  const sharedText = "p-4 text-[13px] leading-6 whitespace-pre-wrap break-words";
+
   return (
-    <div className="rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between bg-slate-900 px-4 py-2">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-        </div>
-        <span className="text-[11px] font-mono text-slate-400">
-          {question.language ?? "Code"}
+    <div
+      className={`code-editor ${dark ? "" : "light"} rounded-xl overflow-hidden border ${
+        dark ? "border-[#333333]" : "border-slate-200"
+      }`}
+    >
+      {/* ✅ Theme CSS lives INSIDE the component — always applied */}
+      <style>{CODE_EDITOR_CSS}</style>
+
+      {/* Header: language left, theme toggle right */}
+      <div
+        className={`flex items-center justify-between px-4 py-2 ${
+          dark ? "bg-[#252526]" : "bg-slate-100"
+        }`}
+      >
+        <span className={`text-xs font-semibold ${dark ? "text-slate-400" : "text-slate-500"}`}>
+          {question.language || "JavaScript"}
         </span>
+        <button
+          type="button"
+          onClick={() => setTheme(dark ? "light" : "dark")}
+          title={dark ? "Switch to light theme" : "Switch to dark theme"}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
+            dark
+              ? "bg-[#333333] text-slate-300 hover:bg-[#3c3c3c]"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-200"
+          }`}
+        >
+          {dark ? <Sun size={12} /> : <Moon size={12} />}
+          {dark ? "Light" : "Dark"}
+        </button>
       </div>
-      <textarea
-        value={answer ?? ""}
-        onChange={(e) => onAnswer(question.id, e.target.value)}
-        onKeyDown={handleKeyDown}
-        rows={10}
-        spellCheck={false}
-        placeholder="// Write your code here"
-        className="w-full bg-black text-white font-mono text-[13px] leading-relaxed px-4 py-3 outline-none resize-y placeholder-gray-500"
-        style={{ color: "white", backgroundColor: "black", caretColor: "white" }}
-      />
+
+      {/* Editor: colored code behind a transparent textarea */}
+      <div className="relative">
+        <pre
+          aria-hidden
+          className={`m-0 min-h-[260px] ${sharedText} ${
+            dark ? "bg-[#1e1e1e] text-[#d4d4d4]" : "bg-white text-[#393a34]"
+          }`}
+          dangerouslySetInnerHTML={{ __html: highlighted + "\n" }}
+        />
+        <textarea
+          value={value}
+          onChange={(e) => onAnswer(question.id, e.target.value)}
+          onKeyDown={handleKeyDown}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoComplete="off"
+          placeholder="// Write your code here..."
+          style={{
+            color: "transparent",
+            backgroundColor: "transparent",
+            caretColor: dark ? "#ffffff" : "#0f172a",
+          }}
+          className={`absolute inset-0 h-full w-full resize-none overflow-hidden outline-none selection:bg-sky-500/40 ${sharedText} ${
+            dark ? "placeholder:text-slate-500" : "placeholder:text-slate-400"
+          }`}
+        />
+      </div>
     </div>
   );
 }

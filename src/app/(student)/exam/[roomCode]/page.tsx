@@ -1,23 +1,16 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Clock, AlertTriangle, Check, ShieldAlert, Send, PauseCircle } from "lucide-react";
 import { ExamQuestionCard } from "@/components/student/ExamQuestionCard";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { QUESTION_TYPE_LABEL } from "@/lib/student-exam-content";
+import { startProctor } from "@/lib/proctor";
 
 interface StudentSession {
-  studentName: string;
-  studentId: string;
-  roomCode: string;
-  requestId: string;
-  submittedAt: string;
+  studentName: string; studentId: string; roomCode: string; requestId: string; submittedAt: string;
 }
-interface ServerSection {
-  id: string;
-  title: string;
-  questions: any[];
-}
+interface ServerSection { id: string; title: string; questions: any[]; }
 
 const VIOLATION_MESSAGE_MAX_CHARS = 200;
 
@@ -36,6 +29,7 @@ export default function StudentExamPage() {
   const router = useRouter();
   const roomCode = (params.roomCode as string)?.toUpperCase();
 
+  // State
   const [session, setSession] = useState<StudentSession | null>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [examMeta, setExamMeta] = useState<{ title: string; department: string; subject: string } | null>(null);
@@ -50,40 +44,116 @@ export default function StudentExamPage() {
   const [violationMessage, setViolationMessageInput] = useState("");
   const [violationMessageSent, setViolationMessageSent] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [inFullscreen, setInFullscreen] = useState(false);
 
+  // Refs
+  const isLockedRef = useRef(false);
+  const pendingLockRef = useRef(false);
+  const lastActivityRef = useRef(Date.now());
+  const questionStartedAtRef = useRef<number | null>(null);
+  const currentQuestionIdRef = useRef<string | null>(null);
+  const answersRef = useRef<Record<string, string>>({});
+  const wasFsRef = useRef(false);
+
+  // ✅ Single entry point for locking — marks lock as "pending" until server confirms
+  const applyLock = () => {
+    pendingLockRef.current = true;
+    setIsLocked(true);
+  };
+
+  useEffect(() => { isLockedRef.current = isLocked; }, [isLocked]);
+  useEffect(() => { answersRef.current = answers; }, [answers]);
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Activity tracking (for idle detection)
+  useEffect(() => {
+    const mark = () => { lastActivityRef.current = Date.now(); };
+    const evs = ["mousemove", "keydown", "mousedown", "touchstart"];
+    evs.forEach((ev) => window.addEventListener(ev, mark));
+    return () => evs.forEach((ev) => window.removeEventListener(ev, mark));
+  }, []);
+
+  // Load session from sessionStorage
   useEffect(() => {
     const raw = sessionStorage.getItem("esame_student_session");
-    if (!raw) {
-      setIsAuthorized(false);
-      return;
-    }
+    if (!raw) { setIsAuthorized(false); return; }
     setSession(JSON.parse(raw));
   }, []);
 
-  // ✅ Load the REAL exam paper from the database
+  // ✅ Load the REAL exam paper from the server
   useEffect(() => {
     if (!session?.requestId) return;
     (async () => {
       const res = await fetch(
         `/api/student/exam?roomCode=${encodeURIComponent(roomCode)}&requestId=${encodeURIComponent(session.requestId)}`
       );
-      if (res.status === 409) {
-        router.replace("/waiting-room");
-        return;
-      }
-      if (!res.ok) {
-        setIsAuthorized(false);
-        return;
-      }
+      if (res.status === 409) { router.replace("/waiting-room"); return; }
+      if (!res.ok) { setIsAuthorized(false); return; }
       const data = await res.json();
       setExamMeta(data.exam);
       setSections(data.sections);
       setSecondsRemaining(data.secondsRemaining);
+      setAnswers(data.progress && typeof data.progress === "object" ? data.progress : {});
       setServerPaused(!!data.isPaused);
       setIsAuthorized(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.requestId]);
+
+  // ✅ Fullscreen monitor — poll every 1.5s; catch exit / shrink / windowed
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const poll = setInterval(() => {
+      const fs = !!document.fullscreenElement;
+      if (wasFsRef.current && !fs) applyLock();
+      wasFsRef.current = fs;
+      setInFullscreen(fs);
+    }, 1500);
+    return () => clearInterval(poll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthorized]);
+
+  const enterFullscreen = () => {
+    document.documentElement
+      .requestFullscreen?.()
+      .then(() => {
+        wasFsRef.current = true;
+        setInFullscreen(true);
+      })
+      .catch(() => {});
+  };
+
+  // Any click enters fullscreen if not already in it
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const handleClick = () => {
+      if (!document.fullscreenElement) enterFullscreen();
+    };
+    window.addEventListener("click", handleClick);
+    return () => window.removeEventListener("click", handleClick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthorized]);
+
+  // ✅ SINGLE proctor engine — uses applyLock so every lock goes through pendingLockRef
+  useEffect(() => {
+    if (!isAuthorized || !session?.requestId) return;
+    const stop = startProctor({
+      requestId: session.requestId,
+      onLock: applyLock,
+      getLocked: () => isLockedRef.current,
+      getQuestion: () => ({
+        questionId: currentQuestionIdRef.current,
+        startedAt: questionStartedAtRef.current,
+      }),
+      getIdle: () => Math.floor((Date.now() - lastActivityRef.current) / 1000),
+    });
+    return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthorized, session?.requestId]);
 
   // ✅ Poll lock / pause / end / submitted
   useEffect(() => {
@@ -95,52 +165,45 @@ export default function StudentExamPage() {
         );
         if (!res.ok) return;
         const data = await res.json();
-        setIsLocked(!!data.isLocked);
+
+        if (data.isLocked) {
+          // Server confirms the lock — clear pending, stay locked
+          pendingLockRef.current = false;
+          setIsLocked(true);
+        } else if (pendingLockRef.current) {
+          // We locked locally but server hasn't saved yet — STAY locked (no auto-unlock)
+          setIsLocked(true);
+        } else {
+          // Only unlock when the teacher has genuinely cleared it
+          setIsLocked(false);
+        }
+
         setServerPaused(!!data.examPaused);
+        if (typeof data.secondsRemaining === "number") setSecondsRemaining(data.secondsRemaining);
+        if (typeof data.tabSwitches === "number") setTabSwitches(data.tabSwitches);
         if (data.examEnded || data.submitted || data.isRejectedLive) router.replace("/score");
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }, 2000);
     return () => clearInterval(interval);
   }, [isAuthorized, session?.requestId, roomCode, router]);
 
-  // ✅ Tab-switch detection → lock on the SERVER
   useEffect(() => {
-    if (!isAuthorized || !session?.requestId) return;
-    function handleVisibilityChange() {
-      if (document.hidden) {
-        fetch("/api/student/tab-switch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ requestId: session!.requestId }),
-        })
-          .then((r) => r.json())
-          .then((d) => {
-            if (d.success) setTabSwitches(d.tabSwitches);
-          })
-          .catch(() => {});
-        setIsLocked(true);
-      }
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [isAuthorized, session]);
-
-  useEffect(() => {
-    if (isLocked) {
-      setViolationMessageInput("");
-      setViolationMessageSent(false);
-    }
+    if (isLocked) { setViolationMessageInput(""); setViolationMessageSent(false); }
   }, [isLocked]);
 
   function handleSendViolationMessage() {
     const trimmed = violationMessage.trim();
-    if (!trimmed || !session?.requestId) return;
+    if (!trimmed) return;
+    let rid = "";
+    try {
+      const raw = sessionStorage.getItem("esame_student_session");
+      if (raw) rid = JSON.parse(raw).requestId || "";
+    } catch { /* ignore */ }
+    if (!rid) return;
     fetch("/api/student/violation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId: session.requestId, message: trimmed }),
+      body: JSON.stringify({ requestId: rid, message: trimmed }),
     }).catch(() => {});
     setViolationMessageSent(true);
   }
@@ -159,27 +222,67 @@ export default function StudentExamPage() {
   // Countdown + auto-submit
   useEffect(() => {
     if (secondsRemaining === null || isLocked || serverPaused) return;
-    if (secondsRemaining <= 0) {
-      handleSubmit("timeout");
-      return;
-    }
-    const interval = setInterval(() => setSecondsRemaining((s) => (s !== null ? s - 1 : s)), 1000);
+    if (secondsRemaining <= 0) { handleSubmit("timeout"); return; }
+    const interval = setInterval(() => {
+      setSecondsRemaining((s) => (s !== null && s > 0 ? s - 1 : 0));
+    }, 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsRemaining, isLocked, serverPaused]);
 
+  // REAL autosave
   useEffect(() => {
+    if (!isAuthorized || !session?.requestId) return;
     if (Object.keys(answers).length === 0) return;
     setIsSaving(true);
-    const t = setTimeout(() => setIsSaving(false), 700);
+    const t = setTimeout(async () => {
+      try {
+        await fetch("/api/student/save-progress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: session.requestId, answers }),
+        });
+      } catch { /* retry on next change */ }
+      setIsSaving(false);
+    }, 1200);
     return () => clearTimeout(t);
-  }, [answers]);
+  }, [answers, isAuthorized, session?.requestId]);
+
+  // Crash-save on tab close
+  useEffect(() => {
+    function handleHide() {
+      if (!document.hidden || !session?.requestId) return;
+      const payload = JSON.stringify({
+        requestId: session.requestId,
+        answers: answersRef.current,
+      });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(
+          "/api/student/save-progress",
+          new Blob([payload], { type: "application/json" })
+        );
+      }
+    }
+    document.addEventListener("visibilitychange", handleHide);
+    return () => document.removeEventListener("visibilitychange", handleHide);
+  }, [session?.requestId]);
 
   const section = sections[sectionIndex];
   const sectionQuestions = useMemo(() => (section ? section.questions : []), [section]);
+
+  // Per-question timer resets when section changes
+  useEffect(() => {
+    questionStartedAtRef.current = Date.now();
+    currentQuestionIdRef.current = sectionQuestions[0]?.id ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionIndex]);
+
   const answeredInSection = sectionQuestions.filter((q) => answers[q.id] !== undefined && answers[q.id] !== "").length;
   const isLastSection = sectionIndex === sections.length - 1;
-  const totalAnsweredCount = useMemo(() => Object.values(answers).filter((v) => v !== undefined && v !== "").length, [answers]);
+  const totalAnsweredCount = useMemo(
+    () => Object.values(answers).filter((v) => v !== undefined && v !== "").length,
+    [answers]
+  );
   const totalExamQuestions = useMemo(() => sections.reduce((s, sec) => s + sec.questions.length, 0), [sections]);
   const totalUnanswered = totalExamQuestions - totalAnsweredCount;
 
@@ -232,10 +335,7 @@ export default function StudentExamPage() {
       <ConfirmDialog
         open={showSubmitConfirm}
         onClose={() => setShowSubmitConfirm(false)}
-        onConfirm={() => {
-          setShowSubmitConfirm(false);
-          handleSubmit();
-        }}
+        onConfirm={() => { setShowSubmitConfirm(false); handleSubmit(); }}
         title="Submit your exam?"
         description={
           totalUnanswered > 0
@@ -246,6 +346,7 @@ export default function StudentExamPage() {
         variant="submit"
       />
 
+      {/* Teacher-paused overlay */}
       {serverPaused && !isLocked && (
         <div className="fixed inset-0 z-50 bg-navy-900/95 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-2xl">
@@ -260,8 +361,9 @@ export default function StudentExamPage() {
         </div>
       )}
 
+      {/* Lock overlay */}
       {isLocked && (
-        <div className="fixed inset-0 z-50 bg-navy-900/95 backdrop-blur-sm flex items-center justify-center p-4">
+        <div data-lock-overlay className="fixed inset-0 z-50 bg-navy-900/95 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="alert-shake max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-2xl">
             <div className="relative w-16 h-16 mx-auto mb-5">
               <span className="absolute inset-0 rounded-full bg-amber-400/40 animate-ping" />
@@ -272,7 +374,7 @@ export default function StudentExamPage() {
             <span className="inline-block text-[10px] font-black tracking-widest text-amber-600 mb-1.5">SECURITY ALERT</span>
             <h2 className="text-lg font-bold text-slate-900">Exam Locked</h2>
             <p className="mt-1.5 text-sm text-slate-500 leading-relaxed">
-              We detected you switched away from this tab. Your exam has been paused and flagged for your teacher.
+              We detected suspicious activity. Your exam has been paused and flagged for your teacher.
             </p>
             {tabSwitches > 1 && (
               <span className="inline-block mt-3 rounded-full bg-red-50 text-red-600 px-3 py-1 text-[11px] font-bold">
@@ -300,9 +402,7 @@ export default function StudentExamPage() {
                     <div className="flex-1 h-1 rounded-full bg-slate-100 overflow-hidden">
                       <div className="h-full bg-sky-400 transition-all" style={{ width: `${(violationMessage.length / VIOLATION_MESSAGE_MAX_CHARS) * 100}%` }} />
                     </div>
-                    <span className="text-[11px] text-slate-400 shrink-0">
-                      {violationMessage.length}/{VIOLATION_MESSAGE_MAX_CHARS}
-                    </span>
+                    <span className="text-[11px] text-slate-400 shrink-0">{violationMessage.length}/{VIOLATION_MESSAGE_MAX_CHARS}</span>
                   </div>
                   <button
                     onClick={handleSendViolationMessage}
@@ -319,6 +419,30 @@ export default function StudentExamPage() {
         </div>
       )}
 
+      {/* Fullscreen required overlay */}
+      {!inFullscreen && !isLocked && !serverPaused && (
+        <div className="fixed inset-0 z-50 bg-navy-900/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-2xl">
+            <div className="w-16 h-16 bg-sky-50 text-sky-600 rounded-full flex items-center justify-center mx-auto mb-5">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 mb-2">Fullscreen Required</h2>
+            <p className="text-sm text-slate-500 mb-5">
+              This exam must be taken in fullscreen. Click the button below (or anywhere) to enter fullscreen and continue.
+            </p>
+            <button
+              onClick={enterFullscreen}
+              className="w-full bg-navy-900 hover:bg-navy-800 text-white text-sm font-bold py-3 rounded-xl transition-all shadow-md"
+            >
+              Enter Fullscreen
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <span className="text-[10px] font-black uppercase text-sky-600 tracking-wider">{examMeta?.department}</span>
@@ -327,23 +451,43 @@ export default function StudentExamPage() {
             Student: <span className="font-semibold text-slate-600">{session?.studentName}</span>
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="flex items-center gap-1.5 text-slate-500">
+        <div className="flex items-center gap-4 text-sm flex-wrap">
+          <div className="flex flex-col items-start sm:items-end">
+            <span className="flex items-center gap-1.5 font-mono font-bold text-navy-900 text-sm">
+              <Clock size={13} className="text-slate-400" />
+              {currentTime.toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true,
+              })}
+            </span>
+            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+              {currentTime.toLocaleDateString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+          </div>
+          <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+          <span className="flex items-center gap-1.5 text-slate-500 text-xs">
             <span className={`w-1.5 h-1.5 rounded-full ${isSaving ? "bg-amber-400" : "bg-emerald-500"}`} />
             {isSaving ? "Saving..." : "All changes saved"}
           </span>
-          <span className="flex items-center gap-1.5 font-semibold text-navy-900">
-            <Clock size={14} className="text-slate-400" />
-            {formatTime(secondsRemaining)}
-          </span>
+          <div className="flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1">
+            <Clock size={13} className="text-sky-300" />
+            <span className="font-mono font-bold text-sm">{formatTime(secondsRemaining)}</span>
+            <span className="text-[10px] text-slate-400 font-medium">left</span>
+          </div>
         </div>
       </div>
 
+      {/* Progress bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-3">
         <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <span className="text-[11px] font-semibold text-slate-500 shrink-0">
-            {totalAnsweredCount}/{totalExamQuestions} answered
-          </span>
+          <span className="text-[11px] font-semibold text-slate-500 shrink-0">{totalAnsweredCount}/{totalExamQuestions} answered</span>
           <div className="relative flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
             <div
               className="h-full rounded-full bg-sky-500 transition-all duration-500 ease-out"
@@ -357,6 +501,7 @@ export default function StudentExamPage() {
       </div>
 
       <main className="max-w-5xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-6">
+        {/* Section sidebar */}
         <div className="md:w-60 shrink-0">
           <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-1 md:pb-0 md:sticky md:top-6">
             {sections.map((s, i) => {
@@ -370,11 +515,9 @@ export default function StudentExamPage() {
                     isCurrent ? "bg-navy-900 text-white" : sectionComplete ? "bg-emerald-50 text-emerald-700" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  <span
-                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono ${
-                      isCurrent ? "bg-white/15 text-white" : sectionComplete ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
+                  <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono ${
+                    isCurrent ? "bg-white/15 text-white" : sectionComplete ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500"
+                  }`}>
                     {sectionComplete ? <Check size={14} className="check-pop" /> : i + 1}
                   </span>
                   <span className="text-sm font-semibold truncate">{s.title}</span>
@@ -390,6 +533,7 @@ export default function StudentExamPage() {
           </div>
         </div>
 
+        {/* Main content */}
         <div className="flex-1 min-w-0 space-y-5">
           <h1 className="text-sm font-bold text-navy-900">
             Section {sectionIndex + 1} of {sections.length} — {section.title}
@@ -397,15 +541,11 @@ export default function StudentExamPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
               <p className="text-xs text-slate-400 mb-1">Answered</p>
-              <p className="text-sm font-bold text-navy-900">
-                {answeredInSection}/{sectionQuestions.length}
-              </p>
+              <p className="text-sm font-bold text-navy-900">{answeredInSection}/{sectionQuestions.length}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
               <p className="text-xs text-slate-400 mb-1">Section</p>
-              <p className="text-sm font-bold text-navy-900">
-                {sectionIndex + 1} of {sections.length}
-              </p>
+              <p className="text-sm font-bold text-navy-900">{sectionIndex + 1} of {sections.length}</p>
             </div>
           </div>
           {sectionQuestions.length > 0 && (

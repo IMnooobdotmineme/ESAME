@@ -14,8 +14,9 @@ import { eq, and } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { examId: string } }
+  { params }: { params: Promise<{ examId: string }> }
 ) {
+  const { examId } = await params; // ← Add this line
   const session = await requireTeacherSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,7 +24,7 @@ export async function GET(
 
   try {
     const teacherId = session.userId;
-    const examId = params.examId;
+    const { examId } = await params;
 
     const examRows = await db
       .select({
