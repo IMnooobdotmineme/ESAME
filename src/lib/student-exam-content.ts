@@ -55,6 +55,8 @@ export interface FillBlankQuestion extends QuestionBase {
   /** Text segments; blanks sit between them. segments.length === blanks.length + 1 */
   segments: string[];
   blanks: { id: string; correctAnswer: string }[];
+  /** ✅ NEW — optional numbered choices shown to students (1, 2, 3…) */
+  choices?: string[];
 }
 
 export interface MatchingQuestion extends QuestionBase {
@@ -379,26 +381,60 @@ export interface ScoreResult {
   totalPoints: number; // total possible points across the whole exam
 }
 
+// ✅ Strong normalizer: case-insensitive, ignores punctuation and extra whitespace.
+//    "Paris", "PARIS", " paris ", "Paris." all match the key "Paris".
+function norm(s: unknown): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:!?"'`()\-\[\]{}]/g, "")
+    .trim();
+}
+
 function isAnswerCorrect(question: ExamQuestion, given: string | undefined): boolean {
   if (given === undefined || given === "") return false;
 
   switch (question.type) {
     case "mcq":
       return given === question.correctOptionId;
+
     case "true_false":
       return given === question.correctValue;
+
+    // ✅ FILL_BLANK — accepts the choice NUMBER, the WORD, any casing, any punctuation.
+    //    Also handles blank ids that come as "1", "2" (builder) or "b1", "b2" (mock).
     case "fill_blank": {
       try {
         const givenMap = JSON.parse(given) as Record<string, string>;
-        return question.blanks.every(
-          (b) =>
-            (givenMap[b.id] ?? "").trim().toLowerCase() ===
-            b.correctAnswer.trim().toLowerCase()
+        const choices: string[] = question.choices || [];
+
+        // Resolve a raw input: if it's a number and choices exist, map it to that choice's text.
+        const resolve = (raw: string): string => {
+          const t = raw.trim();
+          const n = Number(t);
+          if (choices.length && Number.isInteger(n) && n >= 1 && n <= choices.length) {
+            return String(choices[n - 1]);
+          }
+          return t;
+        };
+
+        // Get what the student wrote for blank `b`, accepting both "b1" and "1" keys.
+        const getVal = (b: { id: string }): string => {
+          const direct = givenMap[b.id];
+          if (direct !== undefined) return direct;
+          const stripped = b.id.replace(/^b/, "");
+          return givenMap[stripped] ?? "";
+        };
+
+        return question.blanks.every((b) =>
+          norm(resolve(getVal(b))) === norm(b.correctAnswer)
         );
       } catch {
         return false;
       }
     }
+
     case "multi_select": {
       const givenIds = given.split(",").filter(Boolean).sort();
       const correctIds = [...question.correctOptionIds].sort();
@@ -407,6 +443,7 @@ function isAnswerCorrect(question: ExamQuestion, given: string | undefined): boo
         givenIds.every((id, i) => id === correctIds[i])
       );
     }
+
     case "matching": {
       try {
         const givenPairs = JSON.parse(given) as Record<string, string>;
@@ -417,6 +454,7 @@ function isAnswerCorrect(question: ExamQuestion, given: string | undefined): boo
         return false;
       }
     }
+
     case "ordering": {
       const givenOrder = given.split(",").filter(Boolean);
       return (
@@ -424,6 +462,7 @@ function isAnswerCorrect(question: ExamQuestion, given: string | undefined): boo
         givenOrder.every((id, i) => id === question.correctOrder[i])
       );
     }
+
     default:
       return false;
   }

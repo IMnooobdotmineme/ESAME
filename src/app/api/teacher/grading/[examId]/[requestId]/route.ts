@@ -132,3 +132,80 @@ export async function GET(
     );
   }
 }
+
+// ✅ Save manual grades + flip attempt status to "complete" in the database
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ examId: string; requestId: string }> }
+) {
+  const session = await requireTeacherSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const teacherId = session.userId;
+    const { examId, requestId } = await params;
+    const body = await req.json();
+    const grades: { questionId: string; score: number }[] = body.grades ?? [];
+
+    // 1. Verify exam ownership
+    const examRows = await db
+      .select()
+      .from(exams)
+      .where(and(eq(exams.id, examId), eq(exams.teacherId, teacherId)));
+    if (examRows.length === 0) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 });
+    }
+
+    // 2. Verify student belongs to this exam
+    const studentRows = await db
+      .select()
+      .from(examStudents)
+      .where(and(eq(examStudents.id, requestId), eq(examStudents.examId, examId)));
+    if (studentRows.length === 0) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    // 3. Find the attempt for this student
+    const attemptRows = await db
+      .select()
+      .from(studentExamAttempts)
+      .where(eq(studentExamAttempts.examStudentId, requestId));
+    const attempt = attemptRows.length > 0 ? attemptRows[0] : null;
+    if (!attempt) {
+      return NextResponse.json({ error: "Attempt not found" }, { status: 404 });
+    }
+
+    // 4. Save each manual score onto its answer row
+    for (const g of grades) {
+      const score = Number(g.score);
+      if (Number.isNaN(score) || score < 0) continue;
+
+      await db
+        .update(studentAnswers)
+        .set({
+          manualPoints: score,
+          markedCorrect: true,
+        })
+        .where(
+          and(
+            eq(studentAnswers.id, g.questionId),
+            eq(studentAnswers.attemptId, attempt.id)
+          )
+        );
+    }
+
+    // 5. Flip the attempt status to "complete" in the DB
+    //    → roster + student will show Pass/Fail instead of Pending
+    await db
+      .update(studentExamAttempts)
+      .set({ gradingStatus: "complete" })
+      .where(eq(studentExamAttempts.id, attempt.id));
+
+    return NextResponse.json({ success: true, graded: grades.length });
+  } catch (error) {
+    console.error("Save grades error:", error);
+    return NextResponse.json({ error: "Failed to save grades" }, { status: 500 });
+  }
+}

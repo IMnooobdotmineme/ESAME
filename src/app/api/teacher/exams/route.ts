@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireTeacherSession } from "@/lib/session";
 import { db } from "@/db";
+import { autoEndExamIfExpired } from "@/lib/auto-end";
 import {
   exams,
   examStudents,
@@ -244,7 +245,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const teacherId = session.userId;
-
+        // ✅ Auto-end any expired exam before building the response
+    const inProgress = await db
+      .select({ id: exams.id })
+      .from(exams)
+      .where(and(eq(exams.teacherId, teacherId), eq(exams.status, "in_progress")));
+    for (const e of inProgress) await autoEndExamIfExpired(e.id);
     const teacherRows = await db
       .select({ orgId: teachers.orgId })
       .from(teachers)

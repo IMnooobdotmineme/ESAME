@@ -4,6 +4,18 @@ import { exams, examStudents, studentExamAttempts, studentAnswers, examQuestions
 import { eq, and, inArray } from "drizzle-orm";
 import { buildResultSummary } from "@/lib/student-grading";
 import { insertProctorEvent } from "@/lib/proctor-server";
+
+// ✅ Strong normalizer: case-insensitive, ignores punctuation and extra whitespace.
+//    "Paris", "PARIS", " paris ", "Paris." all match the key "Paris".
+function norm(s: unknown): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:!?"'`()\-\[\]{}]/g, "")
+    .trim();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -43,7 +55,7 @@ export async function POST(req: NextRequest) {
 
       let correct = false, needsManual = false, selectedOptionIds: string[] = [], answerText = answered ? value : "";
 
-            const manualOverride = payload.autoGrade === false;
+      const manualOverride = payload.autoGrade === false;
       if (!answered) {
         needsManual =
           manualOverride ||
@@ -71,20 +83,48 @@ export async function POST(req: NextRequest) {
           case "true_false":
             correct = value.toLowerCase() === (payload.correctValue ?? "true");
             break;
+
+          // ✅ FILL_IN_BLANK — case-insensitive, punctuation-tolerant, accepts choice NUMBER or WORD
           case "fill_in_blank": {
             let map: Record<string, string> = {};
             try { map = JSON.parse(value); } catch { /* ignore */ }
             const blanks = (payload.blanks ?? []) as { id: string; correctAnswer: string }[];
-            correct = blanks.length > 0 && blanks.every((b) => (map[b.id] ?? "").trim().toLowerCase() === String(b.correctAnswer).trim().toLowerCase());
+            const choices: string[] = Array.isArray(payload.blankChoices) ? payload.blankChoices : [];
+
+            // Resolve: if student typed a number and choices exist, convert to choice text
+            const resolve = (raw: string): string => {
+              const t = raw.trim();
+              const n = Number(t);
+              if (choices.length && Number.isInteger(n) && n >= 1 && n <= choices.length) {
+                return String(choices[n - 1]);
+              }
+              return t;
+            };
+
+            // Get student's answer for this blank (accept both "1" and "b1" keys)
+            const getVal = (b: { id: string }): string => {
+              const direct = map[b.id];
+              if (direct !== undefined) return direct;
+              const stripped = b.id.replace(/^b/, "");
+              return map[stripped] ?? "";
+            };
+
+            correct = blanks.length > 0 && blanks.every((b) => {
+              const studentAns = norm(resolve(getVal(b)));
+              const keyAns = norm(b.correctAnswer);
+              return studentAns === keyAns;
+            });
             break;
           }
+
           case "short_answer": {
             const variants = (payload.acceptedVariants ?? []) as string[];
-            if (variants.length > 0) correct = variants.some((v) => v.trim().toLowerCase() === value.trim().toLowerCase());
+            if (variants.length > 0) correct = variants.some((v) => norm(v) === norm(value));
             else needsManual = true;
             break;
           }
-                    case "matching": {
+
+          case "matching": {
             let map: Record<string, string> = {};
             try { map = JSON.parse(value); } catch { /* ignore */ }
             const pairs = (payload.correctPairs ?? {}) as Record<string, string>;

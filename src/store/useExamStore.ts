@@ -390,21 +390,48 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     }
   },
 
-  saveManualGrades: async (examId, requestId, grades) => {
+    saveManualGrades: async (
+    examId: string,
+    requestId: string,
+    grades: { questionId: string; score: number }[]
+  ) => {
+    // ✅ 1. Persist to the database
     try {
-      const res = await fetch(`/api/teacher/grading/${examId}/${requestId}/save-grades`, {
+      const res = await fetch(`/api/teacher/grading/${examId}/${requestId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ grades }),
       });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        console.error("saveManualGrades failed:", res.status, d);
-      }
-      await get().fetchExams(true);
+      if (!res.ok) console.error("Server save failed");
     } catch (error) {
-      console.error("saveManualGrades error:", error);
+      console.error("Save grades error:", error);
     }
+
+    // ✅ 2. Optimistic local update (roster flips immediately)
+    set((state) => ({
+      exams: state.exams.map((e) =>
+        e.id !== examId
+          ? e
+          : {
+              ...e,
+              requests: e.requests.map((r) =>
+                r.id !== requestId
+                  ? r
+                  : {
+                      ...r,
+                      gradingStatus: "complete" as const,
+                      answers: (r.answers || []).map((a) => {
+                        const g = grades.find((x) => x.questionId === a.id);
+                        return g ? { ...a, manualScore: g.score } : a;
+                      }),
+                    }
+              ),
+            }
+      ),
+    }));
+
+    // ✅ 3. Re-sync from server so everything agrees
+    await get().fetchExams();
   },
 
   setGradingStatus: async (examId, requestId, status) => {

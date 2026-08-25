@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { exams, examStudents } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { autoEndExamIfExpired } from "@/lib/auto-end";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -20,7 +21,13 @@ export async function GET(req: NextRequest) {
     .where(eq(exams.examCode, roomCode));
 
   if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
-
+    // ✅ Auto-end if the timer expired
+    await autoEndExamIfExpired(exam.id);
+    const [freshExam] = await db
+      .select({ status: exams.status })
+      .from(exams)
+      .where(eq(exams.id, exam.id));
+    const examEnded = (freshExam?.status ?? exam.status) === "completed";
   const [student] = await db
     .select()
     .from(examStudents)

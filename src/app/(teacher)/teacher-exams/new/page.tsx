@@ -52,13 +52,14 @@ interface Question {
   type: QuestionType;
   text: string;
   marks: number;
-  autoGrade?: boolean; // ✅ NEW — for MCQ/Multi/TF/Fill
+  autoGrade?: boolean;
   mediaType: "none" | "image" | "audio" | "video";
   mediaUrl?: string;
   mcqOptions?: string[];
   mcqCorrect?: number;
   multiOptions?: string[];
   multiCorrect?: boolean[];
+  blankChoices?: string[];
   tfCorrect?: boolean;
   blanksText?: string;
   answerKey?: AnswerKeyRow[];
@@ -89,8 +90,18 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   ordering: "Sequence / Ordering",
 };
 
-// ✅ NEW — which question types support the Auto-Grading toggle
 const AUTO_GRADABLE: QuestionType[] = ["mcq", "multi_select", "true_false", "fill_blank"];
+
+// ✅ Extract unique [n] marker numbers from the template text
+function extractBlankNumbers(text: string): string[] {
+  const nums: string[] = [];
+  const re = /\[\s*(\d+)\s*\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (!nums.includes(m[1])) nums.push(m[1]);
+  }
+  return nums.sort((a, b) => Number(a) - Number(b));
+}
 
 function blankQuestion(type: QuestionType): Question {
   return {
@@ -100,18 +111,30 @@ function blankQuestion(type: QuestionType): Question {
     marks: 5,
     autoGrade: true,
     mediaType: "none",
-    mcqOptions: ["", ""],           // ✅ empty — teacher types the choice
+    mcqOptions: ["", ""],
     mcqCorrect: 0,
-    multiOptions: ["", ""],         // ✅ empty — teacher types the choice
+    multiOptions: ["", ""],
     multiCorrect: [false, false],
     tfCorrect: true,
     blanksText: "The capital of France is [1].",
     answerKey: [{ number: "1", answer: "" }],
+    blankChoices: [],
     matchLeft: ["", ""],
     matchRight: ["", ""],
     matchAnswers: [{ left: "1", right: "A" }],
     orderingItems: ["Step 1", "Step 2", "Step 3"],
   };
+}
+
+// ✅ Small inline error text component
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-rose-600">
+      <AlertTriangle size={12} className="shrink-0" />
+      {message}
+    </p>
+  );
 }
 
 function ExamBuilderContent() {
@@ -128,10 +151,22 @@ function ExamBuilderContent() {
 
   const [step, setStep] = useState<1 | 2>(1);
 
-  // --- TEACHER ASSIGNMENTS (fetched from API) ---
   const [teacherAssignments, setTeacherAssignments] = useState<
     Array<{ department: string; subjects: string[] }>
   >([]);
+
+  // ✅ Inline error states (replace browser alerts)
+  const [fieldErrors, setFieldErrors] = useState<{
+    title?: string;
+    department?: string;
+    subject?: string;
+    duration?: string;
+  }>({});
+  const [questionError, setQuestionError] = useState("");
+  const [sectionError, setSectionError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [mediaError, setMediaError] = useState("");
+  const [saving, setSaving] = useState(false); // ✅ double-click guard
 
   useEffect(() => {
     fetchExams();
@@ -160,7 +195,6 @@ function ExamBuilderContent() {
     fetchAssignments();
   }, []);
 
-  // --- EXAM PARAMETERS STATE ---
   const [examData, setExamData] = useState({
     title: "",
     description: "",
@@ -170,7 +204,6 @@ function ExamBuilderContent() {
     startDate: "",
   });
 
-  // --- SECTIONS & QUESTIONS STATE ---
   const [parts, setParts] = useState<ExamPart[]>([]);
   const [activePartId, setActivePartId] = useState<string>("");
   const [stagedQuestions, setStagedQuestions] = useState<Question[]>([]);
@@ -183,10 +216,7 @@ function ExamBuilderContent() {
   const [cancelConfirm, setCancelConfirm] = useState<{
     open: boolean;
     target: "question" | "exam";
-  }>({
-    open: false,
-    target: "question",
-  });
+  }>({ open: false, target: "question" });
   const [deleteConfirm, setDeleteConfirm] = useState<{
     source: "staged" | "part";
     questionId: string;
@@ -200,15 +230,17 @@ function ExamBuilderContent() {
   const activePart = parts.find((p) => p.id === activePartId);
   const currentFormat = activePart?.allowedType || "mcq";
   const savedParts = parts.filter((p) => p.questions.length > 0);
+
   async function handleMediaFile(file: File) {
     setUploading(true);
+    setMediaError("");
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/teacher/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok || !data.url) {
-        alert(data.error || "Upload failed.");
+        setMediaError(data.error || "Upload failed. Please try another file.");
         return;
       }
       const kind = file.type.startsWith("image/")
@@ -220,7 +252,7 @@ function ExamBuilderContent() {
         : "none";
       setForm((f) => ({ ...f, mediaType: kind as Question["mediaType"], mediaUrl: data.url }));
     } catch {
-      alert("Upload failed. Please try a smaller file.");
+      setMediaError("Upload failed. Please try a smaller file.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -231,11 +263,7 @@ function ExamBuilderContent() {
   useEffect(() => {
     if (editingExam) {
       if (editingExam.isEnded || (editingExam.isStarted && !editingExam.isEnded)) {
-        alert(
-          editingExam.isEnded
-            ? "Completed exams cannot be edited."
-            : "This exam is live and cannot be edited. End the session first."
-        );
+        console.warn("Exam cannot be edited in its current state.");
         router.push("/teacher-exams");
         return;
       }
@@ -274,24 +302,54 @@ function ExamBuilderContent() {
 
   const handleDepartmentChange = (department: string) => {
     const match = teacherAssignments.find((a) => a.department === department);
-    setExamData({
-      ...examData,
-      department,
-      subject: match?.subjects[0] || "",
-    });
+    setExamData({ ...examData, department, subject: match?.subjects[0] || "" });
+    setFieldErrors((p) => ({ ...p, department: undefined, subject: undefined }));
   };
 
-    const handleCreatePart = (e: React.FormEvent) => {
+  // ✅ Validate parameters with inline errors (no alert)
+  function validateParameters(): boolean {
+    const errs: typeof fieldErrors = {};
+    if (!examData.title.trim()) errs.title = "Exam title is required.";
+    if (!examData.department.trim()) errs.department = "Please select a department.";
+    if (!examData.subject.trim()) errs.subject = "Please select a subject.";
+    if (!examData.duration || examData.duration <= 0)
+      errs.duration = "Duration must be at least 1 minute.";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+    // ✅ Add a new blank: appends [n] marker to the sentence + creates its answer row
+  function addBlankRow() {
+    const nums = extractBlankNumbers(form.blanksText || "");
+    const next = nums.length ? Math.max(...nums.map(Number)) + 1 : 1;
+    const base = (form.blanksText || "").trimEnd();
+    setForm({
+      ...form,
+      blanksText: base ? `${base} [${next}]` : `[${next}]`,
+      answerKey: [...(form.answerKey || []), { number: String(next), answer: "" }],
+    });
+  }
+
+  // ✅ Delete a blank: removes the answer row AND its [n] marker from the sentence
+  function deleteBlankRow(number: string) {
+    const newText = (form.blanksText || "")
+      .replace(new RegExp(`\\[\\s*${number}\\s*\\]`, "g"), "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/\s+([.,;:!?])/g, "$1")
+      .trim();
+    setForm({
+      ...form,
+      blanksText: newText,
+      answerKey: (form.answerKey || []).filter((r) => String(r.number) !== number),
+    });
+  }
+  const handleCreatePart = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPartTitle.trim()) return;
 
-    // ✅ First, keep any staged questions of the current section (don't lose them)
     let nextParts = parts;
     if (activePartId && stagedQuestions.length > 0) {
       nextParts = nextParts.map((p) =>
-        p.id === activePartId
-          ? { ...p, questions: [...p.questions, ...stagedQuestions] }
-          : p
+        p.id === activePartId ? { ...p, questions: [...p.questions, ...stagedQuestions] } : p
       );
     }
 
@@ -304,7 +362,6 @@ function ExamBuilderContent() {
       questions: [],
     };
 
-    // ✅ Only keep sections that have questions — empty ones are thrown away
     setParts([...nextParts.filter((p) => p.questions.length > 0), newPart]);
     setActivePartId(newPart.id);
     setStagedQuestions([]);
@@ -313,18 +370,33 @@ function ExamBuilderContent() {
     setForm(blankQuestion(newPartType));
     setNewPartTitle("");
     setNewPartMarks("");
+    setSectionError("");
   };
 
   const buildQuestionFromForm = (): Question | null => {
     if (!form.text.trim()) {
-      alert("Please enter the question text prompt before continuing!");
+      setQuestionError("Question text prompt is required.");
       return null;
     }
-    return {
-      ...form,
-      id: editingQuestionId || Date.now().toString(),
-      type: currentFormat,
-    };
+    // ✅ Fill-blank validation: markers + complete answer key
+    if (currentFormat === "fill_blank") {
+      const nums = extractBlankNumbers(form.blanksText || "");
+      if (nums.length === 0) {
+        setQuestionError("Add at least one blank marker like [1] in the template text.");
+        return null;
+      }
+      if (form.autoGrade !== false) {
+        const missing = nums.some(
+          (n) => !(form.answerKey || []).find((r) => String(r.number) === n && r.answer.trim())
+        );
+        if (missing) {
+          setQuestionError("Fill in the answer key for every blank before continuing.");
+          return null;
+        }
+      }
+    }
+    setQuestionError("");
+    return { ...form, id: editingQuestionId || Date.now().toString(), type: currentFormat };
   };
 
   const handleNextQuestion = () => {
@@ -334,19 +406,12 @@ function ExamBuilderContent() {
       setParts((prev) =>
         prev.map((part) =>
           part.id === activePartId
-            ? {
-                ...part,
-                questions: part.questions.map((existing) =>
-                  existing.id === q.id ? q : existing
-                ),
-              }
+            ? { ...part, questions: part.questions.map((existing) => (existing.id === q.id ? q : existing)) }
             : part
         )
       );
     } else if (editingSource === "staged") {
-      setStagedQuestions((prev) =>
-        prev.map((existing) => (existing.id === q.id ? q : existing))
-      );
+      setStagedQuestions((prev) => prev.map((existing) => (existing.id === q.id ? q : existing)));
     } else {
       setStagedQuestions((prev) => [...prev, q]);
     }
@@ -355,22 +420,15 @@ function ExamBuilderContent() {
     setForm(blankQuestion(currentFormat));
   };
 
-    const handleAddSection = () => {
+  const handleAddSection = () => {
     let finalStaged = stagedQuestions;
     if (form.text.trim()) {
-      const q: Question = {
-        ...form,
-        id: editingQuestionId || Date.now().toString(),
-        type: currentFormat,
-      };
+      const q: Question = { ...form, id: editingQuestionId || Date.now().toString(), type: currentFormat };
       if (editingSource === "part" && activePartId) {
         setParts((prev) =>
           prev.map((part) =>
             part.id === activePartId
-              ? {
-                  ...part,
-                  questions: part.questions.map((e) => (e.id === q.id ? q : e)),
-                }
+              ? { ...part, questions: part.questions.map((e) => (e.id === q.id ? q : e)) }
               : part
           )
         );
@@ -382,18 +440,15 @@ function ExamBuilderContent() {
       }
     }
     if (finalStaged.length === 0 && !activePartId) {
-      alert("Add at least one question before saving the section.");
+      setSectionError("Add at least one question before saving the section.");
       return;
     }
     if (activePartId) {
       setParts((prev) =>
         prev
           .map((part) =>
-            part.id === activePartId
-              ? { ...part, questions: [...part.questions, ...finalStaged] }
-              : part
+            part.id === activePartId ? { ...part, questions: [...part.questions, ...finalStaged] } : part
           )
-          // ✅ A section is stored ONLY when it has at least one question
           .filter((part) => part.questions.length > 0)
       );
     }
@@ -402,12 +457,15 @@ function ExamBuilderContent() {
     setEditingQuestionId(null);
     setEditingSource(null);
     setForm(blankQuestion("mcq"));
+    setSectionError("");
+    setQuestionError("");
   };
 
   const handleEditQuestion = (q: Question, source: "staged" | "part") => {
     setForm(q);
     setEditingQuestionId(q.id);
     setEditingSource(source);
+    setQuestionError("");
     requestAnimationFrame(() => {
       formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -420,9 +478,7 @@ function ExamBuilderContent() {
   const handleDeleteQuestion = (partId: string, questionId: string) => {
     setParts((prev) =>
       prev.map((p) =>
-        p.id === partId
-          ? { ...p, questions: p.questions.filter((q) => q.id !== questionId) }
-          : p
+        p.id === partId ? { ...p, questions: p.questions.filter((q) => q.id !== questionId) } : p
       )
     );
   };
@@ -431,21 +487,14 @@ function ExamBuilderContent() {
     source: "staged" | "part";
     questionId: string;
     partId?: string;
-  }) => {
-    setDeleteConfirm(payload);
-  };
+  }) => setDeleteConfirm(payload);
 
-  const closeDeleteConfirmation = () => {
-    setDeleteConfirm(null);
-  };
+  const closeDeleteConfirmation = () => setDeleteConfirm(null);
 
   const handleConfirmDeleteQuestion = () => {
     if (!deleteConfirm) return;
-    if (deleteConfirm.source === "staged") {
-      handleDeleteStaged(deleteConfirm.questionId);
-    } else if (deleteConfirm.partId) {
-      handleDeleteQuestion(deleteConfirm.partId, deleteConfirm.questionId);
-    }
+    if (deleteConfirm.source === "staged") handleDeleteStaged(deleteConfirm.questionId);
+    else if (deleteConfirm.partId) handleDeleteQuestion(deleteConfirm.partId, deleteConfirm.questionId);
     if (editingQuestionId === deleteConfirm.questionId) {
       setEditingQuestionId(null);
       setEditingSource(null);
@@ -454,26 +503,14 @@ function ExamBuilderContent() {
     setDeleteConfirm(null);
   };
 
-  const openCancelConfirmation = (target: "question" | "exam") => {
-    setCancelConfirm({
-      open: true,
-      target,
-    });
-  };
+  const openCancelConfirmation = (target: "question" | "exam") =>
+    setCancelConfirm({ open: true, target });
 
-  const closeCancelConfirmation = () => {
-    setCancelConfirm((prev) => ({
-      ...prev,
-      open: false,
-    }));
-  };
+  const closeCancelConfirmation = () => setCancelConfirm((prev) => ({ ...prev, open: false }));
 
   const handleDiscardConfirmed = () => {
     const target = cancelConfirm.target;
-    setCancelConfirm((prev) => ({
-      ...prev,
-      open: false,
-    }));
+    setCancelConfirm((prev) => ({ ...prev, open: false }));
     if (target === "question") {
       setForm(blankQuestion(currentFormat));
       setEditingQuestionId(null);
@@ -486,23 +523,41 @@ function ExamBuilderContent() {
   const countTotalQuestions = () =>
     parts.reduce((acc, part) => acc + part.questions.length, 0) + stagedQuestions.length;
 
-    const handleSaveExam = async () => {
-    // ✅ Never save empty sections
+  // ✅ Save with double-click protection + inline error (no alert)
+  const handleSaveExam = async () => {
+    if (saving) return; // ✅ block rapid double clicks
+    setSaveError("");
+
     const finalParts = parts.filter((p) => p.questions.length > 0);
-    if (finalParts.length === 0) {
-      alert("Please create at least one section with questions before saving.");
-      return;
-    }
     const totalQCount = finalParts.reduce((acc, part) => acc + part.questions.length, 0);
-    if (totalQCount === 0) {
-      alert("Please add at least one question to a section before saving.");
+    if (finalParts.length === 0 || totalQCount === 0) {
+      setSaveError("Please create at least one section with at least one question before saving.");
       return;
     }
 
-    if (editId) {
-      const result = await updateExam(editId, {
+    setSaving(true);
+    try {
+      if (editId) {
+        const result = await updateExam(editId, {
+          title: examData.title || "Untitled Examination",
+          description: examData.description,
+          department: examData.department,
+          subject: examData.subject,
+          durationMinutes: examData.duration,
+          parts: finalParts,
+          questionCount: totalQCount,
+          startDate: examData.startDate || undefined,
+        });
+        if (!result.success) {
+          setSaveError(result.message || "This exam cannot be edited.");
+          return;
+        }
+        router.push("/teacher-exams");
+        return;
+      }
+
+      const result = await createExam({
         title: examData.title || "Untitled Examination",
-        description: examData.description,
         department: examData.department,
         subject: examData.subject,
         durationMinutes: examData.duration,
@@ -510,30 +565,15 @@ function ExamBuilderContent() {
         questionCount: totalQCount,
         startDate: examData.startDate || undefined,
       });
-      if (!result.success) {
-        alert(result.message || "This exam cannot be edited.");
+
+      if (!result.id) {
+        setSaveError(result.message || "Failed to create exam.");
         return;
       }
       router.push("/teacher-exams");
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    const result = await createExam({
-      title: examData.title || "Untitled Examination",
-      department: examData.department,
-      subject: examData.subject,
-      durationMinutes: examData.duration,
-      parts: finalParts,
-      questionCount: totalQCount,
-      startDate: examData.startDate || undefined,
-    });
-
-    if (!result.id) {
-      alert(result.message || "Failed to create exam.");
-      return;
-    }
-
-    router.push("/teacher-exams");
   };
 
   return (
@@ -590,10 +630,17 @@ function ExamBuilderContent() {
                     type="text"
                     placeholder="e.g., CS101 Introduction to Computer Science (Midterm)"
                     value={examData.title}
-                    onChange={(e) => setExamData({ ...examData, title: e.target.value })}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400"
-                    required
+                    onChange={(e) => {
+                      setExamData({ ...examData, title: e.target.value });
+                      setFieldErrors((p) => ({ ...p, title: undefined }));
+                    }}
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none transition-all placeholder:text-slate-400 ${
+                      fieldErrors.title
+                        ? "border-rose-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                        : "border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    }`}
                   />
+                  <FieldError message={fieldErrors.title} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -615,8 +662,11 @@ function ExamBuilderContent() {
                     <select
                       value={examData.department}
                       onChange={(e) => handleDepartmentChange(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all cursor-pointer bg-white"
-                      required
+                      className={`w-full border rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none transition-all cursor-pointer bg-white ${
+                        fieldErrors.department
+                          ? "border-rose-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                          : "border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      }`}
                     >
                       {teacherAssignments.length === 0 ? (
                         <option value="">No departments assigned yet</option>
@@ -628,6 +678,7 @@ function ExamBuilderContent() {
                         ))
                       )}
                     </select>
+                    <FieldError message={fieldErrors.department} />
                     <p className="text-[11px] text-slate-400 mt-1.5">
                       Only your organization-assigned departments show up here.
                     </p>
@@ -638,10 +689,16 @@ function ExamBuilderContent() {
                     </label>
                     <select
                       value={examData.subject}
-                      onChange={(e) => setExamData({ ...examData, subject: e.target.value })}
+                      onChange={(e) => {
+                        setExamData({ ...examData, subject: e.target.value });
+                        setFieldErrors((p) => ({ ...p, subject: undefined }));
+                      }}
                       disabled={subjectsInSelectedDepartment.length === 0}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all cursor-pointer bg-white disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-                      required
+                      className={`w-full border rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none transition-all cursor-pointer bg-white disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${
+                        fieldErrors.subject
+                          ? "border-rose-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                          : "border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      }`}
                     >
                       {subjectsInSelectedDepartment.length === 0 ? (
                         <option value="">No subjects in this department</option>
@@ -653,6 +710,7 @@ function ExamBuilderContent() {
                         ))
                       )}
                     </select>
+                    <FieldError message={fieldErrors.subject} />
                     <p className="text-[11px] text-slate-400 mt-1.5">
                       Only the subjects you teach within that department.
                     </p>
@@ -667,12 +725,17 @@ function ExamBuilderContent() {
                       type="number"
                       min="1"
                       value={examData.duration}
-                      onChange={(e) =>
-                        setExamData({ ...examData, duration: parseInt(e.target.value) || 0 })
-                      }
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all"
-                      required
+                      onChange={(e) => {
+                        setExamData({ ...examData, duration: parseInt(e.target.value) || 0 });
+                        setFieldErrors((p) => ({ ...p, duration: undefined }));
+                      }}
+                      className={`w-full border rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none transition-all ${
+                        fieldErrors.duration
+                          ? "border-rose-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                          : "border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      }`}
                     />
+                    <FieldError message={fieldErrors.duration} />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -694,11 +757,8 @@ function ExamBuilderContent() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    if (editId) {
-                      openCancelConfirmation("exam");
-                    } else {
-                      router.push("/teacher-exams?tab=scheduled");
-                    }
+                    if (editId) openCancelConfirmation("exam");
+                    else router.push("/teacher-exams?tab=scheduled");
                   }}
                   className="bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
                 >
@@ -706,11 +766,7 @@ function ExamBuilderContent() {
                 </Button>
                 <Button
                   onClick={() => {
-                    if (isSettingsFormComplete()) {
-                      setStep(2);
-                    } else {
-                      alert("Please fill in all required fields marked with (*).");
-                    }
+                    if (validateParameters()) setStep(2);
                   }}
                 >
                   Continue to Question Setup <ArrowRight className="w-3.5 h-3.5" />
@@ -743,7 +799,6 @@ function ExamBuilderContent() {
                       value={newPartTitle}
                       onChange={(e) => setNewPartTitle(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400"
-                      required
                     />
                   </div>
                   <div className="md:col-span-4">
@@ -769,12 +824,11 @@ function ExamBuilderContent() {
                   </div>
                 </form>
 
-                {/* SAVED SECTIONS */}
                 <div className="flex flex-wrap gap-2 mt-4 border-t border-slate-100 pt-4 items-center">
                   <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">
                     Saved Sections:
                   </span>
-                                    {savedParts.length === 0 ? (
+                  {savedParts.length === 0 ? (
                     <span className="text-xs font-medium text-slate-400 italic">
                       No sections saved yet. A section is saved once it has at least one question.
                     </span>
@@ -817,7 +871,7 @@ function ExamBuilderContent() {
                       <Badge variant="info">{QUESTION_TYPE_LABELS[currentFormat]}</Badge>
                     </div>
 
-                    {/* ✅ MARKS + MEDIA GRID (Points back, upload from device) */}
+                    {/* MARKS + MEDIA GRID */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -912,6 +966,7 @@ function ExamBuilderContent() {
                             )}
                           </button>
                         )}
+                        <FieldError message={mediaError} />
                         <div className="flex items-center gap-3 mt-2 text-slate-400">
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold">
                             <ImageIcon size={11} /> IMAGE
@@ -936,12 +991,20 @@ function ExamBuilderContent() {
                         rows={3}
                         placeholder="Enter the main question prompt or problem statement..."
                         value={form.text}
-                        onChange={(e) => setForm({ ...form, text: e.target.value })}
-                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all placeholder:text-slate-400 resize-none"
+                        onChange={(e) => {
+                          setForm({ ...form, text: e.target.value });
+                          setQuestionError("");
+                        }}
+                        className={`w-full border rounded-xl px-4 py-2.5 text-sm text-navy-900 outline-none transition-all placeholder:text-slate-400 resize-none ${
+                          questionError
+                            ? "border-rose-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                            : "border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                        }`}
                       />
+                      <FieldError message={questionError} />
                     </div>
 
-                    {/* ✅ 1. MCQ — auto letters, empty boxes */}
+                    {/* 1. MCQ */}
                     {currentFormat === "mcq" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -995,12 +1058,7 @@ function ExamBuilderContent() {
                         </div>
                         <button
                           type="button"
-                          onClick={() =>
-                            setForm({
-                              ...form,
-                              mcqOptions: [...(form.mcqOptions || []), ""],
-                            })
-                          }
+                          onClick={() => setForm({ ...form, mcqOptions: [...(form.mcqOptions || []), ""] })}
                           className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                         >
                           + Add Option
@@ -1008,7 +1066,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* ✅ 2. MULTI SELECT — auto letters, empty boxes */}
+                    {/* 2. MULTI SELECT */}
                     {currentFormat === "multi_select" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -1107,7 +1165,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* ✅ 4. SHORT ANSWER — no variants, manual grading info */}
+                    {/* 4. SHORT ANSWER */}
                     {currentFormat === "short_answer" && (
                       <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                         <div className="flex items-start gap-3">
@@ -1142,82 +1200,163 @@ function ExamBuilderContent() {
                       </p>
                     )}
 
-                    {/* 7. FILL IN THE BLANK */}
+                    {/* ✅ 7. FILL IN THE BLANK — [n] markers only, auto-synced answer key */}
+                                        
                     {currentFormat === "fill_blank" && (
                       <div className="space-y-4">
+                        {/* 1. Template text */}
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                            Template Text (mark blanks as [1], [2]... or 1....., 2.....)
+                            Template Text (mark each blank as [1], [2], [3]…)
                           </label>
                           <input
                             type="text"
                             value={form.blanksText || ""}
-                            onChange={(e) => setForm({ ...form, blanksText: e.target.value })}
-                            placeholder="e.g. The capital of France is [1]."
+                            onChange={(e) => {
+                              const text = e.target.value;
+                              const nums = extractBlankNumbers(text);
+                              const prev = form.answerKey || [];
+                              const nextKey =
+                                nums.length > 0
+                                  ? nums.map((n) => {
+                                      const existing = prev.find((r) => String(r.number) === n);
+                                      return existing ? { ...existing } : { number: n, answer: "" };
+                                    })
+                                  : prev;
+                              setForm({ ...form, blanksText: text, answerKey: nextKey });
+                              setQuestionError("");
+                            }}
+                            placeholder="e.g. The capital of France is [1] and its currency is [2]."
                             className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
                           />
+                          <p className="text-[11px] text-slate-400 mt-1.5">
+                            Students will see one answer box per [n] marker, in order.
+                          </p>
                         </div>
-                        <div className="space-y-2">
+
+                        {/* 2. Choices / Hints (optional) */}
+                        <div>
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                            Answer Key
+                            Answer Choices / Hints (optional — shown to students)
                           </label>
-                          {(form.answerKey || []).map((row, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={row.number}
-                                onChange={(e) => {
-                                  const c = [...(form.answerKey || [])];
-                                  c[i] = { ...c[i], number: e.target.value };
-                                  setForm({ ...form, answerKey: c });
-                                }}
-                                className="w-14 border border-slate-200 rounded-xl px-2 py-2 text-xs text-center font-bold text-navy-900 outline-none focus:border-sky-400"
-                              />
-                              <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <input
-                                type="text"
-                                placeholder="Answer"
-                                value={row.answer}
-                                onChange={(e) => {
-                                  const c = [...(form.answerKey || [])];
-                                  c[i] = { ...c[i], answer: e.target.value };
-                                  setForm({ ...form, answerKey: c });
-                                }}
-                                className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setForm({
-                                    ...form,
-                                    answerKey: (form.answerKey || []).filter((_, idx) => idx !== i),
-                                  })
-                                }
-                                className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          ))}
+                          <div className="space-y-2">
+                            {(form.blankChoices || []).map((c, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="w-8 h-8 shrink-0 rounded-lg bg-sky-500 text-white text-xs font-bold flex items-center justify-center font-mono">
+                                  {i + 1}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={c}
+                                  placeholder="Type a choice (e.g. Paris)..."
+                                  onChange={(e) => {
+                                    const arr = [...(form.blankChoices || [])];
+                                    arr[i] = e.target.value;
+                                    setForm({ ...form, blankChoices: arr });
+                                  }}
+                                  className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setForm({
+                                      ...form,
+                                      blankChoices: (form.blankChoices || []).filter((_, idx) => idx !== i),
+                                    })
+                                  }
+                                  className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                           <button
                             type="button"
                             onClick={() =>
-                              setForm({
-                                ...form,
-                                answerKey: [
-                                  ...(form.answerKey || []),
-                                  { number: String((form.answerKey || []).length + 1), answer: "" },
-                                ],
-                              })
+                              setForm({ ...form, blankChoices: [...(form.blankChoices || []), ""] })
                             }
                             className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
                           >
-                            + Add Row
+                            + Add Choice
                           </button>
+                          <p className="text-[11px] text-slate-400 mt-1.5">
+                            Students see these numbered and may answer with the number (1, 2…) or the word.
+                          </p>
+                        </div>
+
+                        {/* 3. Answer Key */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Answer Key (one correct answer per blank)
+                          </label>
+                          {(form.answerKey || []).length === 0 ? (
+                            <p className="text-xs text-slate-400 italic">
+                              No blanks yet — type [1] in the sentence or click “+ Add Blank”.
+                            </p>
+                          ) : (
+                            (form.answerKey || []).map((row, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="w-14 shrink-0 text-center border border-slate-200 bg-slate-50 rounded-xl px-2 py-2 text-xs font-bold text-navy-900">
+                                  [{row.number}]
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                {(form.blankChoices || []).filter((c) => c.trim()).length > 0 ? (
+                                  <select
+                                    value={row.answer}
+                                    onChange={(e) => {
+                                      const c = [...(form.answerKey || [])];
+                                      c[i] = { ...c[i], answer: e.target.value };
+                                      setForm({ ...form, answerKey: c });
+                                    }}
+                                    className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400 bg-white cursor-pointer"
+                                  >
+                                    <option value="">Select correct answer…</option>
+                                    {(form.blankChoices || [])
+                                      .filter((c) => c.trim())
+                                      .map((c, ci) => (
+                                        <option key={ci} value={c}>
+                                          {c}
+                                        </option>
+                                      ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    placeholder="Correct answer for this blank"
+                                    value={row.answer}
+                                    onChange={(e) => {
+                                      const c = [...(form.answerKey || [])];
+                                      c[i] = { ...c[i], answer: e.target.value };
+                                      setForm({ ...form, answerKey: c });
+                                    }}
+                                    className="grow border border-slate-200 rounded-xl px-4 py-2 text-sm text-navy-900 outline-none focus:border-sky-400"
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => deleteBlankRow(row.number)}
+                                  className="text-xs text-rose-500 font-semibold hover:underline cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            ))
+                          )}
+                          <button
+                            type="button"
+                            onClick={addBlankRow}
+                            className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline block mt-1 cursor-pointer"
+                          >
+                            + Add Blank
+                          </button>
+                          <p className="text-[11px] text-slate-400">
+                            “+ Add Blank” inserts a new [n] marker at the end of your sentence — move it
+                            into place as needed. Deleting a row also removes its marker.
+                          </p>
                         </div>
                       </div>
                     )}
-
                     {/* 8. MATCHING PAIRS */}
                     {currentFormat === "matching" && (
                       <div className="space-y-4">
@@ -1385,7 +1524,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* ✅ NEW: Auto-Grading toggle (styled like your screenshot) */}
+                    {/* Auto-Grading toggle */}
                     {AUTO_GRADABLE.includes(currentFormat) && (
                       <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4">
                         <div className="min-w-0">
@@ -1416,12 +1555,17 @@ function ExamBuilderContent() {
 
                     {/* NEXT QUESTION / ADD SECTION CONTROLS */}
                     <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                      {sectionError && (
+                        <p className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-rose-600">
+                          <AlertTriangle size={12} /> {sectionError}
+                        </p>
+                      )}
                       {editingQuestionId && (
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => openCancelConfirmation("question")}
-                          className="mr-auto bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+                          className={`${sectionError ? "" : "mr-auto"} bg-white border-sky-500 text-sky-700 hover:bg-sky-50 hover:text-sky-800`}
                         >
                           Cancel Edit
                         </Button>
@@ -1440,7 +1584,7 @@ function ExamBuilderContent() {
               </div>
             )}
 
-            {/* STAGED QUESTIONS FOR THE ACTIVE SECTION */}
+            {/* STAGED QUESTIONS */}
             {activePartId && stagedQuestions.length > 0 && (
               <Card>
                 <CardContent className="space-y-3">
@@ -1470,12 +1614,7 @@ function ExamBuilderContent() {
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() =>
-                            openDeleteConfirmation({
-                              source: "staged",
-                              questionId: q.id,
-                            })
-                          }
+                          onClick={() => openDeleteConfirmation({ source: "staged", questionId: q.id })}
                           className="text-rose-500 hover:text-rose-700 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1496,10 +1635,7 @@ function ExamBuilderContent() {
                   </h2>
                   <Badge variant="neutral">
                     Total Marks:{" "}
-                    {parts.reduce(
-                      (acc, p) => acc + p.questions.reduce((qAcc, q) => qAcc + q.marks, 0),
-                      0
-                    )}{" "}
+                    {parts.reduce((acc, p) => acc + p.questions.reduce((qAcc, q) => qAcc + q.marks, 0), 0)}{" "}
                     pts
                   </Badge>
                 </div>
@@ -1519,9 +1655,7 @@ function ExamBuilderContent() {
                           <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
                             <div className="flex items-center gap-2">
                               <Badge>{part.title}</Badge>
-                              <Badge variant="neutral">
-                                {QUESTION_TYPE_LABELS[part.allowedType]}
-                              </Badge>
+                              <Badge variant="neutral">{QUESTION_TYPE_LABELS[part.allowedType]}</Badge>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="text-xs font-medium text-slate-500">
@@ -1553,9 +1687,7 @@ function ExamBuilderContent() {
                                 className="bg-white p-3.5 rounded-xl border border-slate-200 flex justify-between items-center gap-4"
                               >
                                 <div>
-                                  <span className="text-xs font-bold text-navy-900 mr-1.5">
-                                    Q{idx + 1}.
-                                  </span>
+                                  <span className="text-xs font-bold text-navy-900 mr-1.5">Q{idx + 1}.</span>
                                   <span className="text-xs font-medium text-slate-800">{q.text}</span>
                                 </div>
                                 <div className="flex items-center gap-3 shrink-0">
@@ -1595,12 +1727,19 @@ function ExamBuilderContent() {
                   </div>
                 )}
 
-                {/* SAVE CONTROLS */}
-                <div className="flex justify-end gap-2.5 pt-5 border-t border-slate-100">
-                  <Button variant="outline" onClick={() => setStep(1)} className="mr-auto">
+                {/* ✅ SAVE CONTROLS with inline error */}
+                <div className="flex justify-end items-center gap-2.5 pt-5 border-t border-slate-100">
+                  {saveError && (
+                    <p className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                      <AlertTriangle size={14} className="shrink-0" /> {saveError}
+                    </p>
+                  )}
+                  <Button variant="outline" onClick={() => setStep(1)} className={saveError ? "" : "mr-auto"}>
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to Parameters
                   </Button>
-                  <Button onClick={handleSaveExam}>{editId ? "Update Exam" : "Save Exam"}</Button>
+                  <Button onClick={handleSaveExam} disabled={saving}>
+                    {saving ? "Saving..." : editId ? "Update Exam" : "Save Exam"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1612,9 +1751,7 @@ function ExamBuilderContent() {
       <Dialog open={cancelConfirm.open} onClose={closeCancelConfirmation}>
         <DialogHeader
           title={
-            cancelConfirm.target === "question"
-              ? "Cancel editing this question?"
-              : "Discard exam changes?"
+            cancelConfirm.target === "question" ? "Cancel editing this question?" : "Discard exam changes?"
           }
           onClose={closeCancelConfirmation}
         />
@@ -1659,22 +1796,15 @@ function ExamBuilderContent() {
 
       {/* DELETE QUESTION CONFIRMATION MODAL */}
       <Dialog open={!!deleteConfirm} onClose={closeDeleteConfirmation}>
-        <DialogHeader
-          title="Delete this question?"
-          onClose={closeDeleteConfirmation}
-        />
+        <DialogHeader title="Delete this question?" onClose={closeDeleteConfirmation} />
         <div className="px-6 py-5 space-y-5">
           <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
             <div className="w-10 h-10 rounded-xl bg-white border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
               <Trash2 className="w-5 h-5" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-bold text-navy-900">
-                This question will be removed.
-              </p>
-              <p className="text-xs leading-5 text-slate-500 font-medium">
-                This action cannot be undone.
-              </p>
+              <p className="text-sm font-bold text-navy-900">This question will be removed.</p>
+              <p className="text-xs leading-5 text-slate-500 font-medium">This action cannot be undone.</p>
             </div>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5">
