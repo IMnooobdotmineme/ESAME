@@ -154,7 +154,9 @@ function LoginForm() {
               onChange={(e) => setRememberMe(e.target.checked)}
               className="h-4 w-4 rounded-md border-[#C9D6EE] text-[#395886] focus:ring-2 focus:ring-[#395886]/40"
             />
-            <span className="text-sm text-[#4B5468]">Remember me</span>
+            <span className="text-sm text-[#4B5468]">
+  Remember me
+</span>
           </label>
 
           {/* Error message (added to surface backend/login errors) */}

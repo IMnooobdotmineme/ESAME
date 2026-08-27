@@ -75,38 +75,31 @@ export function buildExamQuestion(def: any): any {
 
     // ✅ FILL_BLANK — blank IDs = marker numbers ("1","2","3") so they match the student's
     //    stored JSON keys; includes choices[] so the numbered hints box renders.
-    case "fill_blank": {
+        case "fill_blank": {
       const rawText = String(def.blanksText || "");
-      const nums = extractBlankNumbers(rawText);
-
-      // Split the text on every [n] marker, keeping segments between blanks
       const segments: string[] = [];
-      const re = /\[\s*\d+\s*\]/g;
-      let last = 0;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(rawText))) {
-        segments.push(rawText.slice(last, m.index));
-        last = m.index + m[0].length;
-      }
-      segments.push(rawText.slice(last));
-
-      // Answer key lookup by marker number
+      const blanks: { id: string; correctAnswer: string }[] = [];
       const keyByNum: Record<string, string> = {};
       (def.answerKey || []).forEach((row: any) => {
         keyByNum[String(row.number)] = String(row.answer ?? "");
       });
-
-      const blanks = nums.map((n) => ({
-        id: n,                       // ✅ id = marker number, matches student answer keys
-        correctAnswer: keyByNum[n] || "",
-      }));
-
+      const re = /\[\s*(\d+)\s*\]/g;
+      let last = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(rawText))) {
+        segments.push(rawText.slice(last, m.index));
+        blanks.push({ id: m[1], correctAnswer: keyByNum[m[1]] || "" });
+        last = m.index + m[0].length;
+      }
+      segments.push(rawText.slice(last));
       return {
         ...base,
         type: "fill_blank",
         segments,
         blanks,
-        choices: Array.isArray(def.blankChoices) ? def.blankChoices : [],
+        choices: Array.isArray(def.blankChoices)
+          ? def.blankChoices.filter((c: string) => String(c).trim())
+          : [],
       };
     }
 

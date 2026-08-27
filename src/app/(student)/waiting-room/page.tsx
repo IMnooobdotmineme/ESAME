@@ -10,20 +10,21 @@ interface StudentSession {
   requestId: string;
 }
 
-interface StatusMeta {
+interface ExamDetails {
   title: string;
   department: string;
   subject: string;
   durationMinutes: number;
   totalQuestions: number;
-  examStarted: boolean;
-  examEnded: boolean;
+  totalSections: number;
 }
 
 export default function WaitingRoomPage() {
   const router = useRouter();
   const [session, setSession] = useState<StudentSession | null>(null);
-  const [meta, setMeta] = useState<StatusMeta | null>(null);
+  const [details, setDetails] = useState<ExamDetails | null>(null);
+  const [started, setStarted] = useState(false);
+  const [ended, setEnded] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("esame_student_session");
@@ -34,6 +35,33 @@ export default function WaitingRoomPage() {
     setSession(JSON.parse(raw));
   }, [router]);
 
+  // ✅ Load exam details once (works even before start — reads the 409 body)
+  useEffect(() => {
+    if (!session?.requestId || !session.roomCode) return;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/student/exam?roomCode=${encodeURIComponent(session.roomCode)}&requestId=${encodeURIComponent(session.requestId)}`
+        );
+        const data = await res.json().catch(() => ({}));
+        if (data && (data.title || data.department || data.subject)) {
+          setDetails({
+            title: data.title ?? "",
+            department: data.department ?? "",
+            subject: data.subject ?? "",
+            durationMinutes: data.durationMinutes ?? 0,
+            totalQuestions: data.totalQuestions ?? 0,
+            totalSections: data.totalSections ?? 0,
+          });
+        }
+        if (res.ok) setStarted(true);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [session]);
+
+  // ✅ Poll only for start / end
   useEffect(() => {
     if (!session?.requestId || !session.roomCode) return;
     const interval = setInterval(async () => {
@@ -43,7 +71,8 @@ export default function WaitingRoomPage() {
         );
         if (!res.ok) return;
         const data = await res.json();
-        setMeta(data);
+        setEnded(!!data.examEnded);
+        setStarted(!!data.examStarted);
         if (data.examEnded) {
           clearInterval(interval);
           router.replace("/score");
@@ -59,7 +88,7 @@ export default function WaitingRoomPage() {
   }, [session, router]);
 
   if (!session) return null;
-  const isStarted = Boolean(meta?.examStarted && !meta?.examEnded);
+  const isStarted = Boolean(started && !ended);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -86,15 +115,15 @@ export default function WaitingRoomPage() {
           <div className="grid grid-cols-2 gap-y-4 text-sm">
             <div className="col-span-2">
               <p className="text-slate-400 text-xs mb-1">Exam Name</p>
-              <p className="font-semibold text-navy-900">{meta?.title || "—"}</p>
+              <p className="font-semibold text-navy-900">{details?.title || "—"}</p>
             </div>
             <div>
               <p className="text-slate-400 text-xs mb-1">Department</p>
-              <p className="font-semibold text-navy-900">{meta?.department || "—"}</p>
+              <p className="font-semibold text-navy-900">{details?.department || "—"}</p>
             </div>
             <div>
               <p className="text-slate-400 text-xs mb-1">Subject</p>
-              <p className="font-semibold text-navy-900">{meta?.subject || "—"}</p>
+              <p className="font-semibold text-navy-900">{details?.subject || "—"}</p>
             </div>
             <div>
               <p className="text-slate-400 text-xs mb-1">Candidate</p>
@@ -102,11 +131,15 @@ export default function WaitingRoomPage() {
             </div>
             <div>
               <p className="text-slate-400 text-xs mb-1">Duration</p>
-              <p className="font-semibold text-navy-900">{meta?.durationMinutes ?? "—"} minutes</p>
+              <p className="font-semibold text-navy-900">{details?.durationMinutes ?? "—"} minutes</p>
             </div>
-            <div>
-              <p className="text-slate-400 text-xs mb-1">Questions</p>
-              <p className="font-semibold text-navy-900">{meta?.totalQuestions ?? "—"} questions</p>
+                        <div>
+              <p className="text-slate-400 text-xs mb-1">Sections</p>
+              <p className="font-semibold text-navy-900">
+                {details
+                  ? `${details.totalSections} section${details.totalSections === 1 ? "" : "s"}`
+                  : "—"}
+              </p>
             </div>
           </div>
         </div>

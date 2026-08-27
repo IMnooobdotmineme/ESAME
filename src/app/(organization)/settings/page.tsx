@@ -10,7 +10,14 @@ import { User, Upload, Check, Trash2, Crop, Camera } from "lucide-react";
 
 const ORG_CACHE_KEY = "org-chrome-cache";
 
-type CachedOrg = { name: string; avatarUrl: string | null };
+type CachedOrg = { 
+  name: string; 
+  avatarUrl: string | null;
+  orgType?: string;
+  country?: string;
+  region?: string;
+  address?: string;
+};
 
 function readCache(): CachedOrg | null {
   try {
@@ -37,6 +44,11 @@ export default function SettingsPage() {
   const [orgName, setOrgName] = useState("Organization");
   const [email, setEmail] = useState("");
   const [description, setDescription] = useState("");
+  const [orgType, setOrgType] = useState("");
+  const [country, setCountry] = useState("");
+  const [region, setRegion] = useState("");
+  const [address, setAddress] = useState("");
+  
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [rawAvatar, setRawAvatar] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
@@ -81,13 +93,16 @@ export default function SettingsPage() {
 
   // Client-only, pre-paint: seed name/avatar from the shared cache so this
   // page doesn't flash the placeholder icon before /api/org/profile returns.
-  // Does NOT touch email/description (not cached) or run on the server.
   useLayoutEffect(() => {
     const cached = readCache();
     if (cached) {
       setOrgName(cached.name);
       setAvatarPreview(cached.avatarUrl);
       setRawAvatar(cached.avatarUrl);
+      if (cached.orgType) setOrgType(cached.orgType);
+      if (cached.country) setCountry(cached.country);
+      if (cached.region) setRegion(cached.region);
+      if (cached.address) setAddress(cached.address);
     }
   }, []);
 
@@ -99,12 +114,28 @@ export default function SettingsPage() {
         if (res.ok && payload?.org) {
           const nextName = payload.org.name ?? "Organization";
           const nextAvatar = payload.org.avatarUrl ?? null;
+          const nextOrgType = payload.org.orgType ?? "";
+          const nextCountry = payload.org.country ?? "";
+          const nextRegion = payload.org.region ?? "";
+          const nextAddress = payload.org.address ?? "";
+          
           setOrgName(nextName);
           setEmail(payload.org.email ?? "");
           setDescription(payload.org.description ?? "");
+          setOrgType(nextOrgType);
+          setCountry(nextCountry);
+          setRegion(nextRegion);
+          setAddress(nextAddress);
           setAvatarPreview(nextAvatar);
           setRawAvatar(nextAvatar);
-          writeCache({ name: nextName, avatarUrl: nextAvatar });
+          writeCache({ 
+            name: nextName, 
+            avatarUrl: nextAvatar,
+            orgType: nextOrgType,
+            country: nextCountry,
+            region: nextRegion,
+            address: nextAddress
+          });
         }
       } catch {
         // no-op — keep whatever the cache seeded, if anything
@@ -138,6 +169,10 @@ export default function SettingsPage() {
         body: JSON.stringify({
           name: orgName,
           description,
+          orgType,
+          country,
+          region,
+          address,
           avatarUrl: nextAvatarUrl,
         }),
       });
@@ -150,11 +185,27 @@ export default function SettingsPage() {
       if (payload?.org) {
         const nextName = payload.org.name ?? orgName;
         const nextAvatar = payload.org.avatarUrl ?? null;
+        const nextOrgType = payload.org.orgType ?? orgType;
+        const nextCountry = payload.org.country ?? country;
+        const nextRegion = payload.org.region ?? region;
+        const nextAddress = payload.org.address ?? address;
+        
         setOrgName(nextName);
         setDescription(payload.org.description ?? "");
+        setOrgType(nextOrgType);
+        setCountry(nextCountry);
+        setRegion(nextRegion);
+        setAddress(nextAddress);
         setAvatarPreview(nextAvatar);
         setRawAvatar(nextAvatar);
-        writeCache({ name: nextName, avatarUrl: nextAvatar });
+        writeCache({ 
+          name: nextName, 
+          avatarUrl: nextAvatar,
+          orgType: nextOrgType,
+          country: nextCountry,
+          region: nextRegion,
+          address: nextAddress
+        });
       }
 
       window.dispatchEvent(new Event("org-profile-updated"));
@@ -219,6 +270,10 @@ export default function SettingsPage() {
         body: JSON.stringify({
           name: orgName,
           description,
+          orgType,
+          country,
+          region,
+          address,
           avatarUrl: avatarPreview,
         }),
       });
@@ -230,11 +285,27 @@ export default function SettingsPage() {
       if (payload?.org) {
         const nextName = payload.org.name ?? orgName;
         const nextAvatar = payload.org.avatarUrl ?? null;
+        const nextOrgType = payload.org.orgType ?? orgType;
+        const nextCountry = payload.org.country ?? country;
+        const nextRegion = payload.org.region ?? region;
+        const nextAddress = payload.org.address ?? address;
+        
         setOrgName(nextName);
         setDescription(payload.org.description ?? "");
+        setOrgType(nextOrgType);
+        setCountry(nextCountry);
+        setRegion(nextRegion);
+        setAddress(nextAddress);
         setAvatarPreview(nextAvatar);
         setRawAvatar(nextAvatar);
-        writeCache({ name: nextName, avatarUrl: nextAvatar });
+        writeCache({ 
+          name: nextName, 
+          avatarUrl: nextAvatar,
+          orgType: nextOrgType,
+          country: nextCountry,
+          region: nextRegion,
+          address: nextAddress
+        });
       }
 
       setSavedProfile(true);
@@ -330,6 +401,54 @@ export default function SettingsPage() {
                   <p className="text-xs text-slate-400 mt-1.5">
                     Contact system support to change your root email address.
                   </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-navy-900 mb-1.5 block">
+                      Organization Type
+                    </label>
+                    <input
+                      value={orgType}
+                      onChange={(e) => setOrgType(e.target.value)}
+                      placeholder="e.g., University, High School"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-navy-900 mb-1.5 block">
+                      Country
+                    </label>
+                    <input
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="e.g., Cambodia, United States"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-navy-900 mb-1.5 block">
+                      Region / State / Province
+                    </label>
+                    <input
+                      value={region}
+                      onChange={(e) => setRegion(e.target.value)}
+                      placeholder="e.g., Phnom Penh, California"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-navy-900 mb-1.5 block">
+                      Address
+                    </label>
+                    <input
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Street address, floor, building"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
                 </div>
                 <Button type="submit">
                   {savedProfile ? <Check size={15} /> : null}

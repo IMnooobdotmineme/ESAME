@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Check,
-  CheckCircle2,
-  Copy,
   Layers,
   ArrowLeft,
   Plus,
@@ -59,10 +57,10 @@ interface Question {
   mcqCorrect?: number;
   multiOptions?: string[];
   multiCorrect?: boolean[];
-  blankChoices?: string[];
   tfCorrect?: boolean;
   blanksText?: string;
   answerKey?: AnswerKeyRow[];
+  blankChoices?: string[];
   matchLeft?: string[];
   matchRight?: string[];
   matchAnswers?: MatchRow[];
@@ -92,7 +90,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 
 const AUTO_GRADABLE: QuestionType[] = ["mcq", "multi_select", "true_false", "fill_blank"];
 
-// ✅ Extract unique [n] marker numbers from the template text
+// ✅ Extract unique [n] marker numbers from template text
 function extractBlankNumbers(text: string): string[] {
   const nums: string[] = [];
   const re = /\[\s*(\d+)\s*\]/g;
@@ -126,7 +124,6 @@ function blankQuestion(type: QuestionType): Question {
   };
 }
 
-// ✅ Small inline error text component
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
@@ -150,12 +147,11 @@ function ExamBuilderContent() {
   const editingExam = editId ? exams.find((e) => e.id === editId) : undefined;
 
   const [step, setStep] = useState<1 | 2>(1);
-
   const [teacherAssignments, setTeacherAssignments] = useState<
     Array<{ department: string; subjects: string[] }>
   >([]);
 
-  // ✅ Inline error states (replace browser alerts)
+  // ✅ Inline error states
   const [fieldErrors, setFieldErrors] = useState<{
     title?: string;
     department?: string;
@@ -166,7 +162,7 @@ function ExamBuilderContent() {
   const [sectionError, setSectionError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [mediaError, setMediaError] = useState("");
-  const [saving, setSaving] = useState(false); // ✅ double-click guard
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchExams();
@@ -259,7 +255,6 @@ function ExamBuilderContent() {
     }
   }
 
-  // Pre-fill data when editing an existing exam
   useEffect(() => {
     if (editingExam) {
       if (editingExam.isEnded || (editingExam.isStarted && !editingExam.isEnded)) {
@@ -306,7 +301,6 @@ function ExamBuilderContent() {
     setFieldErrors((p) => ({ ...p, department: undefined, subject: undefined }));
   };
 
-  // ✅ Validate parameters with inline errors (no alert)
   function validateParameters(): boolean {
     const errs: typeof fieldErrors = {};
     if (!examData.title.trim()) errs.title = "Exam title is required.";
@@ -317,7 +311,8 @@ function ExamBuilderContent() {
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   }
-    // ✅ Add a new blank: appends [n] marker to the sentence + creates its answer row
+
+  // ✅ Fill-blank helpers
   function addBlankRow() {
     const nums = extractBlankNumbers(form.blanksText || "");
     const next = nums.length ? Math.max(...nums.map(Number)) + 1 : 1;
@@ -329,7 +324,6 @@ function ExamBuilderContent() {
     });
   }
 
-  // ✅ Delete a blank: removes the answer row AND its [n] marker from the sentence
   function deleteBlankRow(number: string) {
     const newText = (form.blanksText || "")
       .replace(new RegExp(`\\[\\s*${number}\\s*\\]`, "g"), "")
@@ -342,6 +336,69 @@ function ExamBuilderContent() {
       answerKey: (form.answerKey || []).filter((r) => String(r.number) !== number),
     });
   }
+
+  // ✅ Validation: question text always; answers for types that need them
+  function validateQuestionForm(): string | null {
+    if (!form.text.trim()) return "Question text prompt is required.";
+    switch (currentFormat) {
+      case "mcq": {
+        const opts = form.mcqOptions || [];
+        if (opts.filter((o) => o.trim()).length < 2) return "Please provide at least two answer choices.";
+        if (opts.some((o) => !o.trim())) return "Please fill in every answer choice (or delete the empty ones).";
+        return null;
+      }
+      case "multi_select": {
+        const opts = form.multiOptions || [];
+        if (opts.filter((o) => o.trim()).length < 2) return "Please provide at least two checkbox options.";
+        if (opts.some((o) => !o.trim())) return "Please fill in every checkbox option (or delete the empty ones).";
+        if (!(form.multiCorrect || []).some(Boolean)) return "Please tick at least one correct option.";
+        return null;
+      }
+      case "fill_blank": {
+        const nums = extractBlankNumbers(form.blanksText || "");
+        if (nums.length === 0) return "Add at least one blank marker like [1] in the template text.";
+        if (form.autoGrade !== false) {
+          const missing = nums.some(
+            (n) => !(form.answerKey || []).find((r) => String(r.number) === n && r.answer.trim())
+          );
+          if (missing) return "Fill in the answer key for every blank.";
+        }
+        return null;
+      }
+      case "matching": {
+        const left = form.matchLeft || [];
+        const right = form.matchRight || [];
+        if (left.filter((t) => t.trim()).length < 2 || right.filter((t) => t.trim()).length < 2)
+          return "Please provide at least two left items and two right items.";
+        if (left.some((t) => !t.trim()) || right.some((t) => !t.trim()))
+          return "Please fill in every match item (or delete the empty ones).";
+        if (!(form.matchAnswers || []).length) return "Please add the correct left → right mapping.";
+        return null;
+      }
+      case "ordering": {
+        const items = form.orderingItems || [];
+        if (items.filter((t) => t.trim()).length < 2) return "Please provide at least two sequence items.";
+        if (items.some((t) => !t.trim())) return "Please fill in every sequence item (or delete the empty ones).";
+        return null;
+      }
+      default:
+        return null;
+    }
+  }
+
+  function isFormDirty(): boolean {
+    if (form.text.trim()) return true;
+    switch (currentFormat) {
+      case "mcq": return (form.mcqOptions || []).some((o) => o.trim());
+      case "multi_select": return (form.multiOptions || []).some((o) => o.trim());
+      case "fill_blank": return Boolean((form.blanksText || "").trim());
+      case "matching":
+        return (form.matchLeft || []).some((t) => t.trim()) || (form.matchRight || []).some((t) => t.trim());
+      case "ordering": return (form.orderingItems || []).some((t) => t.trim());
+      default: return false;
+    }
+  }
+
   const handleCreatePart = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPartTitle.trim()) return;
@@ -374,26 +431,10 @@ function ExamBuilderContent() {
   };
 
   const buildQuestionFromForm = (): Question | null => {
-    if (!form.text.trim()) {
-      setQuestionError("Question text prompt is required.");
+    const err = validateQuestionForm();
+    if (err) {
+      setQuestionError(err);
       return null;
-    }
-    // ✅ Fill-blank validation: markers + complete answer key
-    if (currentFormat === "fill_blank") {
-      const nums = extractBlankNumbers(form.blanksText || "");
-      if (nums.length === 0) {
-        setQuestionError("Add at least one blank marker like [1] in the template text.");
-        return null;
-      }
-      if (form.autoGrade !== false) {
-        const missing = nums.some(
-          (n) => !(form.answerKey || []).find((r) => String(r.number) === n && r.answer.trim())
-        );
-        if (missing) {
-          setQuestionError("Fill in the answer key for every blank before continuing.");
-          return null;
-        }
-      }
     }
     setQuestionError("");
     return { ...form, id: editingQuestionId || Date.now().toString(), type: currentFormat };
@@ -421,24 +462,32 @@ function ExamBuilderContent() {
   };
 
   const handleAddSection = () => {
+    setSectionError("");
     let finalStaged = stagedQuestions;
-    if (form.text.trim()) {
+
+    if (isFormDirty()) {
+      const err = validateQuestionForm();
+      if (err) {
+        setQuestionError(err);
+        return;
+      }
       const q: Question = { ...form, id: editingQuestionId || Date.now().toString(), type: currentFormat };
       if (editingSource === "part" && activePartId) {
         setParts((prev) =>
           prev.map((part) =>
             part.id === activePartId
-              ? { ...part, questions: part.questions.map((e) => (e.id === q.id ? q : e)) }
+              ? { ...part, questions: part.questions.map((e2) => (e2.id === q.id ? q : e2)) }
               : part
           )
         );
       } else {
         finalStaged =
           editingSource === "staged"
-            ? stagedQuestions.map((e) => (e.id === q.id ? q : e))
+            ? stagedQuestions.map((e2) => (e2.id === q.id ? q : e2))
             : [...stagedQuestions, q];
       }
     }
+
     if (finalStaged.length === 0 && !activePartId) {
       setSectionError("Add at least one question before saving the section.");
       return;
@@ -457,7 +506,6 @@ function ExamBuilderContent() {
     setEditingQuestionId(null);
     setEditingSource(null);
     setForm(blankQuestion("mcq"));
-    setSectionError("");
     setQuestionError("");
   };
 
@@ -523,9 +571,8 @@ function ExamBuilderContent() {
   const countTotalQuestions = () =>
     parts.reduce((acc, part) => acc + part.questions.length, 0) + stagedQuestions.length;
 
-  // ✅ Save with double-click protection + inline error (no alert)
   const handleSaveExam = async () => {
-    if (saving) return; // ✅ block rapid double clicks
+    if (saving) return;
     setSaveError("");
 
     const finalParts = parts.filter((p) => p.questions.length > 0);
@@ -612,7 +659,7 @@ function ExamBuilderContent() {
           </div>
         </Card>
 
-        {/* STEP 1: EXAM PARAMETERS */}
+        {/* STEP 1 */}
         {step === 1 && (
           <Card>
             <CardContent className="space-y-5">
@@ -776,7 +823,7 @@ function ExamBuilderContent() {
           </Card>
         )}
 
-        {/* STEP 2: SECTIONS & QUESTION BUILDER */}
+        {/* STEP 2 */}
         {step === 2 && (
           <div className="space-y-6">
             {/* SECTION CREATOR */}
@@ -849,7 +896,7 @@ function ExamBuilderContent() {
               </CardContent>
             </Card>
 
-            {/* QUESTION BUILDER AREA */}
+            {/* QUESTION BUILDER */}
             {!activePartId ? (
               <Card className="border-dashed p-12 text-center space-y-3">
                 <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center mx-auto border border-slate-200">
@@ -871,7 +918,7 @@ function ExamBuilderContent() {
                       <Badge variant="info">{QUESTION_TYPE_LABELS[currentFormat]}</Badge>
                     </div>
 
-                    {/* MARKS + MEDIA GRID */}
+                    {/* MARKS + MEDIA */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -1004,7 +1051,7 @@ function ExamBuilderContent() {
                       <FieldError message={questionError} />
                     </div>
 
-                    {/* 1. MCQ */}
+                    {/* MCQ */}
                     {currentFormat === "mcq" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -1066,7 +1113,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* 2. MULTI SELECT */}
+                    {/* MULTI SELECT */}
                     {currentFormat === "multi_select" && (
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -1132,7 +1179,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* 3. TRUE / FALSE */}
+                    {/* TRUE / FALSE */}
                     {currentFormat === "true_false" && (
                       <div className="space-y-2">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -1165,7 +1212,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* 4. SHORT ANSWER */}
+                    {/* SHORT ANSWER */}
                     {currentFormat === "short_answer" && (
                       <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                         <div className="flex items-start gap-3">
@@ -1186,25 +1233,23 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* 5. LONG QUESTION */}
+                    {/* LONG */}
                     {currentFormat === "long_answer" && (
                       <p className="text-xs text-slate-400 italic">
                         Students will respond in a free-form long-answer text box. No extra configuration needed.
                       </p>
                     )}
 
-                    {/* 6. CODING */}
+                    {/* CODING */}
                     {currentFormat === "coding" && (
                       <p className="text-xs text-slate-400 italic">
                         Students will respond in a free-form code box. No language, starter code, or test cases are configured here.
                       </p>
                     )}
 
-                    {/* ✅ 7. FILL IN THE BLANK — [n] markers only, auto-synced answer key */}
-                                        
+                    {/* FILL IN THE BLANK */}
                     {currentFormat === "fill_blank" && (
                       <div className="space-y-4">
-                        {/* 1. Template text */}
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Template Text (mark each blank as [1], [2], [3]…)
@@ -1234,7 +1279,7 @@ function ExamBuilderContent() {
                           </p>
                         </div>
 
-                        {/* 2. Choices / Hints (optional) */}
+                        {/* Choices / Hints */}
                         <div>
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Answer Choices / Hints (optional — shown to students)
@@ -1285,14 +1330,14 @@ function ExamBuilderContent() {
                           </p>
                         </div>
 
-                        {/* 3. Answer Key */}
+                        {/* Answer Key */}
                         <div className="space-y-2">
                           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                             Answer Key (one correct answer per blank)
                           </label>
                           {(form.answerKey || []).length === 0 ? (
                             <p className="text-xs text-slate-400 italic">
-                              No blanks yet — type [1] in the sentence or click “+ Add Blank”.
+                              No blanks yet — type [1] in the sentence or click "+ Add Blank".
                             </p>
                           ) : (
                             (form.answerKey || []).map((row, i) => (
@@ -1351,13 +1396,13 @@ function ExamBuilderContent() {
                             + Add Blank
                           </button>
                           <p className="text-[11px] text-slate-400">
-                            “+ Add Blank” inserts a new [n] marker at the end of your sentence — move it
-                            into place as needed. Deleting a row also removes its marker.
+                            "+ Add Blank" inserts a new [n] marker at the end of your sentence — move it into place as needed. Deleting a row also removes its marker.
                           </p>
                         </div>
                       </div>
                     )}
-                    {/* 8. MATCHING PAIRS */}
+
+                    {/* MATCHING */}
                     {currentFormat === "matching" && (
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -1485,7 +1530,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* 9. ORDERING */}
+                    {/* ORDERING */}
                     {currentFormat === "ordering" && (
                       <div className="space-y-2.5">
                         <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -1553,7 +1598,7 @@ function ExamBuilderContent() {
                       </div>
                     )}
 
-                    {/* NEXT QUESTION / ADD SECTION CONTROLS */}
+                    {/* CONTROLS */}
                     <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
                       {sectionError && (
                         <p className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-rose-600">
@@ -1626,7 +1671,7 @@ function ExamBuilderContent() {
               </Card>
             )}
 
-            {/* ALL SAVED SECTIONS SUMMARY */}
+            {/* SAVED SECTIONS SUMMARY */}
             <Card>
               <CardContent className="space-y-5">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-3">
@@ -1727,7 +1772,7 @@ function ExamBuilderContent() {
                   </div>
                 )}
 
-                {/* ✅ SAVE CONTROLS with inline error */}
+                {/* SAVE CONTROLS */}
                 <div className="flex justify-end items-center gap-2.5 pt-5 border-t border-slate-100">
                   {saveError && (
                     <p className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
@@ -1747,7 +1792,7 @@ function ExamBuilderContent() {
         )}
       </main>
 
-      {/* CANCEL / DISCARD CONFIRMATION MODAL */}
+      {/* CANCEL / DISCARD MODAL */}
       <Dialog open={cancelConfirm.open} onClose={closeCancelConfirmation}>
         <DialogHeader
           title={
@@ -1794,7 +1839,7 @@ function ExamBuilderContent() {
         </div>
       </Dialog>
 
-      {/* DELETE QUESTION CONFIRMATION MODAL */}
+      {/* DELETE MODAL */}
       <Dialog open={!!deleteConfirm} onClose={closeDeleteConfirmation}>
         <DialogHeader title="Delete this question?" onClose={closeDeleteConfirmation} />
         <div className="px-6 py-5 space-y-5">

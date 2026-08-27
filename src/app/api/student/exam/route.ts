@@ -27,7 +27,9 @@ export async function GET(req: NextRequest) {
     .select({
       id: exams.id, title: exams.title, status: exams.status, isPaused: exams.isPaused,
       durationMinutes: exams.durationMinutes, startTime: exams.startTime,
-      departmentName: departments.name, subjectName: subjects.name,
+      totalQuestions: exams.totalQuestions,
+      pausedAt: exams.pausedAt, pausedTotalSeconds: exams.pausedTotalSeconds,
+      departmentName: departments.name, subjectName: subjects.name,parts: exams.parts,
     })
     .from(exams)
     .leftJoin(departments, eq(exams.departmentId, departments.id))
@@ -41,15 +43,34 @@ export async function GET(req: NextRequest) {
     .where(and(eq(examStudents.id, requestId), eq(examStudents.examId, exam.id)));
   if (!student || student.status !== "approved")
     return NextResponse.json({ error: "Not approved" }, { status: 403 });
+
+    // ✅ Count sections for the waiting room
+  const totalSections = (
+    await db
+      .select({ id: examSections.id })
+      .from(examSections)
+      .where(eq(examSections.examId, exam.id))
+  ).length;
+
+  // ✅ Even before start, return the exam meta (waiting room reads it from this 409 body)
   if (exam.status !== "in_progress")
-    return NextResponse.json({ error: "Exam not started" }, { status: 409 });
+    return NextResponse.json(
+      {
+        error: "Exam not started",
+        title: exam.title,
+        department: exam.departmentName || "",
+        subject: exam.subjectName || "",
+        durationMinutes: exam.durationMinutes,
+        totalQuestions: exam.totalQuestions ?? 0,
+        totalSections,
+      },
+      { status: 409 }
+    );
 
   if (!student.startedAt)
     await db.update(examStudents).set({ startedAt: new Date() }).where(eq(examStudents.id, student.id));
 
-  const totalSeconds = (exam.durationMinutes || 60) * 60;
-  const elapsed = exam.startTime ? Math.floor((Date.now() - new Date(exam.startTime).getTime()) / 1000) : 0;
-    let secondsRemaining: number | null = null;
+  let secondsRemaining: number | null = null;
   if (exam.status === "in_progress" && exam.startTime) {
     const total = (exam.durationMinutes || 60) * 60;
     const now = Date.now();
@@ -83,6 +104,35 @@ export async function GET(req: NextRequest) {
   const questionsByPage = new Map<string, any[]>();
   for (const q of questionRows as any[]) { const l = questionsByPage.get(q.pageId) ?? []; l.push(q); questionsByPage.set(q.pageId, l); }
 
+    // ✅ Read fill-blank definitions (template + choices) from the teacher's saved parts
+  const partsQuestions = (((exam as any).parts ?? []) as any[]).flatMap((p) => p?.questions ?? []);
+  const fillDefByText = new Map<string, any>();
+  for (const pq of partsQuestions) {
+    const key = String(pq?.text ?? "").trim();
+    if (key) fillDefByText.set(key, pq);
+  }
+
+  function buildFillBlank(def: any) {
+    const rawText = String(def?.blanksText ?? "");
+    const segments: string[] = [];
+    const blanks: { id: string }[] = [];
+    const re = /\[\s*(\d+)\s*\]/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(rawText))) {
+      segments.push(rawText.slice(last, m.index));
+      blanks.push({ id: m[1] }); // ✅ id = marker number
+      last = m.index + m[0].length;
+    }
+    segments.push(rawText.slice(last));
+    return {
+      segments,
+      blanks,
+      choices: Array.isArray(def?.blankChoices)
+        ? def.blankChoices.filter((c: string) => String(c).trim())
+        : [],
+    };
+  }
   const sections = sectionRows.map((section: any) => {
     const pages = pagesBySection.get(section.id) ?? [];
     const questions = pages.flatMap((p) => questionsByPage.get(p.id) ?? []).map((q: any) => {
@@ -100,8 +150,18 @@ export async function GET(req: NextRequest) {
             .map((o, i) => ({ id: o.id, label: String.fromCharCode(65 + i), text: o.optionText })),
         };
       }
-      if (servedType === "fill_blank")
-        return { ...base, segments: payload.segments ?? [], blanks: (payload.blanks ?? []).map((b: any) => ({ id: b.id })) };
+      // ✅ Pass choices through so students see the hints box
+             if (servedType === "fill_blank") {
+        const def = fillDefByText.get(String(q.questionText ?? "").trim());
+        const built = def
+          ? buildFillBlank(def)
+          : {
+              segments: payload.segments ?? [],
+              blanks: (payload.blanks ?? []).map((b: any) => ({ id: String(b.id).replace(/^b/, "") })),
+              choices: payload.blankChoices ?? [],
+            };
+        return { ...base, ...built };
+      }
       if (servedType === "matching")
         return { ...base, left: payload.left ?? [], right: payload.right ?? [] };
       if (servedType === "ordering")

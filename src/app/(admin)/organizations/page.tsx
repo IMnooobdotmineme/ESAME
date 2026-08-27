@@ -11,7 +11,12 @@ import {
   Ban,
   Trash2,
   Eye,
+  Building2,
+  Globe,
+  MapPin,
+  Home,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -26,6 +31,10 @@ interface OrganizationSummary {
   name: string;
   email: string;
   status: OrgStatus;
+  orgType: string | null;
+  country: string | null;
+  region: string | null;
+  address: string | null;
   teachersCount: number;
   liveExaminers: number;
   liveExams: number;
@@ -38,14 +47,35 @@ const STATUS_VARIANT: Record<OrgStatus, "success" | "warning" | "danger" | "neut
 
 const STATUS_TABS: StatusFilter[] = ["All", "Active", "Suspended"];
 
+// ✅ Small info tile for org profile details
+function OrgInfo({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | null;
+}) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2">
+      <Icon size={13} className="text-sky-500 mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</p>
+        <p className="text-xs font-medium text-navy-900 truncate" title={value || undefined}>
+          {value || "—"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminOrganizationsPage() {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
 
-  // Delete is a two-step confirmation: step 1 asks to confirm, step 2 is the
-  // final "are you absolutely sure" check before anything is removed.
   const [deleteTarget, setDeleteTarget] = useState<OrganizationSummary | null>(null);
   const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
   const [actionLoading, setActionLoading] = useState(false);
@@ -79,7 +109,6 @@ export default function AdminOrganizationsPage() {
 
   async function updateStatus(id: string, nextStatus: OrgStatus) {
     const previous = [...organizations];
-    // Optimistic update
     setOrganizations((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: nextStatus } : o))
     );
@@ -222,6 +251,14 @@ export default function AdminOrganizationsPage() {
                     {org.email && (
                       <p className="text-xs text-slate-400 mt-0.5">{org.email}</p>
                     )}
+                  </div>
+
+                  {/* ✅ NEW: Org profile details from sign-up */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <OrgInfo icon={Building2} label="Org Type" value={org.orgType} />
+                    <OrgInfo icon={Globe} label="Country" value={org.country} />
+                    <OrgInfo icon={MapPin} label="Region" value={org.region} />
+                    <OrgInfo icon={Home} label="Address" value={org.address} />
                   </div>
 
                   <div className="grid grid-cols-3 gap-3 pt-1">

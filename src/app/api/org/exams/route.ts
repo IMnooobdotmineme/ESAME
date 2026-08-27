@@ -28,6 +28,7 @@ type ExamListRow = {
   endTime: Date | null;
   durationMinutes: number;
   status: "scheduled" | "in_progress" | "completed" | "locked";
+  gradingStatus: "in_progress" | "complete" | null;
   totalQuestions: number;
   totalPoints: number;
   createdAt: Date;
@@ -83,7 +84,17 @@ function mapExamStatus(status: ExamListRow["status"]): ExamStatus {
       return "Scheduled";
   }
 }
-
+// ✅ Org status follows the teacher's review status for ended exams
+function mapOrgDisplayStatus(
+  sessionStatus: ExamListRow["status"],
+  gradingStatus: ExamListRow["gradingStatus"]
+): ExamStatus {
+  if (sessionStatus === "locked") return "Locked";
+  if (sessionStatus === "scheduled") return "Scheduled";
+  if (sessionStatus === "in_progress") return "In Progress";
+  // exam ended → mirror the teacher's grading dropdown
+  return gradingStatus === "complete" ? "Completed" : "In Progress";
+}
 function mapQuestionType(type: QuestionRow["type"]) {
   switch (type) {
     case "multiple_select":
@@ -207,6 +218,7 @@ async function loadExamRows(orgId: string, examId?: string) {
       endTime: exams.endTime,
       durationMinutes: exams.durationMinutes,
       status: exams.status,
+      gradingStatus: exams.gradingStatus,
       totalQuestions: exams.totalQuestions,
       totalPoints: exams.totalPoints,
       createdAt: exams.createdAt,
@@ -345,7 +357,7 @@ function buildExamPayload(
     date: formatDate(exam.scheduledDate ?? exam.startTime ?? exam.createdAt),
     time: formatTimeRange(exam.startTime, exam.endTime),
     duration: formatDuration(exam.durationMinutes),
-    status: mapExamStatus(exam.status),
+    status: mapOrgDisplayStatus(exam.status, exam.gradingStatus),
     totalQuestions: exam.totalQuestions || questions.length,
     totalStudents: students.length,
     questions,

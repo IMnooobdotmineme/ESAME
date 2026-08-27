@@ -447,16 +447,26 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     }
   },
 
-  setExamGradingStatus: async (examId, status) => {
+    setExamGradingStatus: async (examId: string, status: GradingStatus) => {
+    // ✅ DB uses underscore ("in_progress" | "complete")
+    // ✅ Store uses hyphen ("in-progress" | "complete")
+    const dbStatus = status === "complete" ? "complete" : "in_progress";
+    const storeStatus: GradingStatus = status === "complete" ? "complete" : "in-progress";
+
     try {
-      await fetch(`/api/teacher/grading/${examId}/set-status`, {
+      await fetch(`/api/teacher/exams/${examId}/grading-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: dbStatus }),
       });
-      await get().fetchExams(true);
-    } catch (error) {
-      console.error("setExamGradingStatus error:", error);
+    } catch {
+      // network error — still update locally so the UI doesn't feel broken
     }
+
+    set((state) => ({
+      exams: state.exams.map((e) =>
+        e.id === examId ? { ...e, gradingStatus: storeStatus } : e
+      ),
+    }));
   },
 }));

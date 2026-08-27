@@ -33,6 +33,9 @@ export async function GET() {
         email: organizations.email,
         status: organizations.status,
         orgType: organizations.orgType,
+        country: organizations.country,
+        region: organizations.region,
+        address: organizations.address,
         createdAt: organizations.createdAt,
       })
       .from(organizations)
@@ -106,6 +109,11 @@ export async function GET() {
         code: generateOrgCode(org.name, org.id),
         email: org.email,
         status: (org.status === "suspended" ? "Suspended" : "Active") as "Active" | "Suspended",
+        // ✅ Org profile details from sign-up / settings
+        orgType: org.orgType ?? null,
+        country: org.country ?? null,
+        region: org.region ?? null,
+        address: org.address ?? null,
         teachersCount: orgTeachers.length,
         liveExaminers,
         liveExams: orgLiveExams.length,
@@ -122,6 +130,7 @@ export async function GET() {
   }
 }
 
+// PATCH and DELETE handlers stay EXACTLY the same as before
 export async function PATCH(req: Request) {
   try {
     const admin = await requireAdminSession();
@@ -131,7 +140,7 @@ export async function PATCH(req: Request) {
 
     const body = await req.json();
     const orgId = String(body.orgId ?? "").trim();
-    const requestedStatus = String(body.status ?? "").trim(); // "Active" | "Suspended"
+    const requestedStatus = String(body.status ?? "").trim();
 
     if (!orgId || (requestedStatus !== "Active" && requestedStatus !== "Suspended")) {
       return NextResponse.json(
@@ -160,41 +169,30 @@ export async function PATCH(req: Request) {
       .set({ status: newDbStatus, updatedAt: new Date() })
       .where(eq(organizations.id, orgId));
 
-    // Fetch teachers to notify
     const teacherRows = await db
       .select({ id: teachers.id, email: teachers.email, name: teachers.name })
       .from(teachers)
       .where(and(eq(teachers.orgId, orgId), ne(teachers.status, "deleted")));
 
     if (newDbStatus === "suspended") {
-      // 1. Send email to Org
       sendOrgSuspendedEmail(org.email, org.name).catch((err) =>
         console.error("sendOrgSuspendedEmail error:", err)
       );
-
-      // 2. Send email to all teachers under this org
       for (const t of teacherRows) {
         sendTeacherOrgSuspendedEmail(t.email, org.name).catch((err) =>
           console.error("sendTeacherOrgSuspendedEmail error:", err)
         );
       }
-
-      // 3. Log activity (sets group="user", severity, actorLabel, orgLabel from the catalog)
       await logOrgSuspended(org.id, org.name, admin.userId);
     } else {
-      // 1. Send email to Org
       sendOrgActivatedEmail(org.email, org.name).catch((err) =>
         console.error("sendOrgActivatedEmail error:", err)
       );
-
-      // 2. Send email to all teachers under this org
       for (const t of teacherRows) {
         sendTeacherOrgActivatedEmail(t.email, org.name).catch((err) =>
           console.error("sendTeacherOrgActivatedEmail error:", err)
         );
       }
-
-      // 3. Log activity
       await logOrgActivated(org.id, org.name, admin.userId);
     }
 
@@ -241,29 +239,23 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Organization not found." }, { status: 404 });
     }
 
-    // Load all teachers belonging to this org before deleting
     const teacherRows = await db
       .select({ id: teachers.id, email: teachers.email, name: teachers.name })
       .from(teachers)
       .where(eq(teachers.orgId, orgId));
 
-    // Send deletion email to Org
     sendOrgDeletedEmail(org.email, org.name).catch((err) =>
       console.error("sendOrgDeletedEmail error:", err)
     );
 
-    // Send deletion email to all teachers
     for (const t of teacherRows) {
       sendTeacherOrgDeletedEmail(t.email, org.name).catch((err) =>
         console.error("sendTeacherOrgDeletedEmail error:", err)
       );
     }
 
-    // Log activity BEFORE deleting, so entityId still points at a row that (until this
-    // request completes) actually exists
     await logOrgDeleted(org.id, org.name, admin.userId);
 
-    // Delete organization (cascades to all child records)
     await db.delete(organizations).where(eq(organizations.id, orgId));
 
     return NextResponse.json({ ok: true });

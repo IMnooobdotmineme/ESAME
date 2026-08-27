@@ -23,7 +23,6 @@ function normalizeAvatar(avatarUrl: string | null): string | null {
     throw new Error("Profile image is too large. Please crop or choose a smaller image.");
   }
 
-  // Stored as-is (data URL) directly in the database — no filesystem writes.
   return avatarUrl;
 }
 
@@ -40,6 +39,10 @@ export async function GET() {
       email: organizations.email,
       description: organizations.description,
       avatarUrl: organizations.avatarUrl,
+      orgType: organizations.orgType,
+      country: organizations.country,
+      region: organizations.region,
+      address: organizations.address,
     })
     .from(organizations)
     .where(eq(organizations.id, session.userId));
@@ -59,6 +62,10 @@ export async function PUT(req: Request) {
   const name = String(body.name ?? "").trim();
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const avatarUrl = typeof body.avatarUrl === "string" ? body.avatarUrl.trim() : null;
+  const orgType = typeof body.orgType === "string" ? body.orgType.trim() : "";
+  const country = typeof body.country === "string" ? body.country.trim() : "";
+  const region = typeof body.region === "string" ? body.region.trim() : "";
+  const address = typeof body.address === "string" ? body.address.trim() : "";
 
   if (!name) {
     return NextResponse.json({ error: "Organization name is required." }, { status: 400 });
@@ -80,6 +87,10 @@ export async function PUT(req: Request) {
       name,
       description: description || null,
       avatarUrl: storedAvatarUrl,
+      orgType: orgType || null,
+      country: country || null,
+      region: region || null,
+      address: address || null,
       updatedAt: new Date(),
     })
     .where(eq(organizations.id, session.userId))
@@ -89,6 +100,10 @@ export async function PUT(req: Request) {
       email: organizations.email,
       description: organizations.description,
       avatarUrl: organizations.avatarUrl,
+      orgType: organizations.orgType,
+      country: organizations.country,
+      region: organizations.region,
+      address: organizations.address,
     });
 
   return NextResponse.json({ ok: true, org: updated ?? null });

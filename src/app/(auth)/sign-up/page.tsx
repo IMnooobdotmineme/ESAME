@@ -1,13 +1,53 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { useRouter } from "next/navigation"; // Added router import
+import { useRouter } from "next/navigation";
 
-// Suggestion data — combobox still shows these as suggestions,
-// but the user is free to type any value they want.
-const countries = ["Afghanistan", "Cambodia", "Canada", "France", "United Kingdom", "United States"];
-const regions = ["California", "Kabul", "Paris", "Phnom Penh", "Texas", "London"];
-const orgTypes = ["High School", "University", "Primary School", "Language Center", "Tech Institute"];
+// ✅ Real-world countries (ISO standard names) — search filters these
+const countries = [
+  "Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia",
+  "Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin",
+  "Bhutan","Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi",
+  "Cabo Verde","Cambodia","Cameroon","Canada","Central African Republic","Chad","Chile","China","Colombia",
+  "Comoros","Congo (DRC)","Congo (Republic)","Costa Rica","Côte d'Ivoire","Croatia","Cuba","Cyprus","Czech Republic",
+  "Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea",
+  "Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana",
+  "Greece","Grenada","Guatemala","Guinea","Guinea-Bissau","Guyana","Haiti","Honduras","Hungary","Iceland",
+  "India","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kazakhstan",
+  "Kenya","Kiribati","Kosovo","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya",
+  "Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands",
+  "Mauritania","Mauritius","Mexico","Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique",
+  "Myanmar","Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria","North Korea",
+  "North Macedonia","Norway","Oman","Pakistan","Palau","Palestine","Panama","Papua New Guinea","Paraguay","Peru",
+  "Philippines","Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saint Kitts and Nevis","Saint Lucia",
+  "Saint Vincent and the Grenadines","Samoa","San Marino","São Tomé and Príncipe","Saudi Arabia","Senegal","Serbia",
+  "Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa","South Korea",
+  "South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania",
+  "Thailand","Timor-Leste","Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda",
+  "Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay","Uzbekistan","Vanuatu","Vatican City",
+  "Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"
+];
+
+// ✅ Real-world regions (provinces, states, cities) — search filters these
+const regions = [
+  "Phnom Penh","Siem Reap","Battambang","Kampong Cham","Kampong Chhnang","Kampong Speu","Kampong Thom","Kampot",
+  "Kandal","Kep","Koh Kong","Kratie","Mondulkiri","Oddar Meanchey","Pailin","Preah Sihanouk","Preah Vihear",
+  "Pursat","Ratanakiri","Sihanoukville","Stung Treng","Svay Rieng","Takéo","Tbong Khmum",
+  "California","Texas","New York","Florida","Illinois","Pennsylvania","Ohio","Georgia","Washington","Massachusetts",
+  "Arizona","Colorado","Michigan","Virginia","Ontario","Quebec","British Columbia","Alberta","Manitoba",
+  "England","Scotland","Wales","Northern Ireland","London","Manchester","Birmingham","Liverpool",
+  "Île-de-France","Provence-Alpes-Côte d'Azur","Auvergne-Rhône-Alpes","Paris","Lyon","Marseille","Toulouse","Nice",
+  "Bavaria","Berlin","Hamburg","North Rhine-Westphalia","Saxony","Baden-Württemberg",
+  "Tokyo","Osaka","Kyoto","Hokkaido","Fukuoka","Kanagawa",
+  "Beijing","Shanghai","Guangdong","Sichuan","Zhejiang","Jiangsu"
+];
+
+// ✅ Organization types — user can type any, or pick a suggestion
+const orgTypes = [
+  "High School","University","Primary School","Middle School","Secondary School",
+  "Language Center","Tech Institute","Vocational School","Community College",
+  "Training Center","Research Institute","Corporate Training","Government Agency","Non-Profit Organization"
+];
 
 type Field = "country" | "region" | "orgType";
 
@@ -73,11 +113,11 @@ function Combobox({
       </div>
 
       {isOpen && suggestions.length > 0 && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-[#D5DEEF] rounded-xl shadow-lg shadow-[#395886]/10 p-2 space-y-0.5 max-h-48 overflow-y-auto">
+        <div className="absolute z-20 mt-1 w-full bg-white border border-[#D5DEEF] rounded-xl shadow-lg shadow-[#395886]/10 p-2 space-y-0.5 max-h-56 overflow-y-auto">
           <p className="px-3 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9FAFCB]">
-            Suggestions
+            {field === "country" ? `${suggestions.length} countries match` : "Suggestions"}
           </p>
-          {suggestions.map((item) => (
+          {suggestions.slice(0, 50).map((item) => (
             <div
               key={item}
               onMouseDown={(e) => {
@@ -89,13 +129,18 @@ function Combobox({
               {item}
             </div>
           ))}
+          {suggestions.length > 50 && (
+            <p className="px-3 py-1.5 text-[11px] text-[#9FAFCB]">
+              + {suggestions.length - 50} more — keep typing to narrow
+            </p>
+          )}
         </div>
       )}
 
       {isOpen && suggestions.length === 0 && value && (
         <div className="absolute z-20 mt-1 w-full bg-white border border-[#D5DEEF] rounded-xl shadow-lg shadow-[#395886]/10 p-3">
           <p className="text-xs text-[#9FAFCB]">
-            No matches — <span className="text-[#395886] font-medium">"{value}"</span> will be used as entered.
+            No matches — <span className="text-[#395886] font-medium">&quot;{value}&quot;</span> will be used as entered.
           </p>
         </div>
       )}
@@ -104,7 +149,7 @@ function Combobox({
 }
 
 export default function OrganizationSignUp() {
-  const router = useRouter(); // Initialized router
+  const router = useRouter();
   
   const [formData, setFormData] = useState({
     orgName: "",
@@ -116,18 +161,12 @@ export default function OrganizationSignUp() {
     orgType: "",
   });
 
-  // Tab state (1 = Org Info, 2 = Account Setup)
   const [activeTab, setActiveTab] = useState<1 | 2>(1);
-
-  // Which combobox is currently showing its suggestion list
   const [openDropdown, setOpenDropdown] = useState<Field | null>(null);
-
-  // Show/hide password toggle
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Timers so a click on a suggestion registers before blur closes the list
   const blurTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,7 +201,7 @@ export default function OrganizationSignUp() {
 
   const getSuggestions = (field: Field) => {
     const source = field === "country" ? countries : field === "region" ? regions : orgTypes;
-    const query = formData[field].toLowerCase();
+    const query = formData[field].toLowerCase().trim();
     if (!query) return source;
     return source.filter((item) => item.toLowerCase().includes(query));
   };
@@ -208,24 +247,18 @@ export default function OrganizationSignUp() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EDF1FA] via-[#F5F7FC] to-[#E4EAF7] py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-[50%] min-w-[350px] bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-[#395886]/10 border border-[#E7ECF7]">
-        {/* Back to website */}
-        <a
-          href="/#"
-          className="inline-flex items-center text-sm font-medium text-[#1F2A44]  mb-6"
-        >
+        <a href="/#" className="inline-flex items-center text-sm font-medium text-[#1F2A44] mb-6">
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           Back
         </a>
 
-        {/* Header */}
         <div className="text-center mb-6">
           <h2 className="text-3xl font-extrabold text-[#1F2A44] tracking-tight">Create Organization</h2>
           <p className="mt-2 text-sm text-[#7D8CAB]">Set up your workspace to get started.</p>
         </div>
 
-        {/* Tab progress indicators */}
         <div className="flex border-b border-[#E7ECF7] mb-8 select-none">
           <div
             className={`flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-colors ${
@@ -244,7 +277,6 @@ export default function OrganizationSignUp() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* TAB 1: Organization Info */}
           {activeTab === 1 && (
             <div className="space-y-5 animate-in fade-in duration-300">
               <div>
@@ -266,7 +298,7 @@ export default function OrganizationSignUp() {
                 field="orgType"
                 label="Organization Type"
                 required
-                placeholder="e.g. University, or type your own"
+                placeholder="Type your own, or pick from suggestions"
                 value={formData.orgType}
                 suggestions={getSuggestions("orgType")}
                 isOpen={openDropdown === "orgType"}
@@ -281,7 +313,7 @@ export default function OrganizationSignUp() {
                 field="country"
                 label="Country"
                 required
-                placeholder="Type to search or enter a country"
+                placeholder="Type to search 195 countries..."
                 value={formData.country}
                 suggestions={getSuggestions("country")}
                 isOpen={openDropdown === "country"}
@@ -295,7 +327,7 @@ export default function OrganizationSignUp() {
               <Combobox
                 field="region"
                 label="Region"
-                placeholder="Type to search or enter a region"
+                placeholder="State, province, or city"
                 value={formData.region}
                 suggestions={getSuggestions("region")}
                 isOpen={openDropdown === "region"}
@@ -337,7 +369,6 @@ export default function OrganizationSignUp() {
             </div>
           )}
 
-          {/* TAB 2: Account Setup */}
           {activeTab === 2 && (
             <div className="space-y-5 animate-in fade-in duration-300">
               <div>

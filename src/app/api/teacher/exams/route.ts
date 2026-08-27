@@ -8,6 +8,7 @@ import {
   departments,
   subjects,
   teachers,
+  organizations,
   studentExamAttempts,
   studentAnswers,
   examQuestions,
@@ -29,13 +30,15 @@ type ExamRow = {
   pausedTotalSeconds: number;
   scheduledDate: Date | null;
   endTime: Date | null;
-  startTime: Date | null; // ✅ FIX 1 — add startTime
+  startTime: Date | null;
   createdAt: Date;
   parts: unknown[];
   departmentId: string;
   subjectId: string;
   departmentName: string | null;
   subjectName: string | null;
+  teacherName: string | null;
+  orgName: string | null;
 };
 
 type StudentRow = typeof examStudents.$inferSelect;
@@ -54,6 +57,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const teacherId = session.userId;
+
+    // ✅ Auto-end any expired exam BEFORE building the response
+    const inProgress = await db
+      .select({ id: exams.id })
+      .from(exams)
+      .where(and(eq(exams.teacherId, teacherId), eq(exams.status, "in_progress")));
+    for (const e of inProgress) await autoEndExamIfExpired(e.id);
 
     const teacherExams: ExamRow[] = await db
       .select({
@@ -77,10 +87,14 @@ export async function GET(req: NextRequest) {
         subjectId: exams.subjectId,
         departmentName: departments.name,
         subjectName: subjects.name,
+        teacherName: teachers.name,
+        orgName: organizations.name,
       })
       .from(exams)
       .leftJoin(departments, eq(exams.departmentId, departments.id))
       .leftJoin(subjects, eq(exams.subjectId, subjects.id))
+      .leftJoin(teachers, eq(exams.teacherId, teachers.id))
+      .leftJoin(organizations, eq(exams.orgId, organizations.id))
       .where(eq(exams.teacherId, teacherId))
       .orderBy(desc(exams.createdAt));
 
@@ -176,6 +190,7 @@ export async function GET(req: NextRequest) {
           id: exam.id,
           title: exam.title,
           roomCode: exam.examCode === "DRAFT" ? "" : exam.examCode,
+          courseCode: exam.examCode === "DRAFT" ? "" : exam.examCode,
           durationMinutes: exam.durationMinutes,
           questionCount: exam.totalQuestions,
           status: exam.status,
@@ -189,10 +204,12 @@ export async function GET(req: NextRequest) {
           createdAt: exam.createdAt?.toISOString() || "",
           endedAt: exam.endTime ? exam.endTime.toISOString() : null,
           endTime: exam.endTime ? exam.endTime.toISOString() : null,
-          startedAt: exam.startTime ? exam.startTime.toISOString() : undefined, // ✅ FIX 3 — was `startTime: exams.startTime` (wrong schema reference)
+          startedAt: exam.startTime ? exam.startTime.toISOString() : undefined,
           startDate: exam.scheduledDate?.toISOString() || undefined,
           department: exam.departmentName || "",
           subject: exam.subjectName || "",
+          teacherName: exam.teacherName || "",
+          orgName: exam.orgName || "",
           parts: exam.parts || [],
           requests: studentRows.map((s: StudentRow) => {
             const attempt: AttemptRow | undefined = attemptByStudent.get(s.id);
@@ -219,7 +236,7 @@ export async function GET(req: NextRequest) {
               gradingStatus: attempt
                 ? attempt.gradingStatus === "complete"
                   ? ("complete" as const)
-                  : ("in-progress" as const)
+                  : ("in_progress" as const)
                 : undefined,
             };
           }),
@@ -245,12 +262,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const teacherId = session.userId;
-        // ✅ Auto-end any expired exam before building the response
-    const inProgress = await db
-      .select({ id: exams.id })
-      .from(exams)
-      .where(and(eq(exams.teacherId, teacherId), eq(exams.status, "in_progress")));
-    for (const e of inProgress) await autoEndExamIfExpired(e.id);
+
     const teacherRows = await db
       .select({ orgId: teachers.orgId })
       .from(teachers)
@@ -310,9 +322,6 @@ export async function POST(req: NextRequest) {
         status: "scheduled",
         isLaunched: false,
         isPaused: false,
-        // ✅ FIX 4 — removed the bogus `startTime: Date | null;` and `ndTime: Date | null;`
-        // (those were type annotations inside .values(), which is invalid JavaScript).
-        // startTime is written later by /start and /end routes.
       })
       .returning();
 

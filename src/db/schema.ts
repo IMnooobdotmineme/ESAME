@@ -88,6 +88,7 @@ export const organizations = pgTable("organizations", {
   description: text("description"),
   avatarUrl: text("avatar_url"),
   googleId: text("google_id").unique(),
+  
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

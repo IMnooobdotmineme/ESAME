@@ -175,28 +175,55 @@ function FillBlankInput({
   } catch {
     values = {};
   }
+  const choices: string[] = (question as any).choices || [];
 
   function setBlank(blankId: string, value: string) {
     const next = { ...values, [blankId]: value };
     onAnswer(question.id, JSON.stringify(next));
   }
 
+  // ✅ Accept both "1" and "b1" stored keys (old + new submissions)
+  const getVal = (blankId: string) => values[blankId] ?? values[`b${blankId}`] ?? "";
+
   return (
-    <p className="text-sm text-navy-900 leading-loose">
-      {question.segments.map((segment, i) => (
-        <React.Fragment key={i}>
-          {segment}
-          {i < question.blanks.length && (
-            <input
-              type="text"
-              value={values[question.blanks[i].id] ?? ""}
-              onChange={(e) => setBlank(question.blanks[i].id, e.target.value)}
-              className="inline-block w-28 mx-2 my-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-navy-900 text-center outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 align-middle"
-            />
-          )}
-        </React.Fragment>
-      ))}
-    </p>
+    <div className="space-y-3">
+      {/* ✅ Choices / Hints box shown to the student */}
+      {choices.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+            Choices — type the number or the word
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {choices.map((c, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 border border-sky-200 px-3 py-1 text-xs font-semibold text-sky-700"
+              >
+                <span className="w-4 h-4 rounded-full bg-sky-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {i + 1}
+                </span>
+                {c}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="text-sm text-navy-900 leading-loose">
+        {question.segments.map((segment, i) => (
+          <React.Fragment key={i}>
+            {segment}
+            {i < question.blanks.length && (
+              <input
+                type="text"
+                value={getVal(question.blanks[i].id)}
+                onChange={(e) => setBlank(question.blanks[i].id, e.target.value)}
+                className="inline-block w-28 mx-2 my-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-navy-900 text-center outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 align-middle"
+              />
+            )}
+          </React.Fragment>
+        ))}
+      </p>
+    </div>
   );
 }
 
