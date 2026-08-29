@@ -8,6 +8,7 @@ import {
   integer,
   boolean,
   jsonb,
+  date,
 } from "drizzle-orm/pg-core";
 
 // ---------- Enums ----------
@@ -431,3 +432,50 @@ export const proctorEvents = pgTable("proctor_events", {
   details: jsonb("details").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+// AI Projects (group chats like ChatGPT projects)
+export const aiProjects = pgTable("ai_projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  teacherId: uuid("teacher_id").references(() => teachers.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// AI Chats (conversations within projects or standalone)
+export const aiChats = pgTable("ai_chats", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  teacherId: uuid("teacher_id").references(() => teachers.id, { onDelete: "cascade" }).notNull(),
+  projectId: uuid("project_id").references(() => aiProjects.id, { onDelete: "set null" }),
+  title: text("title").default("New chat").notNull(),
+  isPinned: boolean("is_pinned").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// AI Messages (individual messages in chats)
+export const aiMessages = pgTable("ai_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  chatId: uuid("chat_id").references(() => aiChats.id, { onDelete: "cascade" }).notNull(),
+  role: text("role", { enum: ["user", "assistant"] }).notNull(),
+  content: text("content").notNull(),
+  attachments: jsonb("attachments"), // Array of { type, name, url, size }
+  provider: text("provider"), // "gemini", "groq", "openrouter"
+  model: text("model"),
+  tokensUsed: integer("tokens_used"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// AI Usage (per-teacher quota tracking)
+export const aiUsage = pgTable("ai_usage", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  teacherId: uuid("teacher_id").references(() => teachers.id, { onDelete: "cascade" }).notNull(),
+  date: date("date").notNull(),
+  requestCount: integer("request_count").default(0).notNull(),
+  tokenCount: integer("token_count").default(0).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
