@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Send, MessageSquare, Trash2, Sparkles, Paperclip, X,
@@ -88,8 +88,12 @@ function CodeBlock({ children, ...rest }: any) {
           {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <SyntaxHighlighter
-        language={lang || "text"}
+            {code.length > 5000 ? (
+        <pre className="overflow-x-auto p-4 text-xs text-slate-100">{code}</pre>
+      ) : (
+        <SyntaxHighlighter
+          language={lang || "text"}
+          
         style={oneDark}
         showLineNumbers
         lineNumberStyle={{ color: "#5b6472", fontSize: 11, minWidth: "2.25em" }}
@@ -97,7 +101,8 @@ function CodeBlock({ children, ...rest }: any) {
         codeTagProps={{ style: { fontSize: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" } }}
       >
         {code}
-      </SyntaxHighlighter>
+              </SyntaxHighlighter>
+      )}
     </div>
   );
 }
@@ -199,12 +204,15 @@ function UserBubble({ msg }: { msg: any }) {
           ))}
         </div>
       )}
-      {files.length > 0 && (
+            {files.length > 0 && (
         <div className="flex flex-wrap justify-end gap-2">
           {files.map((a: any, i: number) => (
-            <span key={a.name + i} className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
-              <Paperclip size={12} /> {a.name}
-            </span>
+            <div key={a.name + i} className="flex w-40 flex-col justify-between gap-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <p className="line-clamp-2 break-all text-sm text-slate-700">{a.name}</p>
+              <span className="w-fit rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                {String(a.name).split(".").pop()}
+              </span>
+            </div>
           ))}
         </div>
       )}
@@ -488,7 +496,8 @@ export default function AIAssistantPage() {
   const [listening, setListening] = useState(false);
     const [showJump, setShowJump] = useState(false);
     const [creatingProject, setCreatingProject] = useState(false);
-    const [speakingId, setSpeakingId] = useState<string | null>(null);
+      const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [editFromId, setEditFromId] = useState<string | null>(null);
   const [streamFor, setStreamFor] = useState<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -496,10 +505,24 @@ export default function AIAssistantPage() {
   const stickRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const streamRef = useRef("");
+    const streamRef = useRef("");
+  const rafPending = useRef(false);
+  const tokenCountRef = useRef(0);
   const streamingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const recRef = useRef<any>(null);
+// ---------- memoized assistant content (keeps the page fast) ----------
+const AssistantContent = memo(function AssistantContent({ content }: { content: string }) {
+  const ex = extractExamDraft(content);
+  return (
+    <>
+      <div className="md-body w-full">
+        <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(ex.clean)}</ReactMarkdown>
+      </div>
+      {ex.draft && <ExamDraftCard draft={ex.draft} />}
+    </>
+  );
+});
 
   useEffect(() => {
     fetch("/api/teacher/ai/chats").then((r) => r.json()).then((d) => setChats(d.chats || []));
@@ -606,7 +629,7 @@ export default function AIAssistantPage() {
     rec.start();
   }
 
-  async function runChat(userText: string, imageAtts: any[], baseHistory: Message[], displayAtts: any[] = []) {
+    async function runChat(userText: string, imageAtts: any[], baseHistory: Message[], displayAtts: any[] = [], editFromId: string | null = null) {
         setIsStreaming(true);
     streamingRef.current = true;
     stickRef.current = true;
@@ -637,6 +660,7 @@ export default function AIAssistantPage() {
           message: userText,
           attachments: imageAtts,
           projectId: expandedProjectId,
+          editFromId,
           history: baseHistory.map((m) => ({ role: m.role, content: m.content })),
         }),
       });
@@ -645,14 +669,23 @@ export default function AIAssistantPage() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) throw new Error("No response stream");
-
+      if (!response.ok) {
+        throw new Error(`Server error (${response.status}) — please try again.`);
+      }
       const handleLine = (line: string) => {
         if (!line.startsWith("data: ")) return;
         let json: any;
         try { json = JSON.parse(line.slice(6)); } catch { return; }
-        if (json.type === "token") {
+                    if (json.type === "token") {
           streamRef.current += json.text;
-          setStreamingText(streamRef.current);
+          tokenCountRef.current = (tokenCountRef.current || 0) + 1;
+          if (!rafPending.current && tokenCountRef.current % 3 === 0) {
+            rafPending.current = true;
+            requestAnimationFrame(() => {
+              rafPending.current = false;
+              setStreamingText(streamRef.current);
+            });
+          }
         } else if (json.type === "done") {
           gotDone = true;
           newChatId = json.chatId;
@@ -739,10 +772,12 @@ export default function AIAssistantPage() {
       .filter((a) => a.kind === "image")
       .map((a) => ({ type: "image", name: a.name, dataUrl: a.dataUrl }));
     const displayAtts = attachments.map((a) => ({ name: a.name, dataUrl: a.dataUrl }));
-    const base = messages;
+        const base = messages;
+    const editId = editFromId;
     setInput("");
     setAttachments([]);
-    await runChat(userText, imageAtts, base, displayAtts);
+    setEditFromId(null);
+    await runChat(userText, imageAtts, base, displayAtts, editId);
   }
 
   function regenerate() {
@@ -777,8 +812,9 @@ export default function AIAssistantPage() {
       restored.push({ id: crypto.randomUUID(), name: header, kind: "text", text });
     }
 
-    setAttachments(restored);
+        setAttachments(restored);
     setInput(userText);
+    setEditFromId(msg.id);
     inputRef.current?.focus();
   }
 
@@ -995,7 +1031,7 @@ export default function AIAssistantPage() {
               </button>
             </div>
 
-                        <div className="space-y-2 p-3">
+              <div className="space-y-2 p-3">
               {searchOpen ? (
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1008,6 +1044,30 @@ export default function AIAssistantPage() {
                     className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-8 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                   />
                   <button onClick={() => { setSearch(""); setSearchOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-navy-900"><X size={13} /></button>
+
+                  {/* ✅ quick-find dropdown — see old conversations instantly */}
+                  <div className="absolute left-0 right-0 top-11 z-50 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                    {(q ? searchResults : chats).slice(0, 30).map((c) => (
+                      <button
+                        key={c.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setActiveChatId(c.id);
+                          setSearch("");
+                          setSearchOpen(false);
+                        }}
+                        className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition ${
+                          activeChatId === c.id ? "bg-slate-200/70 font-medium text-navy-900" : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <MessageSquare size={13} className="shrink-0 text-slate-400" />
+                        <span className="flex-1 truncate">{c.title}</span>
+                      </button>
+                    ))}
+                    {(q ? searchResults : chats).length === 0 && (
+                      <p className="px-3 py-2 text-xs text-slate-400">No chats found.</p>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -1157,12 +1217,9 @@ export default function AIAssistantPage() {
                     <div className="flex justify-end">
                       <UserBubble msg={msg} />
                     </div>
-                  ) : (
-                    <div className="md-body w-full">
-                      <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(ex!.clean)}</ReactMarkdown>
-                    </div>
+                                    ) : (
+                    <AssistantContent content={msg.content} />
                   )}
-                  {ex?.draft && <ExamDraftCard draft={ex.draft} />}
                   <div className={msg.role === "user" ? "flex justify-end" : ""}>
                       <MsgActions msg={msg} index={i} alwaysShow={msg.role === "assistant" && i === lastAssistantIdx} />
                   </div>
