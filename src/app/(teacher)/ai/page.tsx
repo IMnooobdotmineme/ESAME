@@ -6,10 +6,13 @@ import {
   Plus, Send, MessageSquare, Trash2, Sparkles, Paperclip, X,
   FolderPlus, Folder, Loader2, PanelLeftClose, PanelLeftOpen,
   Search, SquarePen, ChevronDown, Copy, Check, Pencil, Square, RefreshCw,
-  FileText, Eye, Mic,
+    FileText, Eye, Mic, Pin, MoreHorizontal, ArrowDown, Volume2, Download,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Dialog, DialogHeader } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -35,57 +38,181 @@ const QUICK_PROMPTS = [
   "Explain photosynthesis in Khmer",
   "Show a Python example for reading a CSV file",
 ];
+const FOLLOWUPS = [
+  { label: "🌐 Translate to Khmer", prompt: "Translate your previous answer into Khmer." },
+  { label: "🧒 Explain simpler", prompt: "Explain your previous answer more simply, for a beginner." },
+  { label: "✂️ Summarize", prompt: "Summarize your previous answer in 3-5 bullet points." },
+  { label: "📝 Make a quiz", prompt: "Turn your previous answer into a 5-question quiz with answers." },
+];
+
+
+
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 
 // ---------- code block with language header + copy ----------
 function CodeBlock({ children, ...rest }: any) {
-  const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
   let lang = "";
+  let code = "";
   try {
     const codeEl = Array.isArray(children) ? children[0] : children;
     lang = String(codeEl?.props?.className || "").replace("language-", "").trim();
+    code = String(codeEl?.props?.children ?? "");
   } catch {}
+  if (!code) {
+    try { code = String(children ?? ""); } catch { code = ""; }
+  }
+
   return (
-    <div className="my-2 overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-700/60 bg-slate-800/80 px-3 py-1.5">
+    <div className="my-2 overflow-hidden rounded-xl border border-slate-700/60 bg-[#282c34]">
+      <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-3 py-1.5">
         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang || "code"}</span>
         <button
           type="button"
           onClick={() => {
-            navigator.clipboard.writeText(ref.current?.innerText ?? "");
+            navigator.clipboard.writeText(code);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-slate-700"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-white/10"
         >
           {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre ref={ref} {...rest} className="overflow-x-auto p-4 text-xs leading-5 text-slate-100">{children}</pre>
+      <SyntaxHighlighter
+        language={lang || "text"}
+        style={oneDark}
+        showLineNumbers
+        lineNumberStyle={{ color: "#5b6472", fontSize: 11, minWidth: "2.25em" }}
+        customStyle={{ margin: 0, padding: "0.9rem 0.75rem", background: "transparent", fontSize: 12, lineHeight: 1.7 }}
+        codeTagProps={{ style: { fontSize: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" } }}
+      >
+        {code}
+      </SyntaxHighlighter>
     </div>
   );
 }
-const MD_COMPONENTS = { pre: CodeBlock } as any;
-// ---------- user message with visible attachments ----------
+
+
+function TableBlock({ children, ...rest }: any) {
+  const ref = useRef<HTMLTableElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  function copyTable() {
+    const table = ref.current;
+    if (!table) return;
+
+    const rows = Array.from(table.querySelectorAll("tr")).map((tr) =>
+      Array.from((tr as HTMLTableRowElement).querySelectorAll("th,td")).map(
+        (cell) => (cell as HTMLElement).innerText.trim()
+      )
+    );
+
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const tsv = rows.map((r) => r.join("\t")).join("\n");
+    const html =
+      "<table>" +
+      rows
+        .map((r, i) => "<tr>" + r.map((c) => (i === 0 ? `<th>${esc(c)}</th>` : `<td>${esc(c)}</td>`)).join("") + "</tr>")
+        .join("") +
+      "</table>";
+
+    try {
+      navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([tsv], { type: "text/plain" }),
+        }),
+      ]);
+    } catch {
+      navigator.clipboard.writeText(tsv);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className="my-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Table</span>
+        <button
+          type="button"
+          onClick={copyTable}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 shadow-sm transition hover:text-navy-900"
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table ref={ref} {...rest} className="w-full min-w-[560px] border-collapse text-sm">
+          {children}
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const MD_COMPONENTS = {
+  pre: CodeBlock,
+  table: TableBlock,
+  thead: ({ children, ...props }: any) => (
+    <thead {...props} className="bg-slate-50">{children}</thead>
+  ),
+  tbody: ({ children, ...props }: any) => (
+    <tbody {...props} className="divide-y divide-slate-100 bg-white">{children}</tbody>
+  ),
+  tr: ({ children, ...props }: any) => (
+    <tr {...props} className="transition hover:bg-slate-50/70">{children}</tr>
+  ),
+  th: ({ children, ...props }: any) => (
+    <th {...props} className="border-b border-slate-200 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">{children}</th>
+  ),
+  td: ({ children, ...props }: any) => (
+    <td {...props} className="px-4 py-3 align-top text-sm text-slate-700">{children}</td>
+  ),
+} as any;
+
+
+// ---------- user bubble (white text on navy) ----------
 function UserBubble({ msg }: { msg: any }) {
   const imgs = (msg.attachments ?? []).filter((a: any) => a.dataUrl);
   const files = (msg.attachments ?? []).filter((a: any) => !a.dataUrl);
   const text = String(msg.content ?? "").split("\n\n--- Attached file:")[0];
   return (
-    <div className="flex flex-col items-end gap-2">
-      {(imgs.length > 0 || files.length > 0) && (
+    <div className="flex max-w-[80%] flex-col items-end gap-2">
+      {imgs.length > 0 && (
         <div className="flex flex-wrap justify-end gap-2">
-          {imgs.map((a: any, i: number) => (
-            <img key={i} src={a.dataUrl} alt={a.name} className="h-24 w-24 rounded-xl border border-white/20 object-cover" />
+                    {imgs.map((a: any, i: number) => (
+            <div key={a.name + i} className="h-28 w-28 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+              <img src={a.dataUrl} alt={a.name} className="h-full w-full rounded-xl object-cover" />
+            </div>
           ))}
+        </div>
+      )}
+      {files.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-2">
           {files.map((a: any, i: number) => (
-            <span key={i} className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
+            <span key={a.name + i} className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
               <Paperclip size={12} /> {a.name}
             </span>
           ))}
         </div>
       )}
-      {text.trim() && <p className="whitespace-pre-wrap text-sm">{text}</p>}
+      {text.trim() && (
+        <div className="rounded-3xl rounded-br-lg bg-navy-900 px-5 py-3 text-white shadow-sm">
+          <p className="whitespace-pre-wrap text-sm text-white">{text}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -102,7 +229,11 @@ function extractExamDraft(content: string): { clean: string; draft: any | null }
     return { clean, draft: null };
   }
 }
-
+function renderMarkdownText(text: string) {
+  return String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\\n/g, "\n");
+}
 // ---------- file helpers ----------
 function bufToBase64(buf: ArrayBuffer) {
   let bin = "";
@@ -174,8 +305,9 @@ function groupLabel(dateStr: string): string {
 }
 
 function groupChats(list: Chat[]) {
+    const sorted = [...list].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0) || +new Date(b.updatedAt) - +new Date(a.updatedAt));
   const groups: { label: string; items: Chat[] }[] = [];
-  for (const chat of list) {
+  for (const chat of sorted) {
     const label = groupLabel(chat.updatedAt);
     let g = groups.find((x) => x.label === label);
     if (!g) { g = { label, items: [] }; groups.push(g); }
@@ -280,7 +412,7 @@ function ExamDraftCard({ draft }: { draft: any }) {
 
   return (
     <>
-      <div className="mt-3 w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-3 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-sky-400 to-sky-600">
             <FileText size={16} className="text-white" />
@@ -338,6 +470,7 @@ export default function AIAssistantPage() {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -349,8 +482,16 @@ export default function AIAssistantPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [menuChatId, setMenuChatId] = useState<string | null>(null);
+  const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [showJump, setShowJump] = useState(false);
+    const [creatingProject, setCreatingProject] = useState(false);
+    const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [streamFor, setStreamFor] = useState<string | null>(null);
+  const activeChatIdRef = useRef<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollBoxRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -365,22 +506,40 @@ export default function AIAssistantPage() {
     fetch("/api/teacher/ai/projects").then((r) => r.json()).then((d) => setProjects(d.projects || []));
   }, []);
 
-  useEffect(() => {
+      useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+    stickRef.current = true; // ✅ open chats at the latest message (bottom), like ChatGPT/Qwen
+    setShowJump(false);
     if (!activeChatId) { setMessages([]); return; }
     fetch(`/api/teacher/ai/chats?chatId=${activeChatId}`)
       .then((r) => r.json())
-      .then((d) => setMessages(d.messages || []));
+      .then((d) => {
+        setMessages(d.messages || []);
+        requestAnimationFrame(() => {
+          const el = scrollBoxRef.current;
+          if (el) el.scrollTop = el.scrollHeight; // instant jump to bottom
+        });
+      });
   }, [activeChatId]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (stickRef.current) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
 
-  
+  // ✅ input auto-expands as you type
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }, [input]);
+
   function onScrollBox() {
     const el = scrollBoxRef.current;
     if (!el) return;
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    stickRef.current = near;
+    setShowJump(!near);
   }
 
   const q = search.trim().toLowerCase();
@@ -399,6 +558,29 @@ export default function AIAssistantPage() {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
   }
+    function toggleSpeak(msg: Message) {
+    try {
+      if (speakingId === msg.id) {
+        window.speechSynthesis.cancel();
+        setSpeakingId(null);
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const clean = msg.content
+        .replace(/```[\s\S]*?```/g, " (code block) ")
+        .replace(/[#*|>`_]/g, "")
+        .slice(0, 3000);
+            const u = new SpeechSynthesisUtterance(clean);
+      u.lang = /[\u1780-\u17FF]/.test(clean) ? "km-KH" : "en-US";
+      const match = window.speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith(u.lang.split("-")[0]));
+      if (match) u.voice = match;
+      u.onend = () => setSpeakingId(null);
+      u.onerror = () => setSpeakingId(null);
+      setSpeakingId(msg.id);
+      window.speechSynthesis.speak(u);
+    } catch {}
+  }
+
 
   function stopGeneration() {
     abortRef.current?.abort();
@@ -424,20 +606,24 @@ export default function AIAssistantPage() {
     rec.start();
   }
 
-    async function runChat(userText: string, imageAtts: any[], baseHistory: Message[], displayAtts: any[] = []) {
+  async function runChat(userText: string, imageAtts: any[], baseHistory: Message[], displayAtts: any[] = []) {
         setIsStreaming(true);
     streamingRef.current = true;
     stickRef.current = true;
+    try { window.speechSynthesis.cancel(); } catch {}
     setStreamingText("");
     streamRef.current = "";
     const controller = new AbortController();
     abortRef.current = controller;
-    const hadChat = !!activeChatId;
+        const hadChat = !!activeChatId;
+    const originKey = activeChatId ?? "new";
+    setStreamFor(originKey);
 
-        setMessages((prev) => [
+    setMessages((prev) => [
       ...prev,
       { id: `temp-u-${Date.now()}`, role: "user", content: userText, createdAt: new Date().toISOString(), attachments: displayAtts.length ? displayAtts : undefined },
     ]);
+
     let newChatId: string | null = null;
     let gotDone = false;
 
@@ -455,9 +641,25 @@ export default function AIAssistantPage() {
         }),
       });
 
+            refreshChats(); // ✅ sidebar re-orders immediately, no manual refresh
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) throw new Error("No response stream");
+
+      const handleLine = (line: string) => {
+        if (!line.startsWith("data: ")) return;
+        let json: any;
+        try { json = JSON.parse(line.slice(6)); } catch { return; }
+        if (json.type === "token") {
+          streamRef.current += json.text;
+          setStreamingText(streamRef.current);
+        } else if (json.type === "done") {
+          gotDone = true;
+          newChatId = json.chatId;
+        } else if (json.type === "error") {
+          toast(json.message || "AI error", "error");
+        }
+      };
 
       let buf = "";
       while (true) {
@@ -468,47 +670,33 @@ export default function AIAssistantPage() {
         while ((idx = buf.indexOf("\n")) >= 0) {
           const line = buf.slice(0, idx);
           buf = buf.slice(idx + 1);
-          if (!line.startsWith("data: ")) continue;
-          let json: any;
-          try { json = JSON.parse(line.slice(6)); } catch { continue; }
-          if (json.type === "token") {
-            streamRef.current += json.text;
-            setStreamingText(streamRef.current);
-          } else if (json.type === "done") {
-            gotDone = true;
-            newChatId = json.chatId;
-            setMessages((prev) => [
-              ...prev,
-              { id: `msg-${Date.now()}`, role: "assistant", content: streamRef.current, createdAt: new Date().toISOString(), provider: json.metadata?.provider },
-            ]);
-            streamRef.current = "";
-            setStreamingText("");
-            setIsStreaming(false);
-            streamingRef.current = false;
-          } else if (json.type === "error") {
-            toast(json.message || "AI error", "error");
-            setIsStreaming(false);
-            streamingRef.current = false;
-          }
+          handleLine(line);
         }
       }
+      if (buf.trim()) for (const line of buf.split("\n")) handleLine(line);
 
-      if (!gotDone && streamRef.current) {
-        setMessages((prev) => [
-          ...prev,
-          { id: `msg-${Date.now()}`, role: "assistant", content: streamRef.current, createdAt: new Date().toISOString() },
-        ]);
-        streamRef.current = "";
-        setStreamingText("");
-      }
+      streamRef.current = "";
+      setStreamingText("");
       setIsStreaming(false);
       streamingRef.current = false;
 
-            await refreshChats();
-      // ✅ if the live stream missed the answer, load it from DB — no manual refresh needed
-      if (!gotDone) {
+      if (!hadChat && newChatId) {
+        await fetch("/api/teacher/ai/chats", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chatId: newChatId, title: userText.slice(0, 40) || "New chat" }),
+        });
+      }
+
+            // ✅ resync from DB — only update the view if user is still on the originating chat
+      const viewKey = activeChatIdRef.current ?? "new";
+      if (viewKey === originKey) {
         const list = await fetch("/api/teacher/ai/chats").then((r) => r.json()).then((d) => d.chats || []);
-        const target = activeChatId ? list.find((c: Chat) => c.id === activeChatId) : list[0];
+        const target = activeChatIdRef.current
+          ? list.find((c: Chat) => c.id === activeChatIdRef.current)
+          : newChatId
+          ? list.find((c: Chat) => c.id === newChatId)
+          : list[0];
         if (target) {
           const d = await fetch(`/api/teacher/ai/chats?chatId=${target.id}`).then((r) => r.json());
           if (d.messages?.length) {
@@ -516,19 +704,9 @@ export default function AIAssistantPage() {
             setActiveChatId(target.id);
           }
         }
-        setIsStreaming(false);
-        streamingRef.current = false;
-        setStreamingText("");
       }
-      if (!hadChat && newChatId) {
-        setActiveChatId(newChatId);
-        await fetch("/api/teacher/ai/chats", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chatId: newChatId, title: userText.slice(0, 40) || "New chat" }),
-        });
-        await refreshChats();
-      }
+      setStreamFor(null);
+      await refreshChats();
     } catch (error: any) {
       if (error?.name === "AbortError") {
         if (streamRef.current) {
@@ -543,8 +721,9 @@ export default function AIAssistantPage() {
       } else {
         toast(error.message || "Failed to send message.", "error");
       }
-      setIsStreaming(false);
+           setIsStreaming(false);
       streamingRef.current = false;
+      setStreamFor(null);
     }
   }
 
@@ -556,7 +735,7 @@ export default function AIAssistantPage() {
         .filter((a) => a.kind === "text" && a.text)
         .map((a) => `\n\n--- Attached file: ${a.name} ---\n${a.text}`)
         .join("");
-        const imageAtts = attachments
+    const imageAtts = attachments
       .filter((a) => a.kind === "image")
       .map((a) => ({ type: "image", name: a.name, dataUrl: a.dataUrl }));
     const displayAtts = attachments.map((a) => ({ name: a.name, dataUrl: a.dataUrl }));
@@ -570,38 +749,61 @@ export default function AIAssistantPage() {
     if (isStreaming) return;
     const idx = messages.map((m) => m.role).lastIndexOf("user");
     if (idx === -1) return;
-        const userMsg = messages[idx];
+    const userMsg = messages[idx];
     const base = messages.slice(0, idx);
     setMessages(base);
     const imgs = (userMsg.attachments ?? []).filter((a: any) => a.dataUrl);
     runChat(userMsg.content, imgs, base, userMsg.attachments ?? []);
   }
 
-  function editUser(index: number) {
-    if (isStreaming) return;
+    function editUser(index: number) {
+    if (isStreaming) stopGeneration();
     const msg = messages[index];
     setMessages(messages.slice(0, index));
-    setInput(msg.content);
+
+    // ✅ restore attachments so you can add more / delete before resending
+    const restored: Attachment[] = [];
+    (msg.attachments ?? []).forEach((a: any) => {
+      if (a.dataUrl) restored.push({ id: crypto.randomUUID(), name: a.name, kind: "image", dataUrl: a.dataUrl });
+    });
+
+    const parts = String(msg.content ?? "").split("\n\n--- Attached file: ");
+    const userText = parts[0] ?? "";
+    for (let i = 1; i < parts.length; i++) {
+      const block = parts[i];
+      const nl = block.indexOf("\n");
+      const header = block.slice(0, nl).replace(/ ---$/, "").trim();
+      const text = block.slice(nl + 1);
+      restored.push({ id: crypto.randomUUID(), name: header, kind: "text", text });
+    }
+
+    setAttachments(restored);
+    setInput(userText);
     inputRef.current?.focus();
   }
 
-  async function createProject() {
+    async function createProject() {
     const name = newProjectName.trim();
-    if (!name) return;
-    const res = await fetch("/api/teacher/ai/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    const data = await res.json();
-    if (data.project) {
-      setProjects((p) => [data.project, ...p]);
-      setExpandedProjectId(data.project.id);
-      setProjectsOpen(true);
-      toast(`Project "${name}" created.`, "success");
+    if (!name || creatingProject) return; 
+    setCreatingProject(true);
+    try {
+      const res = await fetch("/api/teacher/ai/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (data.project) {
+        setProjects((p) => [data.project, ...p]);
+        setExpandedProjectId(data.project.id);
+        setProjectsOpen(true);
+        toast(`Project "${name}" created.`, "success");
+      }
+      setNewProjectName("");
+      setProjectDialogOpen(false);
+    } finally {
+      setCreatingProject(false);
     }
-    setNewProjectName("");
-    setProjectDialogOpen(false);
   }
 
   function newChatInProject(p: Project) {
@@ -610,6 +812,21 @@ export default function AIAssistantPage() {
     setMessages([]);
     inputRef.current?.focus();
     toast(`New chat in "${p.name}"`, "info");
+  }
+
+  async function confirmDeleteProject() {
+    if (!deleteProjectId) return;
+    const id = deleteProjectId;
+    setDeleteProjectId(null);
+    await fetch("/api/teacher/ai/projects", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: id }),
+    });
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    if (expandedProjectId === id) setExpandedProjectId(null);
+    await refreshChats();
+    toast("Project deleted — its chats moved to All chats.", "success");
   }
 
   async function confirmDeleteChat() {
@@ -626,6 +843,20 @@ export default function AIAssistantPage() {
     toast("Chat deleted.", "success");
   }
 
+  async function pinChat(chatId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const target = chats.find((c) => c.id === chatId);
+    if (!target) return;
+    const isPinned = !target.isPinned;
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, isPinned } : c)));
+    await fetch("/api/teacher/ai/chats", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId, isPinned }),
+    });
+    toast(isPinned ? "Chat pinned." : "Chat unpinned.", "success");
+  }
+
   async function saveRename(chatId: string) {
     const title = renameValue.trim();
     setRenamingId(null);
@@ -638,9 +869,23 @@ export default function AIAssistantPage() {
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title } : c)));
   }
 
+    const MAX_ATTACHMENTS = 10; // ✅ max 10 files per message — send again for more
+
   async function handleFiles(files: FileList | null) {
     if (!files) return;
-    for (const file of Array.from(files)) {
+    const list = Array.from(files);
+    const room = MAX_ATTACHMENTS - attachments.length;
+
+    if (room <= 0) {
+      toast(`Max ${MAX_ATTACHMENTS} files per message. Send this one first, then attach more.`, "error");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (list.length > room) {
+      toast(`Only ${room} more file(s) fit in this message (max ${MAX_ATTACHMENTS}) — extras were skipped.`, "info");
+    }
+
+    for (const file of list.slice(0, room)) {
       const att = await fileToAttachment(file);
       if (att) setAttachments((prev) => [...prev, att]);
     }
@@ -665,30 +910,49 @@ export default function AIAssistantPage() {
         </div>
       );
     }
-    return (
-      <button
+        return (
+      <div
         onClick={() => setActiveChatId(chat.id)}
-        className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
+        className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
           activeChatId === chat.id ? "bg-slate-200/70 font-medium text-navy-900" : "text-slate-600 hover:bg-slate-100"
         }`}
       >
         <MessageSquare size={14} className="shrink-0 text-slate-400" />
         <span className="flex-1 truncate text-sm">{chat.title}</span>
-        <span className="hidden items-center gap-1 group-hover:flex">
-          <span role="button" onClick={(e) => { e.stopPropagation(); setRenamingId(chat.id); setRenameValue(chat.title); }} className="text-slate-400 hover:text-sky-600" title="Rename">
-            <Pencil size={12} />
-          </span>
-          <span role="button" onClick={(e) => { e.stopPropagation(); setDeleteTarget(chat.id); }} className="text-slate-400 hover:text-rose-500" title="Delete">
-            <Trash2 size={12} />
-          </span>
+        <span className={`${chat.isPinned ? "flex" : "hidden group-hover:flex"} items-center`}>
+          <span className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuChatId(menuChatId === chat.id ? null : chat.id); }}
+              className={`rounded-md p-1 hover:bg-white hover:text-navy-900 ${chat.isPinned ? "text-sky-600" : "text-slate-400"}`}
+              title="Chat options"
+            >
+              {chat.isPinned ? <Pin size={12} /> : <MoreHorizontal size={13} />}
+            </button>
+            {menuChatId === chat.id && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenuChatId(null); }} />
+                <div className="absolute right-0 top-6 z-50 w-36 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <button onClick={(e) => { e.stopPropagation(); setMenuChatId(null); pinChat(chat.id, e as any); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50">
+                    <Pin size={12} /> {chat.isPinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); setMenuChatId(null); setRenamingId(chat.id); setRenameValue(chat.title); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50">
+                    <Pencil size={12} /> Rename
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); setMenuChatId(null); setDeleteTarget(chat.id); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-rose-600 hover:bg-rose-50">
+                    <Trash2 size={12} /> Delete
+                  </button>
+                </div>
+              </>
+            )}
+                  </span>
         </span>
-      </button>
+      </div>
     );
   }
 
-  function MsgActions({ msg, index }: { msg: Message; index: number }) {
+      function MsgActions({ msg, index, alwaysShow }: { msg: Message; index: number; alwaysShow?: boolean }) {
     return (
-      <div className="mt-1 flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+            <div className="mt-1 flex translate-y-1 items-center gap-1 opacity-0 transition-all duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100">
         <button onClick={() => copyMsg(msg.id, msg.content)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-navy-900" title="Copy">
           {copiedId === msg.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
           {copiedId === msg.id ? "Copied" : "Copy"}
@@ -698,16 +962,25 @@ export default function AIAssistantPage() {
             <Pencil size={12} /> Edit
           </button>
         )}
+        {msg.role === "assistant" && (
+          <button onClick={() => toggleSpeak(msg)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-navy-900" title={speakingId === msg.id ? "Stop reading" : "Read aloud"}>
+            {speakingId === msg.id ? <Square size={12} className="text-rose-500" /> : <Volume2 size={12} />}
+            {speakingId === msg.id ? "Stop" : "Listen"}
+          </button>
+        )}
         {msg.role === "assistant" && index === lastAssistantIdx && (
           <button onClick={regenerate} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-navy-900" title="Regenerate">
             <RefreshCw size={12} /> Regenerate
           </button>
         )}
-        {msg.provider && <span className="ml-1 text-[10px] text-slate-400">via {msg.provider}</span>}
+        {msg.role === "assistant" && (
+          <span className="ml-1 text-[10px] text-slate-400">
+            {new Date(msg.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
       </div>
     );
   }
-
   return (
     <>
       <TeacherTopbar title="AI Assistant" description="Chat with AI to get help with your exams" />
@@ -722,14 +995,30 @@ export default function AIAssistantPage() {
               </button>
             </div>
 
-            <div className="space-y-2 p-3">
-              <button onClick={() => { setActiveChatId(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-3 rounded-xl bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800">
-                <SquarePen size={15} /> New Chat
-              </button>
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats" className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
-              </div>
+                        <div className="space-y-2 p-3">
+              {searchOpen ? (
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    autoFocus
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
+                    placeholder="Search chats"
+                    className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-8 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  />
+                  <button onClick={() => { setSearch(""); setSearchOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-navy-900"><X size={13} /></button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setActiveChatId(null); inputRef.current?.focus(); }} className="flex flex-1 items-center gap-3 rounded-xl bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800">
+                    <SquarePen size={15} /> New Chat
+                  </button>
+                  <button onClick={() => setSearchOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-navy-900" title="Search chats">
+                    <Search size={16} />
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 pb-4">
@@ -751,7 +1040,7 @@ export default function AIAssistantPage() {
                       </button>
                       {projects.map((p) => {
                         const open = expandedProjectId === p.id;
-                        const pChats = chats.filter((c) => c.projectId === p.id);
+                                                const pChats = chats.filter((c) => c.projectId === p.id).sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0) || +new Date(b.updatedAt) - +new Date(a.updatedAt));
                         return (
                           <div key={p.id}>
                             <div className={`group flex w-full items-center rounded-lg transition ${open ? "bg-slate-200/70" : "hover:bg-slate-100"}`}>
@@ -760,14 +1049,29 @@ export default function AIAssistantPage() {
                                 <span className={`flex-1 truncate text-left ${open ? "font-medium text-navy-900" : "text-slate-600"}`}>{p.name}</span>
                                 <ChevronDown size={13} className={`text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
                               </button>
-                              <button onClick={() => newChatInProject(p)} className="mr-2 hidden shrink-0 rounded-md p-1 text-slate-400 hover:bg-white hover:text-sky-600 group-hover:block" title={`New chat in ${p.name}`}>
-                                <SquarePen size={13} />
-                              </button>
+                              <span className="relative mr-1 hidden shrink-0 group-hover:block">
+                                <button onClick={() => setMenuProjectId(menuProjectId === p.id ? null : p.id)} className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-navy-900" title="Project options">
+                                  <MoreHorizontal size={13} />
+                                </button>
+                                {menuProjectId === p.id && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setMenuProjectId(null)} />
+                                    <div className="absolute right-0 top-6 z-50 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                                      <button onClick={() => { setMenuProjectId(null); newChatInProject(p); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50">
+                                        <SquarePen size={12} /> New chat here
+                                      </button>
+                                      <button onClick={() => { setMenuProjectId(null); setDeleteProjectId(p.id); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-rose-600 hover:bg-rose-50">
+                                        <Trash2 size={12} /> Delete project
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </span>
                             </div>
                             {open && (
                               <div className="ml-4 space-y-0.5 border-l border-slate-200 py-0.5 pl-3">
                                 {pChats.map((c) => <ChatRow key={c.id} chat={c} />)}
-                                {pChats.length === 0 && <p className="px-3 py-1 text-xs text-slate-400">No chats yet — click the pen icon to start one.</p>}
+                                {pChats.length === 0 && <p className="px-3 py-1 text-xs text-slate-400">No chats yet — use ⋯ → New chat here.</p>}
                               </div>
                             )}
                           </div>
@@ -794,7 +1098,7 @@ export default function AIAssistantPage() {
         )}
 
         {/* ===== CHAT AREA ===== */}
-        <div className="flex flex-1 flex-col">
+        <div className="relative flex flex-1 flex-col">
           <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
             {!sidebarOpen && (
               <button onClick={() => setSidebarOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-navy-900" title="Show sidebar">
@@ -804,14 +1108,28 @@ export default function AIAssistantPage() {
             <span className="truncate text-sm font-semibold text-navy-900">
               {activeChatId ? chats.find((c) => c.id === activeChatId)?.title ?? "Chat" : "New chat"}
             </span>
-            {activeProject && (
+                        {activeProject && (
               <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-700">
                 <Folder size={11} /> {activeProject.name}
               </span>
             )}
+            {activeChatId && messages.length > 0 && (
+              <button
+                onClick={() => {
+                  const title = chats.find((c) => c.id === activeChatId)?.title || "chat";
+                  const md = messages.map((m) => `**${m.role === "user" ? "You" : "ESAME AI"}:**\n\n${m.content}`).join("\n\n---\n\n");
+                  downloadText(`${title.slice(0, 30) || "chat"}.md`, `# ${title}\n\n${md}`);
+                  toast("Chat exported as Markdown.", "success");
+                }}
+                className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-navy-900"
+                title="Export chat as Markdown"
+              >
+                <Download size={15} />
+              </button>
+            )}
           </div>
 
-                    <div ref={scrollBoxRef} onScroll={onScrollBox} className="flex-1 space-y-5 overflow-y-auto p-6">
+                    <div ref={scrollBoxRef} onScroll={onScrollBox} className="flex-1 space-y-6 overflow-y-auto px-6 py-6 md:px-12">
             {messages.length === 0 && !isStreaming && (
               <div className="flex h-full items-center justify-center">
                 <div className="max-w-lg text-center">
@@ -834,30 +1152,35 @@ export default function AIAssistantPage() {
             {messages.map((msg, i) => {
               const ex = msg.role === "assistant" ? extractExamDraft(msg.content) : null;
               return (
-                <div key={msg.id} className={`group flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                  <div className={`max-w-3xl rounded-2xl px-5 py-3 ${msg.role === "user" ? "bg-navy-900 text-white" : "border border-slate-200 bg-white"}`}>
-                                        {msg.role === "assistant" ? (
-                      <div className="md-body max-w-none"><ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkBreaks]}>{ex!.clean}</ReactMarkdown></div>
-                    ) : (
+                <div key={msg.id} className="msg-in group mx-auto w-full max-w-3xl">
+                                    {msg.role === "user" ? (
+                    <div className="flex justify-end">
                       <UserBubble msg={msg} />
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="md-body w-full">
+                      <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(ex!.clean)}</ReactMarkdown>
+                    </div>
+                  )}
                   {ex?.draft && <ExamDraftCard draft={ex.draft} />}
-                  <MsgActions msg={msg} index={i} />
+                  <div className={msg.role === "user" ? "flex justify-end" : ""}>
+                      <MsgActions msg={msg} index={i} alwaysShow={msg.role === "assistant" && i === lastAssistantIdx} />
+                  </div>
+                  
                 </div>
               );
             })}
 
-            {isStreaming && streamingText && (
-              <div className="flex flex-col items-start">
-                <div className="max-w-3xl rounded-2xl border border-slate-200 bg-white px-5 py-3">
-                                    <div className="md-body max-w-none"><ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkBreaks]}>{extractExamDraft(streamingText).clean}</ReactMarkdown></div>
+                        {isStreaming && streamFor === (activeChatId ?? "new") && streamingText && (
+              <div className="msg-in mx-auto w-full max-w-3xl">
+                <div className="md-body w-full">
+                  <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(extractExamDraft(streamingText).clean)}</ReactMarkdown>
                 </div>
               </div>
             )}
-            {isStreaming && !streamingText && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm text-slate-500">
+                        {isStreaming && streamFor === (activeChatId ?? "new") && !streamingText && (
+              <div className="mx-auto w-full max-w-3xl">
+                <div className="flex items-center gap-2 text-sm text-slate-500">
                   <Loader2 size={14} className="animate-spin" /> Thinking...
                 </div>
               </div>
@@ -865,8 +1188,18 @@ export default function AIAssistantPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* ===== INPUT (white theme pill bar) ===== */}
-          <div className="border-t border-slate-200 bg-white p-4">
+                    {showJump && (
+            <button
+              onClick={() => { stickRef.current = true; setShowJump(false); messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }}
+                            className="absolute bottom-24 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-slate-200/60 bg-white/70 text-slate-400 opacity-60 shadow-sm backdrop-blur transition hover:opacity-100 hover:text-navy-900"
+              title="Scroll to bottom"
+            >
+              <ArrowDown size={16} />
+            </button>
+          )}
+
+          {/* ===== INPUT ===== */}
+          <div className="p-4">
             <div className="mx-auto max-w-3xl">
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -882,11 +1215,11 @@ export default function AIAssistantPage() {
 
               <input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.csv,.xlsx,.xls,.pdf,.docx,.doc" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
 
-              <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1.5 shadow-sm focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+              <div className="flex items-end gap-1 rounded-2xl bg-white p-1.5 shadow-[0_2px_10px_rgba(15,23,42,0.08)]">
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-navy-900 disabled:opacity-40"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-navy-900 disabled:opacity-40"
                   title="Attach image / PDF / Word / Excel"
                 >
                   <Plus size={18} />
@@ -898,15 +1231,14 @@ export default function AIAssistantPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                  placeholder="Ask anything in English or Khmer..."
-                  disabled={isStreaming}
-                  className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-navy-900 placeholder-slate-400 outline-none disabled:opacity-50"
+                  placeholder="Ask anything"
+                  className="flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm text-navy-900 placeholder-slate-400 outline-none"
                 />
 
                 <button
                   onClick={toggleMic}
                   disabled={isStreaming}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition disabled:opacity-40 ${
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition disabled:opacity-40 ${
                     listening ? "animate-pulse bg-rose-50 text-rose-600" : "text-slate-500 hover:bg-slate-100 hover:text-navy-900"
                   }`}
                   title="Voice input (auto English / Khmer)"
@@ -917,7 +1249,7 @@ export default function AIAssistantPage() {
                 {isStreaming ? (
                   <button
                     onClick={stopGeneration}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white transition hover:bg-rose-600"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white transition hover:bg-rose-600"
                     title="Stop generating"
                   >
                     <Square size={15} />
@@ -926,7 +1258,7 @@ export default function AIAssistantPage() {
                   <button
                     onClick={sendMessage}
                     disabled={!input.trim() && attachments.length === 0}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-900 text-white transition hover:bg-navy-800 disabled:bg-slate-200 disabled:text-slate-400"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-800 disabled:bg-slate-200 disabled:text-slate-400"
                     title="Send"
                   >
                     <Send size={15} />
@@ -947,7 +1279,7 @@ export default function AIAssistantPage() {
           <input autoFocus value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createProject()} placeholder="e.g. Grade 12 Physics, Midterm prep..." className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>Cancel</Button>
-            <Button onClick={createProject} disabled={!newProjectName.trim()}><FolderPlus size={14} /> Create</Button>
+                        <Button onClick={createProject} disabled={!newProjectName.trim() || creatingProject}><FolderPlus size={14} /> {creatingProject ? "Creating..." : "Create"}</Button>
           </div>
         </div>
       </Dialog>
@@ -959,6 +1291,16 @@ export default function AIAssistantPage() {
         onConfirm={confirmDeleteChat}
         title="Delete this chat?"
         description="All messages in this chat will be permanently removed."
+        confirmLabel="Delete"
+      />
+
+      {/* Delete project confirm */}
+      <ConfirmDialog
+        open={!!deleteProjectId}
+        onClose={() => setDeleteProjectId(null)}
+        onConfirm={confirmDeleteProject}
+        title="Delete this project?"
+        description="Chats inside will move to All chats (they won't be deleted)."
         confirmLabel="Delete"
       />
 

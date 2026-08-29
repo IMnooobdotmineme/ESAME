@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { aiProjects, teachers } from "@/db/schema";
+import { aiChats, aiProjects, teachers } from "@/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { requireTeacherSession } from "@/lib/session";
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-    const { name, description } = await req.json();
+  const { name, description } = await req.json();
 
   const [teacher] = await db
     .select({ orgId: teachers.orgId })
@@ -53,6 +53,12 @@ export async function DELETE(req: NextRequest) {
   }
 
   const { projectId } = await req.json();
+  if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+
+  await db
+    .update(aiChats)
+    .set({ projectId: null })
+    .where(and(eq(aiChats.projectId, projectId), eq(aiChats.teacherId, session.userId)));
 
   await db
     .delete(aiProjects)

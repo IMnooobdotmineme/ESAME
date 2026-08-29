@@ -50,23 +50,24 @@ export function ExamQuestionCard({ question, questionNumber, answer, onAnswer }:
       )}
 
       {question.type === "mcq" && (
-        <div className="space-y-2">
-          {question.options.map((option) => {
-            const selected = answer === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => onAnswer(question.id, option.id)}
-                className={optionButtonClass(selected)}
-              >
-                <span className="font-semibold text-navy-900">{option.label}</span>
-                {option.text}
-              </button>
-            );
-          })}
-        </div>
-      )}
+  <div className="space-y-2">
+    {question.options.map((option, i) => {
+      const key = option.id || `opt-${i}`;
+      const selected = answer === option.id;
+      return (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onAnswer(question.id, option.id)}
+          className={optionButtonClass(selected)}
+        >
+          <span className="font-semibold text-navy-900">{option.label}</span>
+          {option.text}
+        </button>
+      );
+    })}
+  </div>
+)}
 
       {question.type === "multi_select" && (
         <div className="space-y-2">
