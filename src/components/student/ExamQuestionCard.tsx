@@ -51,29 +51,33 @@ export function ExamQuestionCard({ question, questionNumber, answer, onAnswer }:
 
       {question.type === "mcq" && (
   <div className="space-y-2">
-    {question.options.map((option, i) => {
-      const key = option.id || `opt-${i}`;
-      const selected = answer === option.id;
-      return (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onAnswer(question.id, option.id)}
-          className={optionButtonClass(selected)}
-        >
-          <span className="font-semibold text-navy-900">{option.label}</span>
-          {option.text}
-        </button>
-      );
-    })}
+    {question.options.map((option: any, i: number) => {
+  const selected = Array.isArray(answer)
+    ? answer.includes(option.id ?? option.text)
+    : answer === (option.id ?? option.text);
+  return (
+    <button
+      key={`${option.id ?? "opt"}-${i}`}
+      type="button"
+      onClick={() => onAnswer(question.id, option.id ?? option.text)}
+      className={optionButtonClass(selected)}
+    >
+      <span className="font-semibold text-navy-900">{option.label}</span>
+      {option.text}
+    </button>
+  );
+})}
   </div>
 )}
 
       {question.type === "multi_select" && (
         <div className="space-y-2">
-          {question.options.map((option) => {
-            const selectedIds = (answer ?? "").split(",").filter(Boolean);
-            const selected = selectedIds.includes(option.id);
+                    {question.options.map((option) => {
+            // ✅ Handle both string (from student taking exam) and array (from grading view)
+            const selectedIds = Array.isArray(answer)
+              ? answer
+              : (answer ?? "").split(",").filter(Boolean);
+            const selected = selectedIds.includes(option.id) || selectedIds.includes(option.text);
             return (
               <button
                 key={option.id}

@@ -146,10 +146,10 @@ export function GradingAnswerView({
 }) {
   const question = buildExamQuestion(def);
 
-  // normalize "a, b" → "a,b" so multi-select highlighting matches
-  let viewAnswer = answer;
-  if (def?.type === "multi_select" && answer) {
-    viewAnswer = answer.split(",").map((s) => s.trim()).filter(Boolean).join(",");
+    // ✅ For multi-select, pass answer as an array of texts so ExamQuestionCard can match them
+  let viewAnswer: any = answer;
+  if (def?.type === "multi_select" && typeof answer === "string") {
+    viewAnswer = answer.split(",").map((s) => s.trim()).filter(Boolean);
   }
 
   return (

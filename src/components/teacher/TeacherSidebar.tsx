@@ -21,7 +21,6 @@ const NAV_ITEMS = [
   { label: "My Exams", href: "/teacher-exams", icon: FileText },
   { label: "Live Monitoring", href: "/monitor", icon: Eye },
   { label: "Grading & Results", href: "/grading", icon: CheckSquare },
-  { label: "AI Assistant", href: "/ai", icon: Sparkles },
   { label: "Settings", href: "/teacher-settings", icon: Settings },
 ];
 

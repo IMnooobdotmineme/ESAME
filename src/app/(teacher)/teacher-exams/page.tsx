@@ -1,7 +1,7 @@
 "use client";
 import { useTeacherExamRealtime } from "@/hooks/useTeacherExamRealtime";
 import React, { useState, useEffect } from "react";
-import { Copy, Check, CheckCircle2, X } from "lucide-react";
+import { Copy, Check, CheckCircle2, X, MoreVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useExamStore, type Exam } from "@/store/useExamStore";
 import {
@@ -14,13 +14,14 @@ import {
   FileText,
   CalendarDays,
   Search,
+  Layers,
 } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Dialog, DialogHeader } from "@/components/ui/dialog"; // ← ADD THIS IMPORT
+import { Dialog, DialogHeader } from "@/components/ui/dialog";
 
 type ExamCard = Exam & {
   status: "active" | "scheduled" | "completed";
@@ -67,6 +68,21 @@ function formatStartDateTime(iso?: string) {
   });
 }
 
+// ✅ Compute section + question count from parts[] (the sections the exam was built with)
+function getStructureCounts(exam: Exam): { sections: number; questions: number } {
+  const parts = (exam as any).parts;
+  if (Array.isArray(parts) && parts.length > 0) {
+    let questions = 0;
+    for (const s of parts) {
+      if (s?.questions && Array.isArray(s.questions)) {
+        questions += s.questions.length;
+      }
+    }
+    return { sections: parts.length, questions };
+  }
+  return { sections: 0, questions: exam.questionCount ?? 0 };
+}
+
 const STATUS_BADGE: Record<ExamCard["status"], "info" | "warning" | "success"> = {
   active: "info",
   scheduled: "warning",
@@ -88,15 +104,17 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
 };
 
 export default function MyExamsPage() {
-  useTeacherExamRealtime(true, 2000); 
+  useTeacherExamRealtime(true, 2000);
   const router = useRouter();
   const storeExams = useExamStore((state) => state.exams) || [];
   const deleteExam = useExamStore((state) => state.deleteExam);
   const launchExam = useExamStore((state) => state.launchExam);
   const fetchExams = useExamStore((state) => state.fetchExams);
-  
+
   const [launchedRoomCode, setLaunchedRoomCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchExams();
@@ -144,6 +162,27 @@ export default function MyExamsPage() {
     if (examPendingDelete) await deleteExam?.(examPendingDelete.id);
     setExamPendingDelete(null);
   };
+
+  // ✅ Duplicate exam — calls backend and refreshes list
+  async function handleDuplicate(exam: ExamCard) {
+    if (duplicatingId) return;
+    setDuplicatingId(exam.id);
+    setOpenMenuId(null);
+    try {
+      const res = await fetch(`/api/teacher/exams/${exam.id}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+            const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to duplicate");
+      setActiveTab("scheduled");
+      await fetchExams();
+    } catch (err: any) {
+      alert(err.message || "Failed to duplicate exam.");
+    } finally {
+      setDuplicatingId(null);
+    }
+  }
 
   return (
     <>
@@ -209,121 +248,163 @@ export default function MyExamsPage() {
               )}
             </Card>
           ) : (
-            filteredExams.map((exam) => (
-              <Card
-                key={exam.id}
-                className="p-5 hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
-              >
-                {/* Exam Information */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      title={exam.courseCode || undefined}
-                      className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase cursor-default"
-                    >
-                      {exam.department || "EXAM"}
-                    </span>
-                    <Badge
-                      variant={
-                        exam.status === "active" && !exam.isStarted
-                          ? "warning"
-                          : STATUS_BADGE[exam.status]
-                      }
-                    >
-                      {exam.status === "active"
-                        ? exam.isStarted
-                          ? "Live"
-                          : "Launched"
-                        : STATUS_LABEL[exam.status]}
-                    </Badge>
-                  </div>
-                  <h3 className="text-sm font-semibold text-navy-900">{exam.title}</h3>
-                  {exam.subject && (
-                    <p className="text-xs text-slate-500 font-medium">{exam.subject}</p>
-                  )}
-                  <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {exam.durationMinutes} mins
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
-                      {exam.questions?.length ?? exam.questionCount ?? 0} Questions
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-                      Created {formatCreatedDate(exam.createdAt)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-                      Start: {exam.startDate ? formatStartDateTime(exam.startDate) : "Not set"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 shrink-0">
-                  {exam.status === "scheduled" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        router.push(`/teacher-exams/new?edit=${exam.id}&tab=parameters`)
-                      }
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      Edit Exam
-                    </Button>
-                  )}
-                  {exam.status === "completed" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/grading/${exam.id}`)}
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      View Details
-                    </Button>
-                  )}
-                  {exam.status === "scheduled" && (
-                    <Button
-                      size="sm"
-                      onClick={async () => {
-                        const result = await launchExam(exam.id);
-                        if (result.success && result.roomCode) {
-                          setLaunchedRoomCode(result.roomCode);
-                        } else {
-                          alert(result.message || "Failed to launch exam.");
+            filteredExams.map((exam) => {
+              const structure = getStructureCounts(exam);
+              const isMenuOpen = openMenuId === exam.id;
+              const isDuplicating = duplicatingId === exam.id;
+              return (
+                <Card
+                  key={exam.id}
+                  className="p-5 hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  {/* Exam Information */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        title={exam.courseCode || undefined}
+                        className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase cursor-default"
+                      >
+                        {exam.department || "EXAM"}
+                      </span>
+                      <Badge
+                        variant={
+                          exam.status === "active" && !exam.isStarted
+                            ? "warning"
+                            : STATUS_BADGE[exam.status]
                         }
-                      }}
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      Launch Exam
-                    </Button>
-                  )}
-                  {exam.status === "active" && (
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        router.push(
-                          exam.isStarted ? "/monitor" : `/teacher-exams/${exam.roomCode}`
-                        )
-                      }
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      {exam.isStarted ? "Manage Live Exam" : "Resume Setup"}
-                    </Button>
-                  )}
-                  <button
-                    onClick={() => setExamPendingDelete(exam)}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors cursor-pointer"
-                    title="Delete Exam"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </Card>
-            ))
+                      >
+                        {exam.status === "active"
+                          ? exam.isStarted
+                            ? "Live"
+                            : "Launched"
+                          : STATUS_LABEL[exam.status]}
+                      </Badge>
+                    </div>
+                    <h3 className="text-sm font-semibold text-navy-900">{exam.title}</h3>
+                    {exam.subject && (
+                      <p className="text-xs text-slate-500 font-medium">{exam.subject}</p>
+                    )}
+                    <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        {exam.durationMinutes} mins
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Layers className="w-3.5 h-3.5 text-slate-400" />
+                        {structure.sections} {structure.sections === 1 ? "Section" : "Sections"}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+                        {structure.questions} {structure.questions === 1 ? "Question" : "Questions"}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                        Created {formatCreatedDate(exam.createdAt)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                        Start: {exam.startDate ? formatStartDateTime(exam.startDate) : "Not set"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {exam.status === "scheduled" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          router.push(`/teacher-exams/new?edit=${exam.id}&tab=parameters`)
+                        }
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        Edit Exam
+                      </Button>
+                    )}
+                    {exam.status === "completed" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/grading/${exam.id}`)}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        View Details
+                      </Button>
+                    )}
+                    {exam.status === "scheduled" && (
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const result = await launchExam(exam.id);
+                          if (result.success && result.roomCode) {
+                            setLaunchedRoomCode(result.roomCode);
+                          } else {
+                            alert(result.message || "Failed to launch exam.");
+                          }
+                        }}
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Launch Exam
+                      </Button>
+                    )}
+                    {exam.status === "active" && (
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          router.push(
+                            exam.isStarted ? "/monitor" : `/teacher-exams/${exam.roomCode}`
+                          )
+                        }
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        {exam.isStarted ? "Manage Live Exam" : "Resume Setup"}
+                      </Button>
+                    )}
+
+                    {/* ⋯ Menu — click to see all actions (Duplicate + Delete) */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setOpenMenuId(isMenuOpen ? null : exam.id)}
+                        disabled={isDuplicating}
+                        className="p-2 text-slate-400 hover:text-navy-900 hover:bg-slate-100 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                        title="More actions"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      {isMenuOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setOpenMenuId(null)}
+                          />
+                          <div className="absolute right-0 top-9 z-50 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                            <button
+                              onClick={() => handleDuplicate(exam)}
+                              disabled={isDuplicating}
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              {isDuplicating ? "Duplicating..." : "Duplicate Exam"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                setExamPendingDelete(exam);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete Exam
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })
           )}
         </div>
 

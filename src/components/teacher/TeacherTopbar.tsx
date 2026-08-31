@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Bell, Sparkles } from "lucide-react";
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useTeacherStore } from "@/store/useTeacherStore";
 
 interface TeacherTopbarProps {
@@ -10,6 +11,7 @@ interface TeacherTopbarProps {
 }
 
 export function TeacherTopbar({ title, description }: TeacherTopbarProps) {
+  const pathname = usePathname();
   const profile = useTeacherStore((state) => state.profile);
   const fetchProfile = useTeacherStore((state) => state.fetchProfile);
 
@@ -27,6 +29,8 @@ export function TeacherTopbar({ title, description }: TeacherTopbarProps) {
     .toUpperCase()
     .slice(0, 2);
 
+  const onAI = pathname === "/ai";
+
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/80 backdrop-blur px-6 h-16">
       <div>
@@ -36,6 +40,18 @@ export function TeacherTopbar({ title, description }: TeacherTopbarProps) {
         )}
       </div>
       <div className="flex items-center gap-3">
+                {/* AI Assistant */}
+        <Link
+          href="/ai"
+          title="AI Assistant"
+          className="flex h-9 items-center gap-1.5 rounded-full px-2.5 hover:bg-slate-100 transition-colors"
+        >
+          <Sparkles size={17} className={onAI ? "text-sky-600" : "text-slate-600"} />
+          <span className={`text-sm font-medium ${onAI ? "text-sky-600" : "text-slate-600"}`}>
+            AI
+          </span>
+        </Link>
+
         <Link
           href="/teacher-notifications"
           className="relative h-9 w-9 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"

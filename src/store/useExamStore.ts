@@ -129,8 +129,17 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     }
     if (exams.length === 0) set({ isLoading: true });
     try {
-      const res = await fetch("/api/teacher/exams");
-      if (!res.ok) throw new Error("Failed to fetch exams");
+            const res = await fetch("/api/teacher/exams");
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error("[fetchExams] status:", res.status, "body:", body);
+        if (res.status === 401) {
+          // session expired → go to login quietly
+          window.location.href = "/login";
+          return;
+        }
+        throw new Error(`Failed to fetch exams (${res.status})`);
+      }
       const data = await res.json();
       set({
         exams: (data.exams || []).map((e: any) => ({

@@ -6,12 +6,32 @@ import { and, eq } from "drizzle-orm";
 
 export const SESSION_COOKIE = "session_token";
 export const RESET_COOKIE = "reset_token";
+export const ROLE_COOKIE = "session_role";
+
+const ROLE_SECRET = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET || "esame-role-secret";
 
 export const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (signup, Google login)
 export const REMEMBER_ME_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days ("Remember me" checked)
 export const SHORT_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 day ("Remember me" unchecked)
 
 export type UserType = "org" | "teacher" | "admin";
+
+export function signRoleCookie(userType: UserType): string {
+  const payload = `${userType}:${Date.now()}`;
+  const sig = crypto.createHmac("sha256", ROLE_SECRET).update(payload).digest("hex").slice(0, 16);
+  return `${payload}.${sig}`;
+}
+
+export function verifyRoleCookie(value: string | undefined): UserType | null {
+  if (!value) return null;
+  const [payload, sig] = value.split(".");
+  if (!payload || !sig) return null;
+  const expected = crypto.createHmac("sha256", ROLE_SECRET).update(payload).digest("hex").slice(0, 16);
+  if (sig !== expected) return null;
+  const [userType] = payload.split(":");
+  if (userType === "org" || userType === "teacher" || userType === "admin") return userType;
+  return null;
+}
 
 export async function createSession(
   userType: UserType,
@@ -27,7 +47,8 @@ export async function createSession(
 export function setSessionCookie(
   res: { cookies: { set: Function } },
   token: string,
-  expiresAt: Date
+  expiresAt: Date,
+  userType?: UserType
 ) {
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -36,10 +57,20 @@ export function setSessionCookie(
     path: "/",
     expires: expiresAt,
   });
+  if (userType) {
+    res.cookies.set(ROLE_COOKIE, signRoleCookie(userType), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      expires: expiresAt,
+    });
+  }
 }
 
 export function clearSessionCookie(res: { cookies: { set: Function } }) {
   res.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+  res.cookies.set(ROLE_COOKIE, "", { path: "/", maxAge: 0 });
 }
 
 export async function getSessionFromCookie() {

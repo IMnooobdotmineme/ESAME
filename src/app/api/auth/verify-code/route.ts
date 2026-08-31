@@ -168,7 +168,7 @@ export async function POST(req: Request) {
 
     const redirect = userType === "org" ? "/dashboard" : "/teacher-dashboard";
     const res = NextResponse.json({ ok: true, purpose: record.purpose, redirect });
-    setSessionCookie(res, token, expiresAt);
+        setSessionCookie(res, token, expiresAt, userType);
     return res;
   } catch (err) {
     console.error("verify-code error", err);

@@ -61,8 +61,21 @@ export async function POST(req: NextRequest) {
           manualOverride ||
           ["essay", "coding"].includes(q.questionType) ||
           (q.questionType === "short_answer" && !(payload.acceptedVariants ?? []).length);
-      } else if (manualOverride) {
+            } else if (manualOverride) {
         needsManual = true;
+        // ✅ STILL record what the student chose so manual grading shows it
+        if (q.questionType === "mcq" || q.questionType === "true_false") {
+          selectedOptionIds = [value];
+          const chosen = options.find((o: any) => o.id === value);
+          answerText = chosen?.optionText ?? value;
+        } else if (q.questionType === "multiple_select" || q.questionType === "multi_select") {
+          const ids = value.split(",").filter(Boolean);
+          selectedOptionIds = ids;
+          answerText = options
+            .filter((o: any) => ids.includes(o.id))
+            .map((o: any) => o.optionText)
+            .join(", ");
+        }
       } else {
         switch (q.questionType) {
           case "mcq": {

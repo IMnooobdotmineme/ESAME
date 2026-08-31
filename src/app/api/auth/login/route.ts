@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       }).catch((err) => console.error("Failed to log admin_login_success:", err));
 
       const res = NextResponse.json({ ok: true, redirect: "/admin-dashboard" });
-      setSessionCookie(res, token, expiresAt);
+            setSessionCookie(res, token, expiresAt, "admin");
       return res;
     }
 

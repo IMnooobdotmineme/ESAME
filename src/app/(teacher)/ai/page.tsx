@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, memo } from "react";
 import { useRouter } from "next/navigation";
+import { Home, ArrowLeft } from "lucide-react";
 import {
   Plus, Send, MessageSquare, Trash2, Sparkles, Paperclip, X,
   FolderPlus, Folder, Loader2, PanelLeftClose, PanelLeftOpen,
@@ -227,7 +228,7 @@ function UserBubble({ msg }: { msg: any }) {
 
 // ---------- exam JSON extraction ----------
 function extractExamDraft(content: string): { clean: string; draft: any | null } {
-  const re = /\[\[EXAM_JSON\]\]([\s\S]*?)\[\[\/EXAM_JSON\]\]/;
+  const re = /\[\[EXAM_JSON\]\]([\s\S]*?)\[\[\/?EXAM_JSON\]\]/;  // ← added ? to make the slash optional
   const m = content.match(re);
   if (!m) return { clean: content, draft: null };
   const clean = content.replace(re, "").trim();
@@ -409,14 +410,123 @@ function QuestionView({ q, index }: { q: any; index: number }) {
 function ExamDraftCard({ draft }: { draft: any }) {
   const router = useRouter();
   const [viewOpen, setViewOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [canSave, setCanSave] = useState<boolean | null>(null);
+    const [saved, setSaved] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
   const totalQ = draft.sections.reduce((a: number, s: any) => a + s.questions.length, 0);
   const totalMarks = draft.sections.reduce((a: number, s: any) => a + s.marks, 0);
 
-  function addToExamPage() {
-    sessionStorage.setItem("esai_ai_exam_draft", JSON.stringify(draft));
-    toast("Exam draft ready — review and save it in the builder.", "success");
-    router.push("/teacher-exams/new?from=ai");
+  useEffect(() => {
+    if (!draft.department || !draft.subject) {
+      setCanSave(false);
+      return;
+    }
+    fetch("/api/teacher/ai/departments")
+      .then((r) => r.json())
+      .then((data) => {
+        const depts = data.departments || [];
+        const subjs = data.subjects || [];
+        const deptMatch = depts.some((d: any) => d.name === draft.department);
+        const subjMatch = subjs.some(
+          (s: any) => s.name === draft.subject && s.deptName === draft.department
+        );
+        setCanSave(deptMatch && subjMatch);
+      })
+      .catch(() => setCanSave(false));
+  }, [draft.department, draft.subject]);
+
+  useEffect(() => {
+    if (sessionStorage.getItem(`esai_saved_${draft.title}`)) setSaved(true);
+  }, [draft.title]);
+
+  async function saveExam() {
+    if (saving || canSave === false) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/teacher/ai/exams/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: draft.title,
+          description: draft.description || "",
+          department: draft.department,
+          subject: draft.subject,
+          durationMinutes: draft.duration || 60,
+          sections: draft.sections,
+          startDate: draft.date || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      sessionStorage.setItem(`esai_saved_${draft.title}`, "1");
+      setSaved(true);
+      router.push("/teacher-exams");
+    } catch (err: any) {
+      toast(err.message || "Failed to save exam.", "error");
+    } finally {
+      setSaving(false);
+    }
   }
+
+  // ✅ Download = exact photo of the View design → PDF
+    // ✅ PDF = exact View design, with margins, never cuts a card between pages
+  async function downloadExam() {
+    const node = printRef.current;
+    if (!node || downloading) return;
+    setDownloading(true);
+    try {
+      const html2canvas = (await import("html2canvas-pro")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const blocks = Array.from(node.querySelectorAll("[data-pdf-block]")) as HTMLElement[];
+
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      const M = 12;              // ✅ 12mm margin top/bottom/left/right
+      const CW = 210 - M * 2;    // content width
+      const PH = 297;            // page height
+      let y = M;
+
+      for (const b of blocks) {
+        const canvas = await html2canvas(b, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+        const h = (canvas.height * CW) / canvas.width;
+        if (y + h > PH - M) {    // ✅ would overflow bottom margin → new page
+          doc.addPage();
+          y = M;
+        }
+        doc.addImage(canvas.toDataURL("image/png"), "PNG", M, y, CW, h);
+        y += h;
+      }
+
+      doc.save(`${(draft.title || "exam").replace(/[^\w\d-]+/g, "_")}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      toast("PDF export failed.", "error");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  // ✅ The EXACT same body used by the View dialog AND the hidden PDF replica
+  const paperBody = (
+    <>
+      {draft.sections.map((s: any) => (
+        <div key={s.id}>
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded-lg bg-navy-900 px-2.5 py-1 text-[11px] font-bold text-white">{s.title}</span>
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+              {TYPE_LABELS[s.allowedType] ?? s.allowedType}
+            </span>
+            <span className="text-[11px] text-slate-400">{s.marks} marks</span>
+          </div>
+          <div className="space-y-2">
+            {s.questions.map((q: any, i: number) => <QuestionView key={q.id} q={q} index={i} />)}
+          </div>
+        </div>
+      ))}
+    </>
+  );
 
   return (
     <>
@@ -435,41 +545,81 @@ function ExamDraftCard({ draft }: { draft: any }) {
         </div>
         <div className="flex items-center justify-between gap-2 px-4 py-2.5">
           <p className="text-[11px] text-slate-400">Want changes? Just ask: &quot;make it harder&quot;, &quot;only MCQ&quot;, &quot;add 5 questions&quot;…</p>
-          <Button size="sm" onClick={addToExamPage}>
-            <Plus size={13} /> Add to Exam Page
-          </Button>
+          <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={downloadExam} disabled={downloading}>
+              <Download size={13} /> {downloading ? "Preparing…" : "Download"}
+            </Button>
+            {canSave === true && (
+              saved ? (
+                <Button size="sm" variant="outline" disabled>
+                  <Check size={13} /> Saved
+                </Button>
+              ) : (
+                <Button size="sm" onClick={saveExam} disabled={saving}>
+                  {saving ? "Saving..." : <><Plus size={13} /> Save Exam</>}
+                </Button>
+              )
+            )}
+          </div>
         </div>
       </div>
 
       <Dialog open={viewOpen} onClose={() => setViewOpen(false)} className="max-w-3xl">
         <DialogHeader title={draft.title} onClose={() => setViewOpen(false)} />
-        <div className="max-h-[65vh] space-y-5 overflow-y-auto px-6 py-5">
-          {draft.sections.map((s: any) => (
-            <div key={s.id}>
-              <div className="mb-2 flex items-center gap-2">
+        <div className="max-h-[65vh] space-y-5 overflow-y-auto px-6 py-5">{paperBody}</div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <Button variant="outline" onClick={() => setViewOpen(false)}>Close</Button>
+                    <Button variant="outline" onClick={downloadExam} disabled={downloading}>
+            <Download size={14} /> {downloading ? "Preparing…" : "Download"}
+          </Button>
+          {canSave === true && (
+            saved ? (
+              <Button variant="outline" disabled>
+                <Check size={14} /> Saved
+              </Button>
+            ) : (
+              <Button onClick={saveExam} disabled={saving}>
+                {saving ? "Saving..." : <><Plus size={14} /> Save Exam</>}
+              </Button>
+            )
+          )}
+        </div>
+      </Dialog>
+
+            {/* Hidden off-screen replica — captured block-by-block for clean page breaks */}
+      <div ref={printRef} className="fixed top-0 left-[-2000px] w-[794px] bg-white">
+        <div data-pdf-block className="pt-2 pb-4">
+          <h1 className="text-xl font-bold text-navy-900">{draft.title}</h1>
+          <p className="mt-1 text-[11px] text-slate-500">
+            {draft.department || "N/A"} • {draft.subject || "N/A"} • {draft.duration || 60} min • {totalQ} questions • {totalMarks} marks
+          </p>
+        </div>
+        {draft.sections.map((s: any) => (
+          <div key={s.id}>
+            <div data-pdf-block className="pb-2">
+              <div className="flex items-center gap-2">
                 <span className="rounded-lg bg-navy-900 px-2.5 py-1 text-[11px] font-bold text-white">{s.title}</span>
                 <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
                   {TYPE_LABELS[s.allowedType] ?? s.allowedType}
                 </span>
                 <span className="text-[11px] text-slate-400">{s.marks} marks</span>
               </div>
-              <div className="space-y-2">
-                {s.questions.map((q: any, i: number) => <QuestionView key={q.id} q={q} index={i} />)}
-              </div>
             </div>
-          ))}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
-          <Button variant="outline" onClick={() => setViewOpen(false)}>Close</Button>
-          <Button onClick={addToExamPage}><Plus size={14} /> Add to Exam Page</Button>
-        </div>
-      </Dialog>
+            {s.questions.map((q: any, i: number) => (
+              <div data-pdf-block key={q.id} className="py-1.5">
+                <QuestionView q={q} index={i} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </>
   );
 }
 
 // ================= PAGE =================
 export default function AIAssistantPage() {
+  const router = useRouter();
   const [chats, setChats] = useState<Chat[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
@@ -511,6 +661,7 @@ export default function AIAssistantPage() {
   const streamingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const recRef = useRef<any>(null);
+  const TEACHER_HOME = "/teacher-dashboard";
 // ---------- memoized assistant content (keeps the page fast) ----------
 const AssistantContent = memo(function AssistantContent({ content }: { content: string }) {
   const ex = extractExamDraft(content);
@@ -833,7 +984,6 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
         setProjects((p) => [data.project, ...p]);
         setExpandedProjectId(data.project.id);
         setProjectsOpen(true);
-        toast(`Project "${name}" created.`, "success");
       }
       setNewProjectName("");
       setProjectDialogOpen(false);
@@ -847,7 +997,6 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
     setActiveChatId(null);
     setMessages([]);
     inputRef.current?.focus();
-    toast(`New chat in "${p.name}"`, "info");
   }
 
   async function confirmDeleteProject() {
@@ -862,7 +1011,6 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (expandedProjectId === id) setExpandedProjectId(null);
     await refreshChats();
-    toast("Project deleted — its chats moved to All chats.", "success");
   }
 
   async function confirmDeleteChat() {
@@ -876,7 +1024,6 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
     });
     setChats((prev) => prev.filter((c) => c.id !== chatId));
     if (activeChatId === chatId) { setActiveChatId(null); setMessages([]); }
-    toast("Chat deleted.", "success");
   }
 
   async function pinChat(chatId: string, e: React.MouseEvent) {
@@ -890,10 +1037,9 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId, isPinned }),
     });
-    toast(isPinned ? "Chat pinned." : "Chat unpinned.", "success");
   }
 
-  async function saveRename(chatId: string) {
+    async function saveRename(chatId: string) {
     const title = renameValue.trim();
     setRenamingId(null);
     if (!title) return;
@@ -949,7 +1095,7 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
         return (
       <div
         onClick={() => setActiveChatId(chat.id)}
-        className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
+                className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
           activeChatId === chat.id ? "bg-slate-200/70 font-medium text-navy-900" : "text-slate-600 hover:bg-slate-100"
         }`}
       >
@@ -1023,11 +1169,24 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
       <div className="flex h-[calc(100vh-80px)]">
         {/* ===== SIDEBAR ===== */}
         {sidebarOpen && (
-          <div className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
-            <div className="flex h-14 items-center justify-between border-b border-slate-100 px-4">
-              <EsameLogo height={24} />
-              <button onClick={() => setSidebarOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-navy-900" title="Hide sidebar">
-                <PanelLeftClose size={16} />
+                    <div className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60">
+                                   <div className="flex h-14 items-center justify-between border-b border-slate-100 pl-2 pr-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => router.push(TEACHER_HOME)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-200/70 hover:text-navy-900"
+                  title="Back to Dashboard"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                                <EsameLogo height={20} />
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-200/70 hover:text-navy-900"
+                title="Hide sidebar"
+              >
+                <PanelLeftClose size={18} />
               </button>
             </div>
 
@@ -1160,6 +1319,15 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
         {/* ===== CHAT AREA ===== */}
         <div className="relative flex flex-1 flex-col">
           <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
+                        {!sidebarOpen && (
+              <button
+                onClick={() => router.push(TEACHER_HOME)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-navy-900"
+                title="Back to Dashboard"
+              >
+                <Home size={16} />
+              </button>
+            )}
             {!sidebarOpen && (
               <button onClick={() => setSidebarOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-navy-900" title="Show sidebar">
                 <PanelLeftOpen size={16} />
@@ -1179,7 +1347,6 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
                   const title = chats.find((c) => c.id === activeChatId)?.title || "chat";
                   const md = messages.map((m) => `**${m.role === "user" ? "You" : "ESAME AI"}:**\n\n${m.content}`).join("\n\n---\n\n");
                   downloadText(`${title.slice(0, 30) || "chat"}.md`, `# ${title}\n\n${md}`);
-                  toast("Chat exported as Markdown.", "success");
                 }}
                 className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-navy-900"
                 title="Export chat as Markdown"
@@ -1273,13 +1440,13 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
               <input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.csv,.xlsx,.xls,.pdf,.docx,.doc" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
 
               <div className="flex items-end gap-1 rounded-2xl bg-white p-1.5 shadow-[0_2px_10px_rgba(15,23,42,0.08)]">
-                <button
+                                <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-navy-900 disabled:opacity-40"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-navy-900 disabled:opacity-40"
                   title="Attach image / PDF / Word / Excel"
                 >
-                  <Plus size={18} />
+                  <Plus size={19} />
                 </button>
 
                 <textarea
@@ -1295,7 +1462,7 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
                 <button
                   onClick={toggleMic}
                   disabled={isStreaming}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition disabled:opacity-40 ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition disabled:opacity-40 ${
                     listening ? "animate-pulse bg-rose-50 text-rose-600" : "text-slate-500 hover:bg-slate-100 hover:text-navy-900"
                   }`}
                   title="Voice input (auto English / Khmer)"
@@ -1306,7 +1473,7 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
                 {isStreaming ? (
                   <button
                     onClick={stopGeneration}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white transition hover:bg-rose-600"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white transition hover:bg-rose-600"
                     title="Stop generating"
                   >
                     <Square size={15} />
@@ -1315,7 +1482,7 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
                   <button
                     onClick={sendMessage}
                     disabled={!input.trim() && attachments.length === 0}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-800 disabled:bg-slate-200 disabled:text-slate-400"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-800 disabled:bg-slate-200 disabled:text-slate-400"
                     title="Send"
                   >
                     <Send size={15} />
