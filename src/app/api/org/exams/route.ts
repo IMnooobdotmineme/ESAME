@@ -4,6 +4,7 @@ import {
   departments,
   examPages,
   examQuestions,
+  examQuestionOptions,
   examSections,
   exams,
   examStudents,
@@ -11,7 +12,7 @@ import {
   subjects,
   teachers,
 } from "@/db/schema";
-import { and, desc, eq, inArray, sql } from "drizzle-orm"; // ← added sql
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { requireOrgSession } from "@/lib/session";
 
 type ExamStatus = "Scheduled" | "In Progress" | "Completed" | "Locked";
@@ -43,11 +44,23 @@ type QuestionRow = {
   id: string;
   examId: string;
   text: string;
-  type: "mcq" | "multiple_select" | "true_false" | "short_answer" | "essay" | "coding" | "fill_in_blank";
+  type: "mcq" | "multiple_select" | "true_false" | "short_answer" | "essay" | "coding" | "fill_in_blank" | "matching" | "ordering";
   points: number;
   questionOrder: number;
   pageOrder: number;
   sectionOrder: number;
+  sectionId: string;
+  sectionTitle: string;
+  explanation?: string | null;
+  payload: Record<string, unknown>;
+};
+
+type OptionRow = {
+  id: string;
+  questionId: string;
+  optionText: string;
+  isCorrect: boolean;
+  optionOrder: number;
 };
 
 type StudentRow = {
@@ -84,7 +97,7 @@ function mapExamStatus(status: ExamListRow["status"]): ExamStatus {
       return "Scheduled";
   }
 }
-// ✅ Org status follows the teacher's review status for ended exams
+
 function mapOrgDisplayStatus(
   sessionStatus: ExamListRow["status"],
   gradingStatus: ExamListRow["gradingStatus"]
@@ -92,10 +105,10 @@ function mapOrgDisplayStatus(
   if (sessionStatus === "locked") return "Locked";
   if (sessionStatus === "scheduled") return "Scheduled";
   if (sessionStatus === "in_progress") return "In Progress";
-  // exam ended → mirror the teacher's grading dropdown
   return gradingStatus === "complete" ? "Completed" : "In Progress";
 }
-function mapQuestionType(type: QuestionRow["type"]) {
+
+function mapQuestionType(type: string) {
   switch (type) {
     case "multiple_select":
       return "Multiple Select";
@@ -109,6 +122,10 @@ function mapQuestionType(type: QuestionRow["type"]) {
       return "Essay";
     case "coding":
       return "Coding";
+    case "matching":
+      return "Matching Pairs";
+    case "ordering":
+      return "Ordering / Sequence";
     default:
       return "MCQ";
   }
@@ -233,7 +250,6 @@ async function loadExamRows(orgId: string, examId?: string) {
     .innerJoin(departments, eq(exams.departmentId, departments.id))
     .innerJoin(subjects, eq(exams.subjectId, subjects.id))
     .where(conditions)
-    // ✅ NEWEST FIRST: done date (or created date if still live), newest on top
     .orderBy(desc(sql`COALESCE(${exams.endTime}, ${exams.createdAt})`))) as ExamListRow[];
 }
 
@@ -241,38 +257,56 @@ async function loadRelatedRows(examIds: string[]) {
   if (examIds.length === 0) {
     return {
       questionRows: [] as QuestionRow[],
+      optionRows: [] as OptionRow[],
       studentRows: [] as StudentRow[],
       attemptRows: [] as AttemptRow[],
     };
   }
 
-  const [questionRows, studentRows] = (await Promise.all([
-    db
-      .select({
-        id: examQuestions.id,
-        examId: examSections.examId,
-        text: examQuestions.questionText,
-        type: examQuestions.questionType,
-        points: examQuestions.points,
-        questionOrder: examQuestions.questionOrder,
-        pageOrder: examPages.pageOrder,
-        sectionOrder: examSections.sectionOrder,
-      })
-      .from(examQuestions)
-      .innerJoin(examPages, eq(examQuestions.pageId, examPages.id))
-      .innerJoin(examSections, eq(examPages.sectionId, examSections.id))
-      .where(inArray(examSections.examId, examIds)),
-    db
-      .select({
-        id: examStudents.id,
-        examId: examStudents.examId,
-        studentId: examStudents.studentId,
-        studentName: examStudents.studentName,
-        studentEmail: examStudents.studentEmail,
-      })
-      .from(examStudents)
-      .where(inArray(examStudents.examId, examIds)),
-  ])) as [QuestionRow[], StudentRow[]];
+  const questionRows = (await db
+    .select({
+      id: examQuestions.id,
+      examId: examSections.examId,
+      text: examQuestions.questionText,
+      type: examQuestions.questionType,
+      points: examQuestions.points,
+      questionOrder: examQuestions.questionOrder,
+      pageOrder: examPages.pageOrder,
+      sectionOrder: examSections.sectionOrder,
+      sectionId: examSections.id,
+      sectionTitle: examSections.title,
+      explanation: examQuestions.explanation,
+      payload: examQuestions.payload,
+    })
+    .from(examQuestions)
+    .innerJoin(examPages, eq(examQuestions.pageId, examPages.id))
+    .innerJoin(examSections, eq(examPages.sectionId, examSections.id))
+    .where(inArray(examSections.examId, examIds))) as QuestionRow[];
+
+  const optionRows = (await db
+    .select({
+      id: examQuestionOptions.id,
+      questionId: examQuestionOptions.questionId,
+      optionText: examQuestionOptions.optionText,
+      isCorrect: examQuestionOptions.isCorrect,
+      optionOrder: examQuestionOptions.optionOrder,
+    })
+    .from(examQuestionOptions)
+    .innerJoin(examQuestions, eq(examQuestionOptions.questionId, examQuestions.id))
+    .innerJoin(examPages, eq(examQuestions.pageId, examPages.id))
+    .innerJoin(examSections, eq(examPages.sectionId, examSections.id))
+    .where(inArray(examSections.examId, examIds))) as OptionRow[];
+
+  const studentRows = (await db
+    .select({
+      id: examStudents.id,
+      examId: examStudents.examId,
+      studentId: examStudents.studentId,
+      studentName: examStudents.studentName,
+      studentEmail: examStudents.studentEmail,
+    })
+    .from(examStudents)
+    .where(inArray(examStudents.examId, examIds))) as StudentRow[];
 
   const examStudentIds = studentRows.map((student) => student.id);
   const attemptRows =
@@ -293,29 +327,62 @@ async function loadRelatedRows(examIds: string[]) {
           .where(inArray(studentExamAttempts.examStudentId, examStudentIds))) as AttemptRow[])
       : [];
 
-  return { questionRows, studentRows, attemptRows };
+  return { questionRows, optionRows, studentRows, attemptRows };
+}
+
+function mapQuestionWithOptions(question: QuestionRow, optionRows: OptionRow[]) {
+  const opts = optionRows
+    .filter((opt) => opt.questionId === question.id)
+    .sort((a, b) => a.optionOrder - b.optionOrder)
+    .map((opt) => ({ text: opt.optionText, isCorrect: opt.isCorrect }));
+  return {
+    id: question.id,
+    text: question.text,
+    type: mapQuestionType(question.type),
+    rawType: question.type,
+    points: question.points,
+    explanation: question.explanation || null,
+    options: opts,
+    payload: question.payload || {},
+  };
 }
 
 function buildExamPayload(
   exam: ExamListRow,
   questionRows: QuestionRow[],
+  optionRows: OptionRow[],
   studentRows: StudentRow[],
   latestAttempts: Map<string, AttemptRow>
 ) {
-  const questions = questionRows
+  const examQuestionRows = questionRows
     .filter((question) => question.examId === exam.id)
     .sort(
       (a, b) =>
         a.sectionOrder - b.sectionOrder ||
         a.pageOrder - b.pageOrder ||
         a.questionOrder - b.questionOrder
-    )
-    .map((question) => ({
-      id: question.id,
-      text: question.text,
-      type: mapQuestionType(question.type),
-      points: question.points,
-    }));
+    );
+
+  const questions = examQuestionRows.map((q) => mapQuestionWithOptions(q, optionRows));
+
+  // Group into sections, ordered by sectionOrder
+  const sectionIds: string[] = [];
+  for (const q of examQuestionRows) if (!sectionIds.includes(q.sectionId)) sectionIds.push(q.sectionId);
+  const sections = sectionIds
+    .map((sid) => {
+      const qs = examQuestionRows.filter((q) => q.sectionId === sid);
+      const first = qs[0];
+      const types = Array.from(new Set(qs.map((q) => q.type)));
+      return {
+        id: sid,
+        order: first.sectionOrder,
+        title: first.sectionTitle || "Section",
+        type: types.length === 1 ? mapQuestionType(first.type) : "Mixed Types",
+        marks: qs.reduce((sum: number, q) => sum + q.points, 0),
+        questions: qs.map((q) => mapQuestionWithOptions(q, optionRows)),
+      };
+    })
+    .sort((a, b) => a.order - b.order);
 
   const students = studentRows.filter((student) => student.examId === exam.id);
   const results = students
@@ -361,6 +428,7 @@ function buildExamPayload(
     totalQuestions: exam.totalQuestions || questions.length,
     totalStudents: students.length,
     questions,
+    sections,
     results,
   };
 }
@@ -377,10 +445,12 @@ export async function GET(req: Request) {
 
   const examRows = await loadExamRows(session.userId, examId);
   const scopedRows = teacherId ? examRows.filter((exam) => exam.teacherId === teacherId) : examRows;
-  const { questionRows, studentRows, attemptRows } = await loadRelatedRows(scopedRows.map((exam) => exam.id));
+  const { questionRows, optionRows, studentRows, attemptRows } = await loadRelatedRows(
+    scopedRows.map((exam) => exam.id)
+  );
   const latestAttempts = latestAttemptByStudent(attemptRows);
   const examsPayload = scopedRows.map((exam) =>
-    buildExamPayload(exam, questionRows, studentRows, latestAttempts)
+    buildExamPayload(exam, questionRows, optionRows, studentRows, latestAttempts)
   );
 
   if (examId) {
