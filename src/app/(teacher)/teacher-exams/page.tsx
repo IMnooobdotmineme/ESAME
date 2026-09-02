@@ -15,6 +15,7 @@ import {
   CalendarDays,
   Search,
   Layers,
+  Loader2,
 } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
@@ -112,6 +113,8 @@ export default function MyExamsPage() {
   const fetchExams = useExamStore((state) => state.fetchExams);
 
   const [launchedRoomCode, setLaunchedRoomCode] = useState<string | null>(null);
+  const [launchTarget, setLaunchTarget] = useState<{ id: string; title: string } | null>(null);
+  const [launching, setLaunching] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
@@ -333,16 +336,9 @@ export default function MyExamsPage() {
                       </Button>
                     )}
                     {exam.status === "scheduled" && (
-                      <Button
+                                            <Button
                         size="sm"
-                        onClick={async () => {
-                          const result = await launchExam(exam.id);
-                          if (result.success && result.roomCode) {
-                            setLaunchedRoomCode(result.roomCode);
-                          } else {
-                            alert(result.message || "Failed to launch exam.");
-                          }
-                        }}
+                        onClick={() => setLaunchTarget({ id: exam.id, title: exam.title })}
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
                         Launch Exam
@@ -422,6 +418,53 @@ export default function MyExamsPage() {
           confirmLabel="Delete Exam"
         />
       </main>
+
+      {/* LAUNCH CONFIRM — asks before launching */}
+      <Dialog open={!!launchTarget} onClose={() => setLaunchTarget(null)}>
+        <DialogHeader title="Launch Exam?" onClose={() => setLaunchTarget(null)} />
+        <div className="px-6 py-5">
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Launch <span className="font-semibold text-navy-900">{launchTarget?.title}</span>?
+            Once launched, the exam moves to <span className="font-semibold">Active</span> and students
+            can join with the room code. You can end it anytime from Live Monitoring.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <Button variant="outline" onClick={() => setLaunchTarget(null)}>
+            Cancel
+          </Button>
+                    <Button
+            disabled={launching}
+            onClick={async () => {
+              if (!launchTarget) return;
+              setLaunching(true);
+              try {
+                const result = await launchExam(launchTarget.id);
+                setLaunchTarget(null);
+                if (result.success && result.roomCode) {
+                  setLaunchedRoomCode(result.roomCode);
+                } else {
+                  alert(result.message || "Failed to launch exam.");
+                }
+              } finally {
+                setLaunching(false);
+              }
+            }}
+          >
+            {launching ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Launching…
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                Launch
+              </>
+            )}
+          </Button>
+        </div>
+      </Dialog>
 
       {/* LAUNCH SUCCESS MODAL — shows room code */}
       <Dialog open={!!launchedRoomCode} onClose={() => setLaunchedRoomCode(null)}>

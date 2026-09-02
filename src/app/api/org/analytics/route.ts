@@ -213,9 +213,9 @@ export async function GET(req: Request) {
         const attempt = latestAttemptByStudent.get(student.id);
         return !!student.completedAt || !!attempt?.submittedAt;
       }).length;
-      const percent = departmentStudents.length
+            const percent = departmentStudents.length
         ? Math.round((submitted / departmentStudents.length) * 100)
-        : department.metricValue;
+        : 0;
       return {
         code: department.name
           .split(/\s+/)

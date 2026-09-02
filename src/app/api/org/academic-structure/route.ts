@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { departments, notifications, subjects, teachers } from "@/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import {
+  departments,
+  exams,
+  examStudents,
+  notifications,
+  studentExamAttempts,
+  subjects,
+  teachers,
+} from "@/db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { requireOrgSession } from "@/lib/session";
 import {
   assignmentKey,
@@ -84,15 +92,17 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const orgId = session.userId;
+
   const departmentRows = (await db
     .select()
     .from(departments)
-    .where(eq(departments.orgId, session.userId))) as Array<typeof departments.$inferSelect>;
+    .where(eq(departments.orgId, orgId))) as Array<typeof departments.$inferSelect>;
 
   const subjectRows = (await db
     .select()
     .from(subjects)
-    .where(eq(subjects.orgId, session.userId))) as Array<typeof subjects.$inferSelect>;
+    .where(eq(subjects.orgId, orgId))) as Array<typeof subjects.$inferSelect>;
 
   const teacherRows = (await db
     .select({
@@ -104,7 +114,74 @@ export async function GET() {
       createdAt: teachers.createdAt,
     })
     .from(teachers)
-    .where(eq(teachers.orgId, session.userId))) as AcademicTeacherRow[];
+    .where(eq(teachers.orgId, orgId))) as AcademicTeacherRow[];
+
+  // ✅ Real exam data
+  const examRows = (await db
+    .select({ id: exams.id, subjectId: exams.subjectId })
+    .from(exams)
+    .where(eq(exams.orgId, orgId))) as Array<{ id: string; subjectId: string }>;
+
+  const examIds = examRows.map((e) => e.id);
+
+  const enrolledRows =
+    examIds.length > 0
+      ? ((await db
+          .select({
+            id: examStudents.id,
+            examId: examStudents.examId,
+            studentId: examStudents.studentId,
+          })
+          .from(examStudents)
+          .where(inArray(examStudents.examId, examIds))) as Array<{
+          id: string;
+          examId: string;
+          studentId: string;
+        }>)
+      : [];
+
+  const enrolledIds = enrolledRows.map((r) => r.id);
+  const submittedSet = new Set<string>();
+  if (enrolledIds.length > 0) {
+    const attemptRows = (await db
+      .select({
+        examStudentId: studentExamAttempts.examStudentId,
+        submittedAt: studentExamAttempts.submittedAt,
+      })
+      .from(studentExamAttempts)
+      .where(inArray(studentExamAttempts.examStudentId, enrolledIds))) as Array<{
+      examStudentId: string;
+      submittedAt: Date | null;
+    }>;
+    for (const a of attemptRows) if (a.submittedAt) submittedSet.add(a.examStudentId);
+  }
+
+  const subjectById = new Map(subjectRows.map((s) => [s.id, s]));
+  const examSubjectId = new Map(examRows.map((e) => [e.id, e.subjectId]));
+
+  // ✅ Per-department aggregation
+  const aggByDept = new Map<string, { students: Set<string>; enrolled: number; submitted: number }>();
+  for (const d of departmentRows) aggByDept.set(d.id, { students: new Set(), enrolled: 0, submitted: 0 });
+
+  for (const row of enrolledRows) {
+    const subject = subjectById.get(examSubjectId.get(row.examId) ?? "");
+    if (!subject) continue;
+    const agg = aggByDept.get(subject.departmentId);
+    if (!agg) continue;
+    agg.students.add(row.studentId);
+    agg.enrolled += 1;
+    if (submittedSet.has(row.id)) agg.submitted += 1;
+  }
+
+  // ✅ Faculty per department from teacher assignments
+  const facultyByDept = new Map<string, Set<string>>();
+  for (const d of departmentRows) facultyByDept.set(d.id, new Set());
+  for (const teacher of teacherRows) {
+    for (const a of normalizeAssignments(teacher.assignments)) {
+      const dept = departmentRows.find((d) => d.name === a.department);
+      if (dept) facultyByDept.get(dept.id)!.add(teacher.id);
+    }
+  }
 
   const teachersBySubject = new Map<
     string,
@@ -125,17 +202,21 @@ export async function GET() {
     }
   }
 
-  const departmentsPayload = departmentRows.map((department: typeof departments.$inferSelect) => ({
-    id: department.id,
-    name: department.name,
-    courses: department.courses,
-    students: department.students,
-    faculty: department.faculty,
-    metricLabel: department.metricLabel,
-    metricValue: department.metricValue,
-    subjects: subjectRows
-      .filter((subject: typeof subjects.$inferSelect) => subject.departmentId === department.id)
-      .map((subject: typeof subjects.$inferSelect) => ({
+  const departmentsPayload = departmentRows.map((department) => {
+    const deptSubjects = subjectRows.filter((s) => s.departmentId === department.id);
+    const agg = aggByDept.get(department.id)!;
+    const faculty = facultyByDept.get(department.id)!;
+    const completion = agg.enrolled > 0 ? Math.round((agg.submitted / agg.enrolled) * 100) : 0;
+
+    return {
+      id: department.id,
+      name: department.name,
+      courses: deptSubjects.length,
+      students: agg.students.size,
+      faculty: faculty.size,
+      metricLabel: "Exam Completion Rate",
+      metricValue: completion,
+      subjects: deptSubjects.map((subject) => ({
         id: subject.id,
         name: subject.name,
         teacherNames:
@@ -144,7 +225,8 @@ export async function GET() {
             ?.map((teacher) => teacher.name) ?? [],
         teachers: teachersBySubject.get(assignmentKey(department.name, subject.name)) ?? [],
       })),
-  }));
+    };
+  });
 
   return NextResponse.json({ departments: departmentsPayload });
 }

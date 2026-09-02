@@ -104,7 +104,7 @@ export default function OrganizationDashboardPage() {
   const stats = useMemo(
     () => [
       { label: "Total Teachers", value: String(data.stats.totalTeachers), icon: Users },
-      { label: "Active Exams", value: String(data.stats.activeExams), icon: FileText },
+            { label: "Total Exams", value: String(data.stats.activeExams), icon: FileText },
       { label: "Students Participated", value: data.stats.studentsParticipated.toLocaleString(), icon: GraduationCap },
       { label: "Average Pass Rate", value: `${data.stats.averagePassRate}%`, icon: TrendingUp },
       { label: "Total Departments", value: String(data.stats.totalDepartments), icon: Building2 },

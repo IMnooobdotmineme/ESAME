@@ -439,9 +439,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const examId = searchParams.get("id")?.trim();
+    const { searchParams } = new URL(req.url);
+  const rawExamId = searchParams.get("id")?.trim();
   const teacherId = searchParams.get("teacherId")?.trim();
+  const examId =
+    rawExamId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawExamId)
+      ? rawExamId
+      : undefined;
+
+  if (rawExamId && !examId) {
+    return NextResponse.json({ exam: null, error: "Invalid exam id." }, { status: 404 });
+  }
 
   const examRows = await loadExamRows(session.userId, examId);
   const scopedRows = teacherId ? examRows.filter((exam) => exam.teacherId === teacherId) : examRows;
@@ -460,11 +468,14 @@ export async function GET(req: Request) {
   const thisMonth = getMonthRange(0);
   const lastMonth = getMonthRange(1);
 
-  const activeThisMonth = scopedRows.filter(
-    (exam) => exam.status === "in_progress" && isWithinRange(exam.createdAt, thisMonth.start, thisMonth.end)
+    const isActiveExam = (exam: (typeof scopedRows)[number]) =>
+    mapOrgDisplayStatus(exam.status, exam.gradingStatus) === "In Progress";
+
+    const activeThisMonth = scopedRows.filter((exam) =>
+    isWithinRange(exam.createdAt, thisMonth.start, thisMonth.end)
   ).length;
-  const activeLastMonth = scopedRows.filter(
-    (exam) => exam.status === "in_progress" && isWithinRange(exam.createdAt, lastMonth.start, lastMonth.end)
+  const activeLastMonth = scopedRows.filter((exam) =>
+    isWithinRange(exam.createdAt, lastMonth.start, lastMonth.end)
   ).length;
 
   const allLatestAttempts = Array.from(latestAttempts.values());
@@ -478,7 +489,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     exams: examsPayload,
     totals: {
-      active: scopedRows.filter((exam) => exam.status === "in_progress").length,
+          active: scopedRows.length,
       scheduled: scopedRows.filter(isScheduledWithin24Hours).length,
       totalSubmissions: examsPayload.reduce((sum, exam) => sum + exam.results.length, 0),
       activeTrend: computeTrend(activeThisMonth, activeLastMonth) ?? null,

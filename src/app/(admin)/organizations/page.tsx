@@ -337,7 +337,7 @@ export default function AdminOrganizationsPage() {
         onConfirm={handleFinalConfirm}
         title="Are you absolutely sure?"
         description={`This is your final confirmation. "${deleteTarget?.name}" and all associated teacher accounts will be permanently deleted right now.`}
-        confirmLabel={actionLoading ? "Deleting..." : "Delete Permanently"}
+        confirmLabel={actionLoading ? "Deleting..." : "Delete"}
       />
     </>
   );

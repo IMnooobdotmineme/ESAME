@@ -83,6 +83,7 @@ function isRoute(pathname: string, routes: string[]): boolean {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  console.log("[PROXY HIT]", pathname);
 
   // ✅ Read both cookies once
   const sessionToken = req.cookies.get("session_token")?.value;

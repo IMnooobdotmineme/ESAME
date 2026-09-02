@@ -163,7 +163,7 @@ export default function ExamManagementPage() {
         {/* Stat cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
-            label="Active Exams"
+            label="Total Exams"
             value={String(activeCount)}
             icon={ClipboardList}
             trend={totals.activeTrend ?? undefined}

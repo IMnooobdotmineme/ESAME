@@ -95,20 +95,40 @@ export async function GET(req: NextRequest) {
         )
       );
 
-    const pendingEvalsResult = await db
-      .select({ count: sql<number>`count(*)::int` })
+        const attemptReviewRows = (await db
+      .select({
+        examStudentId: studentExamAttempts.examStudentId,
+        attemptNumber: studentExamAttempts.attemptNumber,
+        createdAt: studentExamAttempts.createdAt,
+        submittedAt: studentExamAttempts.submittedAt,
+        status: studentExamAttempts.status,
+      })
       .from(studentExamAttempts)
-      .innerJoin(
-        examStudents,
-        eq(studentExamAttempts.examStudentId, examStudents.id)
-      )
+      .innerJoin(examStudents, eq(studentExamAttempts.examStudentId, examStudents.id))
       .innerJoin(exams, eq(examStudents.examId, exams.id))
-      .where(
-        and(
-          eq(exams.teacherId, teacherId),
-          eq(studentExamAttempts.status, "needs_review")
-        )
-      );
+      .where(eq(exams.teacherId, teacherId))) as Array<{
+      examStudentId: string;
+      attemptNumber: number;
+      createdAt: Date;
+      submittedAt: Date | null;
+      status: string;
+    }>;
+
+    const latestByStudent = new Map<string, (typeof attemptReviewRows)[number]>();
+    for (const row of attemptReviewRows) {
+      const cur = latestByStudent.get(row.examStudentId);
+      if (
+        !cur ||
+        row.attemptNumber > cur.attemptNumber ||
+        (row.attemptNumber === cur.attemptNumber &&
+          new Date(row.createdAt).getTime() > new Date(cur.createdAt).getTime())
+      ) {
+        latestByStudent.set(row.examStudentId, row);
+      }
+    }
+    const pendingEvaluations = Array.from(latestByStudent.values()).filter(
+      (row) => row.submittedAt != null && row.status === "needs_review"
+    ).length;
 
     return NextResponse.json({
       exams: teacherExams.map((e: ExamRow) => ({
@@ -139,7 +159,7 @@ export async function GET(req: NextRequest) {
       })),
       stats: {
         liveExamsCount: liveExams.length,
-        pendingEvaluations: pendingEvalsResult[0]?.count || 0,
+        pendingEvaluations,
         joinRequestsWaiting: pendingRequestsResult[0]?.count || 0,
         lockedCount: lockedCountResult[0]?.count || 0,
       },

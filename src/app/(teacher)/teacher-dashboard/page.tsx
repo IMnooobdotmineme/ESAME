@@ -98,7 +98,7 @@ export default function TeacherDashboardPage() {
     const upcomingExams = useMemo(
     () =>
       exams
-        .filter((e) => !e.isLaunched && !e.isStarted && !e.isEnded)
+              .filter((e) => (e as { status?: string }).status === "scheduled")
         .sort((a, b) => {
           const da = a.startDate ? new Date(a.startDate).getTime() : new Date(a.createdAt).getTime();
           const db = b.startDate ? new Date(b.startDate).getTime() : new Date(b.createdAt).getTime();
