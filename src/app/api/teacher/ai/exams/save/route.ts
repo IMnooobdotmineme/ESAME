@@ -11,8 +11,8 @@ import {
   examQuestions,
   examQuestionOptions,
 } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-
+import { eq, and, like, sql } from "drizzle-orm";
+import { materializeExamQuestions } from "@/lib/exam-materialize";
 // Generate 6-char exam code like HZARYU
 function generateExamCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -44,16 +44,34 @@ export async function POST(req: NextRequest) {
     } = body;
 
     // ✅ Validate department + subject belong to teacher's org
-    const [dept] = await db
+        let [dept] = await db
       .select()
       .from(departments)
       .where(and(eq(departments.orgId, teacher.orgId), eq(departments.name, department)));
+    
+    if (!dept) {
+      // ✅ Fallback: case-insensitive substring match ("SE" → "Software Engineering")
+      [dept] = await db
+        .select()
+        .from(departments)
+              .where(and(eq(departments.orgId, teacher.orgId), sql`LOWER(${departments.name}) LIKE LOWER(${`%${department}%`})`))
+        .limit(1);
+    }
     if (!dept) return NextResponse.json({ error: "Department not found" }, { status: 400 });
 
-    const [subj] = await db
+        let [subj] = await db
       .select()
       .from(subjects)
       .where(and(eq(subjects.departmentId, dept.id), eq(subjects.name, subject)));
+    
+    if (!subj) {
+      // ✅ Fallback: case-insensitive substring match ("IOT" → "Internet of Things")
+      [subj] = await db
+        .select()
+        .from(subjects)
+              .where(and(eq(subjects.departmentId, dept.id), sql`LOWER(${subjects.name}) LIKE LOWER(${`%${subject}%`})`))
+        .limit(1);
+    }
     if (!subj) return NextResponse.json({ error: "Subject not found" }, { status: 400 });
 
     // ✅ Count total questions
@@ -101,60 +119,8 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
-    // ✅ Create sections → pages → questions → options
-    if (Array.isArray(sections)) {
-      for (let sIdx = 0; sIdx < sections.length; sIdx++) {
-        const s = sections[sIdx];
-        const [section] = await db
-          .insert(examSections)
-          .values({
-            examId: newExam.id,
-            title: s.title || `Section ${sIdx + 1}`,
-            allowedType: s.type || s.allowedType || "mcq",
-            sectionOrder: sIdx,
-          })
-          .returning();
-
-        const [page] = await db
-          .insert(examPages)
-          .values({
-            sectionId: section.id,
-            pageTitle: `Page ${sIdx + 1}`,
-            pageOrder: 0,
-          })
-          .returning();
-
-        if (Array.isArray(s.questions)) {
-          for (let qIdx = 0; qIdx < s.questions.length; qIdx++) {
-            const q = s.questions[qIdx];
-            const [question] = await db
-              .insert(examQuestions)
-              .values({
-                pageId: page.id,
-                questionText: q.text || q.questionText || "",
-                questionType: q.type || "mcq",
-                points: q.points || q.marks || 1,
-                questionOrder: qIdx,
-                explanation: q.explanation || null,
-                payload: q.payload || {},
-              })
-              .returning();
-
-            if (Array.isArray(q.options)) {
-              const optionInserts = q.options.map((opt: any, oIdx: number) => ({
-                questionId: question.id,
-                optionText: opt.text || opt,
-                isCorrect: opt.isCorrect || false,
-                optionOrder: oIdx,
-              }));
-              if (optionInserts.length > 0) {
-                await db.insert(examQuestionOptions).values(optionInserts);
-              }
-            }
-          }
-        }
-      }
-    }
+        // ✅ Create sections → pages → questions → options (handles all 9 types correctly)
+    await materializeExamQuestions(newExam.id, sections);
 
     // ✅ Generate unique exam code
     let examCode = generateExamCode();

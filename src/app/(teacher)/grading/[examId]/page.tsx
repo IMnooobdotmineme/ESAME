@@ -397,9 +397,8 @@ export default function GradingDetailPage() {
           body = `<div style="background:#fff;border:2px solid #E2E8F0;border-radius:12px;padding:14px;"><div style="font-size:14px;color:#0F172A;white-space:pre-wrap;line-height:1.6;">${escapeHtml(a.studentAnswer || "No answer provided")}</div></div>`;
         }
 
-        const correctBlock = correctText
-          ? `<div style="margin-top:12px;background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:12px;"><div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Correct Answer</div><div style="font-size:13px;color:#166534;font-weight:600;">${escapeHtml(correctText)}</div></div>`
-          : "";
+                // ✅ No separate correct block — correct answers are already highlighted inline in the options
+        const correctBlock = "";
         const feedbackBlock = a.feedback
           ? `<div style="margin-top:12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:12px;padding:12px;"><div style="font-size:11px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Teacher Feedback</div><div style="font-size:13px;color:#92400E;line-height:1.5;">${escapeHtml(a.feedback)}</div></div>`
           : "";

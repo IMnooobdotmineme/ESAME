@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Filter, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, Filter, Search } from "lucide-react";
 import { TeacherTopbar } from "@/components/teacher/TeacherTopbar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +54,23 @@ function isToday(date: Date) {
     date.getDate() === now.getDate()
   );
 }
-
+function CopyIdButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      title="Copy exam ID"
+      className="rounded p-0.5 text-slate-500 hover:bg-slate-200"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+    </button>
+  );
+}
 export default function GradingPage() {
   const router = useRouter();
   const exams = useExamStore((s) => s.exams);
@@ -200,9 +216,13 @@ export default function GradingPage() {
                   >
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-navy-900">{exam.title}</p>
-                      {exam.roomCode && (
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          Room: {exam.roomCode}
+                                            {exam.roomCode && (
+                        <p
+                          className="mt-0.5 flex items-center gap-1 text-xs text-slate-400"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          ID: <span className="font-mono font-semibold text-slate-500">{exam.roomCode}</span>
+                          <CopyIdButton code={exam.roomCode} />
                         </p>
                       )}
                     </td>

@@ -225,7 +225,26 @@ function UserBubble({ msg }: { msg: any }) {
     </div>
   );
 }
-
+function hashDraft(obj: any): string {
+  // ✅ Hash only stable content (no random IDs) so the same paper = same key forever
+  const stable = {
+    t: obj?.title || "",
+    d: obj?.department || "",
+    s: obj?.subject || "",
+    sec: (obj?.sections || []).map((sec: any) => ({
+      ti: sec?.title || "",
+      ty: sec?.allowedType || "",
+      qs: (sec?.questions || []).map((q: any) => [q?.text || "", q?.marks ?? 0]),
+    })),
+  };
+  const str = JSON.stringify(stable);
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h << 5) - h + str.charCodeAt(i);
+    h |= 0;
+  }
+  return String(h);
+}
 // ---------- exam JSON extraction ----------
 function extractExamDraft(content: string): { clean: string; draft: any | null } {
   const re = /\[\[EXAM_JSON\]\]([\s\S]*?)\[\[\/?EXAM_JSON\]\]/;  // ← added ? to make the slash optional
@@ -411,38 +430,21 @@ function ExamDraftCard({ draft }: { draft: any }) {
   const router = useRouter();
   const [viewOpen, setViewOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [canSave, setCanSave] = useState<boolean | null>(null);
+    const [canSave, setCanSave] = useState<boolean | null>(true);
     const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const totalQ = draft.sections.reduce((a: number, s: any) => a + s.questions.length, 0);
   const totalMarks = draft.sections.reduce((a: number, s: any) => a + s.marks, 0);
+  const draftKey = hashDraft(draft);
+  
 
-  useEffect(() => {
-    if (!draft.department || !draft.subject) {
-      setCanSave(false);
-      return;
-    }
-    fetch("/api/teacher/ai/departments")
-      .then((r) => r.json())
-      .then((data) => {
-        const depts = data.departments || [];
-        const subjs = data.subjects || [];
-        const deptMatch = depts.some((d: any) => d.name === draft.department);
-        const subjMatch = subjs.some(
-          (s: any) => s.name === draft.subject && s.deptName === draft.department
-        );
-        setCanSave(deptMatch && subjMatch);
-      })
-      .catch(() => setCanSave(false));
-  }, [draft.department, draft.subject]);
-
-  useEffect(() => {
-    if (sessionStorage.getItem(`esai_saved_${draft.title}`)) setSaved(true);
-  }, [draft.title]);
+    useEffect(() => {
+    if (sessionStorage.getItem(`esai_saved_${draftKey}`)) setSaved(true);
+  }, [draftKey]);
 
   async function saveExam() {
-    if (saving || canSave === false) return;
+        if (saving || saved || canSave === false) return;
     setSaving(true);
     try {
       const res = await fetch("/api/teacher/ai/exams/save", {
@@ -460,7 +462,7 @@ function ExamDraftCard({ draft }: { draft: any }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save");
-      sessionStorage.setItem(`esai_saved_${draft.title}`, "1");
+      sessionStorage.setItem(`esai_saved_${draftKey}`, "1");
       setSaved(true);
       router.push("/teacher-exams");
     } catch (err: any) {

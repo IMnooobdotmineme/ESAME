@@ -4,10 +4,22 @@ export type AIQuestionType =
   | "mcq" | "multi_select" | "true_false" | "short_answer" | "long_answer"
   | "coding" | "fill_blank" | "matching" | "ordering";
 
-export const AI_TYPES: AIQuestionType[] = [
-  "mcq", "multi_select", "true_false", "short_answer", "long_answer",
-  "coding", "fill_blank", "matching", "ordering",
-];
+// ✅ Accept DB/other aliases so sections NEVER get dropped
+const TYPE_ALIAS: Record<string, AIQuestionType> = {
+  mcq: "mcq",
+  multiple_choice: "mcq",
+  multi_select: "multi_select",
+  multiple_select: "multi_select",
+  true_false: "true_false",
+  short_answer: "short_answer",
+  long_answer: "long_answer",
+  essay: "long_answer",
+  coding: "coding",
+  fill_blank: "fill_blank",
+  fill_in_blank: "fill_blank",
+  matching: "matching",
+  ordering: "ordering",
+};
 
 let uid = 0;
 function newId() { uid += 1; return `ai-q-${Date.now()}-${uid}`; }
@@ -25,7 +37,7 @@ function extractMarkers(t: string): string[] {
 
 export function normalizeQuestion(raw: any, fallback: AIQuestionType): any | null {
   if (!raw || typeof raw !== "object") return null;
-  const type: AIQuestionType = AI_TYPES.includes(raw.type) ? raw.type : fallback;
+    const type: AIQuestionType = TYPE_ALIAS[String(raw?.type)] ?? fallback;
   const text = String(raw.text ?? raw.question ?? "").trim();
   if (!text) return null;
 
@@ -61,11 +73,29 @@ export function normalizeQuestion(raw: any, fallback: AIQuestionType): any | nul
     case "true_false":
       q.tfCorrect = String(raw.tfCorrect ?? raw.correct ?? "true").toLowerCase() !== "false";
       break;
-    case "fill_blank": {
-      const blanksText = String(raw.blanksText ?? raw.template ?? "").trim();
+        case "fill_blank": {
+      let blanksText = String(raw.blanksText ?? raw.template ?? text ?? "").trim();
+      const payload = raw.payload || {};
+      const keyIn = Array.isArray(raw.answerKey) ? raw.answerKey : Array.isArray(payload.answerKey) ? payload.answerKey : [];
+      
+      // ✅ Auto-fix: if no [1] markers, add them
+      if (!blanksText || !extractMarkers(blanksText).length) {
+        const answers = (Array.isArray(keyIn) ? keyIn : []).map((a: any) => 
+          typeof a === "string" ? a : a?.answer || a?.text || ""
+        ).filter(Boolean);
+        if (answers.length > 0 || /_{2,}/.test(blanksText)) {
+          let idx = 0;
+          blanksText = blanksText.replace(/_{2,}/g, () => `[${++idx}]`);
+          if (!extractMarkers(blanksText).length) {
+            blanksText = `${blanksText} [1]`;
+          }
+        } else {
+          // Fallback: add a single blank at the end
+          blanksText = `${blanksText} [1]`;
+        }
+      }
+      
       const nums = extractMarkers(blanksText);
-      if (!blanksText || nums.length === 0) return null;
-      const keyIn = Array.isArray(raw.answerKey) ? raw.answerKey : [];
       q.blanksText = blanksText;
       q.answerKey = nums.map((n) => {
         const found = keyIn.find((k: any) => String(k?.number) === n);
@@ -104,14 +134,127 @@ export interface ExamDraft {
   subject: string;
   sections: any[];
 }
+function preprocessQuestion(q: any): any {
+  const text = q.text || q.question || q.questionText || "";
+  const opts = Array.isArray(q.options) ? q.options : [];
+  const payload = q.payload || {};
 
+  if (opts.length > 0) {
+    const optionTexts = opts.map((o: any) => o.optionText || o.text || String(o)).filter(Boolean);
+    const correctIndexes = opts
+      .map((o: any, i: number) => (o.isCorrect === true ? i : -1))
+      .filter((i: number) => i >= 0);
+
+    return {
+      ...q,
+      text,
+      mcqOptions: optionTexts,
+      mcqCorrect: correctIndexes[0] ?? 0,
+      multiOptions: optionTexts,
+      multiCorrect: opts.map((o: any) => o.isCorrect === true),
+      tfCorrect: correctIndexes[0] === 0,
+    };
+  }
+
+  // ✅ MATCHING — payload lives on the question
+  const pairs = payload.pairs || payload.matches || [];
+  if (pairs.length > 0) {
+    const normalized = pairs
+      .map((p: any) => ({
+        term: String(p?.term || p?.left || p?.a || p?.key || "").trim(),
+        definition: String(p?.definition || p?.right || p?.b || p?.value || "").trim(),
+      }))
+      .filter((p: any) => p.term && p.definition);
+    if (normalized.length >= 2) {
+      return {
+        ...q,
+        text,
+        matchLeft: normalized.map((p: any) => p.term),
+        matchRight: normalized.map((p: any) => p.definition),
+        matchAnswers: normalized.map((_: any, i: number) => ({
+          left: String(i + 1),
+          right: String.fromCharCode(65 + i),
+        })),
+      };
+    }
+  }
+
+  // ✅ ORDERING — payload lives on the question
+  const items = payload.items || payload.order || payload.sequence || [];
+  if (items.length >= 2) {
+    return { ...q, text, orderingItems: items.map(String).filter(Boolean) };
+  }
+
+  // ✅ FILL BLANK — convert "____" into [1] markers the normalizer requires
+  const answers = payload.answerKey || payload.answers || payload.blanks || [];
+  const answerStrings = (Array.isArray(answers) ? answers : [])
+    .map((a: any) => (typeof a === "string" ? a : a?.answer || a?.text || ""))
+    .filter(Boolean);
+
+  if (answerStrings.length > 0 || /_{2,}/.test(text)) {
+    let idx = 0;
+    let template = text.replace(/_{2,}/g, () => `[${++idx}]`);
+    let markers = (template.match(/\[\d+\]/g) || []).length;
+    if (markers === 0) {
+      template = `${template} [1]`;
+      markers = 1;
+    }
+    return {
+      ...q,
+      text: template,
+      blanksText: template,
+      answerKey: Array.from({ length: markers }, (_, i) => ({
+        number: String(i + 1),
+        answer: answerStrings[i] || "",
+      })),
+    };
+  }
+
+  return { ...q, text };
+}
+
+function preprocessMatching(s: any): any {
+  const payload = s.payload || {};
+  const pairs = payload.pairs || payload.matches || payload.items || [];
+  
+  if (pairs.length > 0) {
+    // Handle various formats: [{term, definition}], [{left, right}], [{a, b}]
+    const normalized = pairs.map((p: any) => {
+      const term = p.term || p.left || p.a || p.key || String(p[0] || "");
+      const def = p.definition || p.right || p.b || p.value || String(p[1] || "");
+      return { term, definition: def };
+    });
+    
+    return {
+      ...s,
+      matchLeft: normalized.map((p: any) => p.term).filter(Boolean),
+      matchRight: normalized.map((p: any) => p.definition).filter(Boolean),
+      matchAnswers: normalized.map((p: any, i: number) => ({
+        left: String(i + 1),
+        right: String.fromCharCode(65 + i),
+      })),
+    };
+  }
+  return s;
+}
+function preprocessOrdering(s: any): any {
+  const payload = s.payload || {};
+  const items = payload.items || payload.order || payload.sequence || payload.elements || [];
+  
+  if (items.length > 0) {
+    return { ...s, orderingItems: items.map(String).filter(Boolean) };
+  }
+  return s;
+}
 export function normalizeExamDraft(parsed: any): ExamDraft | null {
   const sectionsIn = Array.isArray(parsed?.sections) ? parsed.sections : [];
   const sections = sectionsIn
     .map((s: any, si: number) => {
-      const t: AIQuestionType = AI_TYPES.includes(s?.type) ? s.type : "mcq";
-      const qs = (Array.isArray(s?.questions) ? s.questions : [])
-        .map((r: any) => normalizeQuestion(r, t))
+      // Preprocess section-level data for matching/ordering
+      const processedSection = s.type === "matching" ? preprocessMatching(s) : s.type === "ordering" ? preprocessOrdering(s) : s;
+            const t: AIQuestionType = TYPE_ALIAS[String(s?.type)] ?? "mcq";
+            const qs = (Array.isArray(processedSection?.questions) ? processedSection.questions : [])
+        .map((r: any) => normalizeQuestion(preprocessQuestion(r), t))
         .filter(Boolean);
       return {
         id: `ai-sec-${Date.now()}-${si}`,

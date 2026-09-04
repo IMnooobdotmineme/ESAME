@@ -127,13 +127,13 @@ export function ExamQuestionCard({ question, questionNumber, answer, onAnswer }:
         </div>
       )}
 
-      {question.type === "short_answer" && (
-        <input
-          type="text"
+            {question.type === "short_answer" && (
+        <textarea
           value={answer ?? ""}
           onChange={(e) => onAnswer(question.id, e.target.value)}
+          rows={3}
           placeholder="Type your answer..."
-          className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+          className="w-full resize-y rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-navy-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 min-h-[76px]"
         />
       )}
 
