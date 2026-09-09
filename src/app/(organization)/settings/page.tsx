@@ -1,5 +1,6 @@
 "use client";
 
+import { validatePasswordStrength } from "@/lib/password-policy";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { OrgTopbar } from "@/components/organization/OrgTopbar";
@@ -328,8 +329,9 @@ export default function SettingsPage() {
       setPasswordError("New password and confirmation do not match.");
       return;
     }
-    if (newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters.");
+    const pwdPolicyError = validatePasswordStrength(newPassword);
+    if (pwdPolicyError) {
+      setPasswordError(pwdPolicyError);
       return;
     }
 
@@ -498,7 +500,7 @@ export default function SettingsPage() {
                     />
                   </div>
                 </div>
-                {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
+                {passwordError && <p className="text-sm text-red-600 whitespace-pre-line">{passwordError}</p>}
                 <Button type="submit" variant="secondary">
                   {savedPassword ? <Check size={15} /> : null}
                   {savedPassword ? "Password Updated" : "Update Password"}

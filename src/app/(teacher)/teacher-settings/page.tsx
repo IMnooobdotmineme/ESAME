@@ -1,5 +1,6 @@
 "use client";
 
+import { validatePasswordStrength } from "@/lib/password-policy";
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
@@ -238,8 +239,9 @@ export default function SettingsPage() {
       setPasswordError("New password must be different from your current password.");
       return;
     }
-    if (passwords.next.length < 8) {
-      setPasswordError("New password must be at least 8 characters.");
+    const pwdPolicyError = validatePasswordStrength(passwords.next);
+    if (pwdPolicyError) {
+      setPasswordError(pwdPolicyError);
       return;
     }
     
@@ -539,7 +541,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {passwordError && <p className="text-xs font-semibold text-red-600">{passwordError}</p>}
+            {passwordError && <p className="text-xs font-semibold text-red-600 whitespace-pre-line">{passwordError}</p>}
           </div>
 
           <div className="flex items-center justify-end gap-3">

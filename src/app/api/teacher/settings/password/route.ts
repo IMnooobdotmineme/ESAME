@@ -3,8 +3,7 @@ import { requireTeacherSession } from "@/lib/session";
 import { db } from "@/db";
 import { teachers, passwordHistory } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { hashPassword, verifyPassword } from "@/lib/password";
-
+import { hashPassword, verifyPassword, validatePasswordStrength } from "@/lib/password";
 export async function PUT(req: NextRequest) {
   const session = await requireTeacherSession();
   if (!session) {
@@ -18,11 +17,17 @@ export async function PUT(req: NextRequest) {
 
     if (!currentPassword || !newPassword) {
       return NextResponse.json(
+        
         { error: "Please provide both current and new password." },
         { status: 400 }
       );
     }
 
+  
+    const strengthError = validatePasswordStrength(newPassword);
+    if (strengthError) {
+      return NextResponse.json({ error: strengthError }, { status: 400 });
+    }
     const [teacher] = await db
       .select()
       .from(teachers)

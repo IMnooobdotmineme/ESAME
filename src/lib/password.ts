@@ -3,6 +3,9 @@ import { db } from "@/db";
 import { passwordHistory } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 
+// Re-export so every server route keeps importing from "@/lib/password"
+export { validatePasswordStrength, validateAdminPassword } from "./password-policy";
+
 const SALT_ROUNDS = 10;
 
 export async function hashPassword(password: string): Promise<string> {

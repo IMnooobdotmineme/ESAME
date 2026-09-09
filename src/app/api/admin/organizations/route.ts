@@ -256,7 +256,13 @@ export async function DELETE(req: Request) {
 
     await logOrgDeleted(org.id, org.name, admin.userId);
 
-    await db.delete(organizations).where(eq(organizations.id, orgId));
+    await db
+      .update(organizations)
+      .set({ 
+        status: "suspended", 
+        updatedAt: new Date() 
+      })
+      .where(eq(organizations.id, orgId));
 
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { validateAdminPassword } from "@/lib/password-policy";
 import React, { useEffect, useState } from "react";
 import { KeyRound, Mail, Check, Eye, EyeOff, ShieldCheck, Lock, Fingerprint } from "lucide-react";
 import { AdminTopbar } from "@/components/admin/AdminTopbar";
@@ -84,8 +85,9 @@ export default function AdminProfilePage() {
       setError("New passwords do not match.");
       return;
     }
-    if (passwords.newPassword.length < 8) {
-      setError("New password must be at least 8 characters long.");
+    const pwdPolicyError = validateAdminPassword(passwords.newPassword);
+    if (pwdPolicyError) {
+      setError(pwdPolicyError);
       return;
     }
 
@@ -181,7 +183,7 @@ export default function AdminProfilePage() {
                 name="newPassword"
                 value={passwords.newPassword}
                 onChange={handlePasswordChange}
-                hint="Min. 8 characters"
+                hint="Min. 12 chars (upper, lower, number, symbol)"
               />
 
               <PasswordField
@@ -192,8 +194,7 @@ export default function AdminProfilePage() {
               />
 
               {error && (
-                <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5 whitespace-pre-line">
                   {error}
                 </p>
               )}

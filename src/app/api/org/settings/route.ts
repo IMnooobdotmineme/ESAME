@@ -3,8 +3,7 @@ import { db } from "@/db";
 import { organizations, passwordHistory } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireOrgSession } from "@/lib/session";
-import { verifyPassword, hashPassword, isPasswordReused } from "@/lib/password";
-
+import { verifyPassword, hashPassword, isPasswordReused, validatePasswordStrength } from "@/lib/password";
 export async function PUT(req: Request) {
   const session = await requireOrgSession();
   if (!session) {
@@ -19,10 +18,10 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Current and new passwords are required." }, { status: 400 });
   }
 
-  if (newPassword.length < 8) {
-    return NextResponse.json({ error: "New password must be at least 8 characters." }, { status: 400 });
+    const passwordError = validatePasswordStrength(newPassword);
+  if (passwordError) {
+    return NextResponse.json({ error: passwordError }, { status: 400 });
   }
-
   const [org] = await db
     .select({
       id: organizations.id,

@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { admins, passwordHistory } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAdminSession } from "@/lib/session";
-import { hashPassword, verifyPassword, isPasswordReused } from "@/lib/password";
+import { hashPassword, verifyPassword, isPasswordReused, validateAdminPassword } from "@/lib/password";
 
 export async function GET() {
   const session = await requireAdminSession();
@@ -37,11 +37,9 @@ export async function PATCH(req: Request) {
         { status: 400 }
       );
     }
-    if (String(newPassword).length < 8) {
-      return NextResponse.json(
-        { error: "New password must be at least 8 characters long." },
-        { status: 400 }
-      );
+        const passwordError = validateAdminPassword(String(newPassword));
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     const [admin] = await db

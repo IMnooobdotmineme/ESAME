@@ -9,6 +9,7 @@ import {
   examStudents,
 } from "@/db/schema";
 import { desc, eq, inArray, ne, countDistinct } from "drizzle-orm";
+import { requireAdminSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ function formatSentAt(date: Date) {
 }
 
 export async function GET() {
+  const admin = await requireAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const [orgRows, teacherRows, studentCountResult, broadcastRows] = await Promise.all([
       db
@@ -115,6 +119,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const admin = await requireAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const body = await req.json();
     const subject = String(body.subject ?? "").trim();
@@ -346,6 +353,9 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  const admin = await requireAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const body = await req.json();
     const action = String(body.action ?? "").trim();
@@ -390,6 +400,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const admin = await requireAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const body = await req.json();
     const id = String(body.id ?? "").trim();

@@ -1,5 +1,6 @@
 "use client";
 
+import { validatePasswordStrength } from "@/lib/password-policy";
 import React, { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -210,8 +211,9 @@ export default function OrganizationSignUp() {
     e.preventDefault();
     setError("");
 
-    if (formData.password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+    const pwdPolicyError = validatePasswordStrength(formData.password);
+    if (pwdPolicyError) {
+      setError(pwdPolicyError);
       return;
     }
 
@@ -444,7 +446,7 @@ export default function OrganizationSignUp() {
         </form>
 
         {error && (
-          <p className="mt-4 text-sm text-rose-500 font-semibold text-center">
+          <p className="mt-4 text-sm text-rose-500 font-semibold text-center whitespace-pre-line">
             {error}
           </p>
         )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { validatePasswordStrength } from "@/lib/password-policy";
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -32,8 +33,9 @@ function AcceptInviteForm() {
       return;
     }
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+    const pwdPolicyError = validatePasswordStrength(password);
+    if (pwdPolicyError) {
+      setError(pwdPolicyError);
       return;
     }
 
@@ -136,8 +138,7 @@ function AcceptInviteForm() {
           </div>
 
           {error && (
-            <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5 mt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+            <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5 mt-1 whitespace-pre-line">
               {error}
             </p>
           )}

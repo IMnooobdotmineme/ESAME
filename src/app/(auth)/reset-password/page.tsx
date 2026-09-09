@@ -1,5 +1,6 @@
 "use client";
 
+import { validatePasswordStrength } from "@/lib/password-policy";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -25,8 +26,9 @@ export default function ResetPassword() {
     e.preventDefault();
     setError("");
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+    const pwdPolicyError = validatePasswordStrength(password);
+    if (pwdPolicyError) {
+      setError(pwdPolicyError);
       return;
     }
 
@@ -140,8 +142,7 @@ export default function ResetPassword() {
 
           {/* Validation Messages Container */}
           {error && (
-            <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5 mt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+            <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5 mt-1 whitespace-pre-line">
               {error}
             </p>
           )}

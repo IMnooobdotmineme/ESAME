@@ -162,7 +162,6 @@ function LoginForm() {
           {/* Error message (added to surface backend/login errors) */}
           {error && (
             <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
               {error}
             </p>
           )}

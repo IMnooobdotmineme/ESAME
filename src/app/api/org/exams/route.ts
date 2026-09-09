@@ -212,7 +212,7 @@ function computeTrend(current: number, previous: number): Trend | undefined {
   return { value: `${pct >= 0 ? "+" : ""}${pct}%`, direction: pct >= 0 ? "up" : "down" };
 }
 
-const VISIBLE_EXAM_STATUSES = ["in_progress", "completed"] as const;
+const VISIBLE_EXAM_STATUSES = ["scheduled", "in_progress", "completed"] as const;
 
 async function loadExamRows(orgId: string, examId?: string) {
   const conditions = examId

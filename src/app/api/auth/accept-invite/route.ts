@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { assertDb } from "@/db";
 import { notifications, teachers, passwordHistory } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { hashPassword } from "../../../../lib/password";
-
+import { hashPassword, validatePasswordStrength } from "../../../../lib/password";
 const db = assertDb();
 
 export async function POST(req: Request) {
@@ -15,11 +14,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters long." },
-        { status: 400 }
-      );
+        const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
     if (password !== confirmPassword) {
       return NextResponse.json(

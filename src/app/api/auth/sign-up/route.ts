@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { organizations, teachers, passwordHistory } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { hashPassword } from "../../../../lib/password";
 import { createAndSendVerificationCode } from "../../../../lib/verification";
 import { checkRateLimit, getClientIp, RateLimitError } from "../../../../lib/rate-limit";
 import { logOrgSignup } from "../../../../lib/logs";
-
+import { hashPassword, validatePasswordStrength } from "../../../../lib/password";
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
@@ -28,11 +27,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters long." },
-        { status: 400 }
-      );
+        const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     const emailLower = String(workEmail).toLowerCase().trim();

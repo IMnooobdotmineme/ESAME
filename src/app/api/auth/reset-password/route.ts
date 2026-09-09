@@ -3,9 +3,8 @@ import { cookies } from "next/headers";
 import { db } from "@/db";
 import { organizations, teachers, passwordHistory, resetTokens } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { hashPassword, isPasswordReused } from "../../../../lib/password";
 import { destroyAllSessionsForUser, RESET_COOKIE } from "../../../../lib/session";
-
+import { hashPassword, isPasswordReused, validatePasswordStrength } from "../../../../lib/password";
 export async function POST(req: Request) {
   try {
     const { password, confirmPassword } = await req.json();
@@ -15,11 +14,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters long." },
-        { status: 400 }
-      );
+        const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
     if (password !== confirmPassword) {
       return NextResponse.json(

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/session";
 import { db } from "@/db";
 import { organizations, teachers, exams, activityLogs } from "@/db/schema";
 import { desc, eq, ne, sql } from "drizzle-orm";
@@ -7,6 +8,9 @@ import { formatRelativeTime } from "@/lib/org-utils";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const admin = await requireAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const [
       [totalOrgsResult],

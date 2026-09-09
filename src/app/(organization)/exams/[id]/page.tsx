@@ -459,12 +459,7 @@ export default function ExamDetailPage() {
                           </div>
                         )}
 
-                        {correctText && (
-                          <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3">
-                            <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800 mb-0.5">Correct Answer</p>
-                            <p className="text-sm font-semibold text-emerald-800">{correctText}</p>
-                          </div>
-                        )}
+                        
                       </Card>
                     );
                   })}
