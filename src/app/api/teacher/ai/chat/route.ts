@@ -11,7 +11,7 @@ import { requireTeacherSession } from "@/lib/session";
 import { streamChat } from "@/lib/ai/adapter";
 import { checkQuota, incrementQuota } from "@/lib/ai/quota";
 
-export const maxDuration = 300;
+export const maxDuration = 900; // 15 minutes for large AI grading tasks
 
 // ✅ AI judge — acts as a human teacher grading each question
 async function aiGradeQuestion(params: {
@@ -248,8 +248,13 @@ export async function POST(req: NextRequest) {
 
         const students = (await db.select().from(examStudents).where(eq(examStudents.examId, exam.id))) as any[];
         const results: any[] = [];
+        let gradedCount = 0;
+        const totalStudents = students.length;
 
         for (const student of students) {
+          gradedCount++;
+          console.log(`[AI-GRADING] grading ${student.studentName} (${gradedCount}/${totalStudents})`);
+          
           const sAttempts = (await db.select().from(studentExamAttempts).where(eq(studentExamAttempts.examStudentId, student.id))) as any[];
 
           for (const attempt of sAttempts) {
@@ -342,7 +347,8 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        console.log("[AI-GRADING] results:", results.length);
+                console.log("[AI-GRADING] results:", results.length);
+        console.log(`[AI-GRADING] completed: ${gradedCount}/${totalStudents} students graded`);
         if (!results.length) {
           message = `Exam ${examCode} (${exam.title}) has no student submissions yet.`;
         } else {

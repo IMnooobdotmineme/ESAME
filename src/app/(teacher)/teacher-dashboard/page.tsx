@@ -367,7 +367,7 @@ export default function TeacherDashboardPage() {
                       <div className="min-w-0 space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200 uppercase">
-                            {exam.courseCode}
+                            {exam.department || "EXAM"}
                           </span>
                           <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
                             <CalendarDays className="w-3 h-3" />

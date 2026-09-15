@@ -16,8 +16,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ examId: string }> }
 ) {
-  const { examId } = await params; // ← Add this line
-  const session = await requireTeacherSession();
+    const session = await requireTeacherSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

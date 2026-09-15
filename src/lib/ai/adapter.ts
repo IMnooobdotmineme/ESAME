@@ -71,17 +71,30 @@ async function streamOllama(
     return msg;
   });
 
-  const res = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages: ollamaMessages,
-      stream: true,
-            options: { temperature, num_ctx: 8192 },
-      ...(think ? { think: true } : {}),
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: ollamaMessages,
+        stream: true,
+        options: { temperature, num_ctx: 8192 },
+        ...(think ? { think: true } : {}),
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      throw new Error("Ollama took too long to respond (120s). It might be loading the model into memory. Please try again.");
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const t = await res.text();

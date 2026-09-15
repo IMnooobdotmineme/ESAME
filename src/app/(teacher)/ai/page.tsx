@@ -646,6 +646,7 @@ export default function AIAssistantPage() {
   const [menuChatId, setMenuChatId] = useState<string | null>(null);
   const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
     const [showJump, setShowJump] = useState(false);
     const [creatingProject, setCreatingProject] = useState(false);
       const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -682,20 +683,23 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
     fetch("/api/teacher/ai/projects").then((r) => r.json()).then((d) => setProjects(d.projects || []));
   }, []);
 
-      useEffect(() => {
+useEffect(() => {
     activeChatIdRef.current = activeChatId;
-    stickRef.current = true; // ✅ open chats at the latest message (bottom), like ChatGPT/Qwen
+    stickRef.current = true;
     setShowJump(false);
-    if (!activeChatId) { setMessages([]); return; }
+    if (!activeChatId) { setMessages([]); setChatLoading(false); return; }
+    setChatLoading(true);
     fetch(`/api/teacher/ai/chats?chatId=${activeChatId}`)
       .then((r) => r.json())
       .then((d) => {
         setMessages(d.messages || []);
+        setChatLoading(false);
         requestAnimationFrame(() => {
           const el = scrollBoxRef.current;
-          if (el) el.scrollTop = el.scrollHeight; // instant jump to bottom
+          if (el) el.scrollTop = el.scrollHeight;
         });
-      });
+      })
+      .catch(() => setChatLoading(false));
   }, [activeChatId]);
 
   useEffect(() => {
@@ -1171,7 +1175,7 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
       <div className="flex h-[calc(100vh-80px)]">
         {/* ===== SIDEBAR ===== */}
         {sidebarOpen && (
-                    <div className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60">
+                    <div className="sidebar-in flex w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60 md:relative md:translate-x-0 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-2xl">
                                    <div className="flex h-14 items-center justify-between border-b border-slate-100 pl-2 pr-2">
               <div className="flex items-center gap-2">
                 <button
@@ -1359,24 +1363,40 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
           </div>
 
                     <div ref={scrollBoxRef} onScroll={onScrollBox} className="flex-1 space-y-6 overflow-y-auto px-6 py-6 md:px-12">
-            {messages.length === 0 && !isStreaming && (
-              <div className="flex h-full items-center justify-center">
-                <div className="max-w-lg text-center">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-sky-400 to-sky-600">
-                    <Sparkles size={32} className="text-white" />
-                  </div>
-                  <h2 className="mb-2 text-2xl font-bold text-navy-900">Welcome to ESAME AI</h2>
-                  <p className="mb-5 text-slate-500">Ask anything in English or Khmer, attach images / PDF / Word / Excel, generate exams, and more.</p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {QUICK_PROMPTS.map((p) => (
-                      <button key={p} onClick={() => { setInput(p); inputRef.current?.focus(); }} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-sky-300 hover:text-sky-700">
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {chatLoading && messages.length === 0 && (
+  <div className="mx-auto w-full max-w-3xl space-y-6 px-2 py-4">
+    <div className="flex justify-end"><div className="h-16 w-2/3 rounded-2xl bg-slate-100 sk-pulse" /></div>
+    <div className="flex justify-start"><div className="h-24 w-5/6 rounded-2xl bg-slate-100 sk-pulse" /></div>
+    <div className="flex justify-end"><div className="h-12 w-1/2 rounded-2xl bg-slate-100 sk-pulse" /></div>
+    <div className="flex justify-start"><div className="h-32 w-5/6 rounded-2xl bg-slate-100 sk-pulse" /></div>
+  </div>
+)}
+
+{!chatLoading && messages.length === 0 && !isStreaming && (
+  <div className="fade-in-up flex h-full items-center justify-center">
+    <div className="max-w-lg text-center">
+      <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-sky-400 via-sky-500 to-indigo-600 shadow-lg shadow-sky-200/60">
+        <Sparkles size={36} className="text-white" />
+      </div>
+      <h2 className="mb-2 text-2xl font-bold tracking-tight text-navy-900">Welcome to ESAME AI</h2>
+      <p className="mb-6 text-sm leading-relaxed text-slate-500">
+        Ask anything in English or Khmer — attach images, PDFs, Word, Excel, or generate full exams from a single prompt.
+      </p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {QUICK_PROMPTS.map((p) => (
+          <button
+            key={p}
+            onClick={() => { setInput(p); inputRef.current?.focus(); }}
+            className="group rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 hover:shadow-md active:translate-y-0"
+          >
+            <span className="mr-1 opacity-60 transition-opacity group-hover:opacity-100">✨</span>
+            {p}
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
 
             {messages.map((msg, i) => {
               const ex = msg.role === "assistant" ? extractExamDraft(msg.content) : null;
@@ -1397,20 +1417,20 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
               );
             })}
 
-                        {isStreaming && streamFor === (activeChatId ?? "new") && streamingText && (
-              <div className="msg-in mx-auto w-full max-w-3xl">
-                <div className="md-body w-full">
-                  <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(extractExamDraft(streamingText).clean)}</ReactMarkdown>
-                </div>
-              </div>
-            )}
-                        {isStreaming && streamFor === (activeChatId ?? "new") && !streamingText && (
-              <div className="mx-auto w-full max-w-3xl">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 size={14} className="animate-spin" /> Thinking...
-                </div>
-              </div>
-            )}
+          {isStreaming && streamFor === (activeChatId ?? "new") && streamingText && (
+  <div className="msg-in mx-auto w-full max-w-3xl">
+    <div className="md-body w-full">
+      <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(extractExamDraft(streamingText).clean)}</ReactMarkdown>
+    </div>
+  </div>
+)}
+{isStreaming && streamFor === (activeChatId ?? "new") && !streamingText && (
+  <div className="mx-auto w-full max-w-3xl">
+    <div className="flex items-center gap-2 text-sm text-slate-500">
+      <Loader2 size={14} className="animate-spin" /> Thinking...
+    </div>
+  </div>
+)}
             <div ref={messagesEndRef} />
           </div>
 
@@ -1441,7 +1461,7 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
 
               <input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.csv,.xlsx,.xls,.pdf,.docx,.doc" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
 
-              <div className="flex items-end gap-1 rounded-2xl bg-white p-1.5 shadow-[0_2px_10px_rgba(15,23,42,0.08)]">
+              <div className="flex items-end gap-1 rounded-2xl border border-transparent bg-white p-1.5 shadow-[0_4px_20px_rgba(15,23,42,0.08)] transition-all duration-200 focus-within:border-sky-300 focus-within:shadow-[0_4px_24px_rgba(14,165,233,0.15)]">
                                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
@@ -1482,11 +1502,13 @@ const AssistantContent = memo(function AssistantContent({ content }: { content: 
                   </button>
                 ) : (
                   <button
-                    onClick={sendMessage}
-                    disabled={!input.trim() && attachments.length === 0}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-800 disabled:bg-slate-200 disabled:text-slate-400"
-                    title="Send"
-                  >
+  onClick={sendMessage}
+  disabled={!input.trim() && attachments.length === 0}
+  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition-all duration-200 hover:bg-navy-800 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${
+    (input.trim() || attachments.length > 0) && !isStreaming ? "send-ready" : ""
+  }`}
+  title="Send"
+>
                     <Send size={15} />
                   </button>
                 )}
