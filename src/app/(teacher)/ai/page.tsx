@@ -6,8 +6,8 @@ import { Home, ArrowLeft } from "lucide-react";
 import {
   Plus, Send, MessageSquare, Trash2, Sparkles, Paperclip, X,
   FolderPlus, Folder, Loader2, PanelLeftClose, PanelLeftOpen,
-  Search, SquarePen, ChevronDown, Copy, Check, Pencil, Square, RefreshCw,
-        FileText, Eye, Mic, Pin, MoreHorizontal, ArrowDown, Volume2, Download, History,
+    Search, SquarePen, ChevronDown, Copy, Check, Pencil, Square, RefreshCw,
+        FileText, Eye, Mic, Pin, MoreHorizontal, ArrowDown, Volume2, Download,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -887,13 +887,7 @@ useEffect(() => {
     if (stickRef.current) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
 
-  // ✅ input auto-expands as you type
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 200) + "px";
-  }, [input]);
+
 
   function onScrollBox() {
     const el = scrollBoxRef.current;
@@ -1095,15 +1089,20 @@ useEffect(() => {
       if (commit && !voiceSendRef.current) setInput((prev) => (prev ? prev + " " : "") + commit);
       voiceSendRef.current = false;
     };
-    rec.onerror = (e: any) => {
+        rec.onerror = (e: any) => {
       const code = e?.error || "";
       if (code === "aborted") return;
       setListening(false);
       if (code === "not-allowed") {
+        userStopRef.current = true;
+        nativeSttFailedRef.current = true;
         toast("Microphone blocked — allow mic access in browser site settings and macOS System Settings, Privacy and Security, Microphone.", "error");
       } else if (code === "audio-capture") {
+        userStopRef.current = true;
+        nativeSttFailedRef.current = true;
         toast("No microphone detected — connect one and try again.", "error");
       } else if (code === "no-speech") {
+        userStopRef.current = true;
         toast("No speech detected — speak closer to the mic and try again.", "info");
             } else {
         const firstFail = !nativeSttFailedRef.current;
@@ -1309,7 +1308,9 @@ useEffect(() => {
     setStreamFor(activeChatId ?? "new");
     setIsStreaming(true);
 
-        let acc = "";
+           let acc = "";
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch("/api/teacher/ai/chat", {
         method: "POST",
@@ -1322,6 +1323,7 @@ useEffect(() => {
                     projectId: activeProject?.id ?? null,
           editFromId: editFromId ?? null,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -1373,13 +1375,16 @@ useEffect(() => {
           } catch {}
         }
       }
-        } catch (err: any) {
+                } catch (err: any) {
+      const wasAborted = err?.name === "AbortError";
       if (acc) {
         setMessages((prev) =>
           prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m))
         );
       }
-      toast(err?.message || "Failed to reach AI", "error");
+      if (!wasAborted) {
+        toast(err?.message || "Failed to reach AI", "error");
+      }
     } finally {
       if (!acc) {
         setMessages((prev) => prev.filter((m) => m.id !== assistantId));
@@ -1388,6 +1393,7 @@ useEffect(() => {
       setStreamingText("");
       runLockRef.current = false;
       setStreamFor(null);
+      abortRef.current = null;
     }
   }
 
@@ -1861,6 +1867,46 @@ useEffect(() => {
             ))}
           </div>
         )}
+                {listening ? (
+          <div className="flex items-center gap-1 rounded-2xl border border-slate-200/80 bg-white p-1.5 shadow-[0_4px_20px_rgba(15,23,42,0.06)]">
+                        <button
+              onClick={cancelRecording}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
+              title="Cancel recording"
+            >
+              <X size={18} />
+            </button>
+            <div className="min-w-0 flex-1 px-1 text-left">
+              <p className="max-h-10 overflow-y-auto text-left text-[15px] leading-6 text-navy-900">
+                {liveText.trim() ? liveText : <span className="text-slate-400">Listening… speak now</span>}
+              </p>
+            </div>
+            <div className="ml-auto flex h-10 shrink-0 items-center gap-[3px] px-1">
+              {Array.from({ length: 24 }).map((_, i) => (
+                <span
+                  key={i}
+                  ref={(el) => { barRefs.current[i] = el; }}
+                  className="w-[3px] shrink-0 rounded-full bg-sky-500"
+                  style={{ height: "6%" }}
+                />
+              ))}
+            </div>
+            <button
+              onClick={toggleMic}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition hover:bg-slate-200"
+              title="Stop recording"
+            >
+              <Square size={15} className="fill-current" />
+            </button>
+            <button
+              onClick={sendFromVoice}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-800"
+              title="Stop and send"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        ) : (
         <div className="flex items-end gap-1 rounded-2xl border border-slate-200/80 bg-white p-1.5 shadow-[0_4px_20px_rgba(15,23,42,0.06)] transition-all duration-200 focus-within:border-sky-300 focus-within:shadow-[0_4px_24px_rgba(14,165,233,0.15)]">
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -1904,6 +1950,7 @@ useEffect(() => {
             <Send size={16} />
           </button>
         </div>
+        )}
         <p className="mt-3 text-center text-xs text-slate-400">AI can make mistakes. Check important info.</p>
       </div>
     </div>
@@ -1914,7 +1961,7 @@ useEffect(() => {
               if (msg.role === "assistant" && !msg.content && isStreaming) return null;
               const ex = msg.role === "assistant" ? extractExamDraft(msg.content) : null;
               return (
-                <div key={msg.id} className="msg-in group mx-auto w-full max-w-3xl">
+                                <div key={msg.id} id={`msg-${msg.id}`} className="msg-in group mx-auto w-full max-w-3xl">
                                     {msg.role === "user" ? (
                     <div className="flex justify-end">
                                            <UserBubble msg={msg.attachments?.length ? msg : attStashRef.current[msg.content] ? { ...msg, attachments: attStashRef.current[msg.content] } : msg} />
@@ -1959,54 +2006,77 @@ useEffect(() => {
             </button>
           )}
 
-                      {/* ===== HISTORY TOGGLE (top-right) ===== */}
-            <button
-              onClick={() => setHistoryOpen((v) => !v)}
-              className={`absolute right-14 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-xl border transition ${
-                historyOpen ? "border-sky-300 bg-sky-50 text-sky-600" : "border-slate-200 bg-white/80 text-slate-500 shadow-sm backdrop-blur hover:bg-slate-100 hover:text-navy-900"
-              }`}
-              title="Search old chats"
-            >
-              <History size={16} />
-            </button>
-
-            {/* ===== HISTORY DRAWER (right slide-over, ChatGPT-style) ===== */}
-            {historyOpen && (
-              <div className="absolute inset-0 z-40 flex justify-end bg-slate-900/20 backdrop-blur-[1px]" onClick={() => setHistoryOpen(false)}>
-                <div className="fade-in-up flex h-full w-[320px] flex-col border-l border-slate-200 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center gap-2 border-b border-slate-100 p-3">
-                    <div className="relative flex-1">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        autoFocus
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search chats"
-                        className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                      />
+                  {/* ===== IN-CHAT HISTORY RAIL — hover to reveal the conversation panel ===== */}
+            {messages.length > 0 && (
+              <div
+                className="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 items-center"
+                onMouseEnter={() => setHistoryOpen(true)}
+                onMouseLeave={() => setHistoryOpen(false)}
+              >
+                            {/* Panel — flex-adjacent to the rail, no dead zone between them */}
+                <div
+                  className={`mr-2 overflow-hidden rounded-xl border bg-white transition-all duration-200 ease-out ${
+                    historyOpen
+                      ? "w-80 border-slate-200/80 opacity-100 scale-100 shadow-[0_8px_30px_rgba(15,23,42,0.08)]"
+                      : "pointer-events-none w-0 scale-95 border-transparent opacity-0 shadow-none"
+                  }`}
+                >
+                  <div className="w-80 py-2">
+                    <p className="px-4 pb-2 pt-1 text-[11px] font-medium text-slate-400">
+                      Conversation
+                    </p>
+                    <div className="max-h-80 overflow-y-auto">
+                      {messages.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            setHistoryOpen(false);
+                            document.getElementById(`msg-${m.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          }}
+                          className="group flex w-full items-start gap-3 px-4 py-2 text-left transition hover:bg-slate-50"
+                        >
+                          <span
+                            className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${
+                              m.role === "user" ? "bg-navy-900" : "bg-sky-400"
+                            }`}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                              {m.role === "user" ? "You" : "Assistant"}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[13px] leading-tight text-slate-600 group-hover:text-navy-900">
+                              {(m.content || "").slice(0, 52) || "…"}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
                     </div>
+                  </div>
+                </div>
+
+                {/* Rail */}
+                <div
+                  className={`flex flex-col items-end gap-1 rounded-full px-1.5 py-3 transition-all duration-200 ${
+                    historyOpen ? "bg-white shadow-[0_2px_12px_rgba(15,23,42,0.08)]" : "opacity-70"
+                  }`}
+                >
+                  {messages.map((m) => (
                     <button
-                      onClick={() => { setHistoryOpen(false); setSearch(""); }}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-navy-900"
-                      title="Close"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-2" onClick={() => setHistoryOpen(false)}>
-                    {(q ? searchResults : chats).length === 0 && (
-                      <p className="px-3 py-6 text-center text-xs text-slate-400">No conversations yet.</p>
-                    )}
-                    {(q ? searchResults : chats).map((c) => (
-                      <ChatRow key={c.id} chat={c} />
-                    ))}
-                  </div>
+                      key={m.id}
+                      onClick={() => document.getElementById(`msg-${m.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      className={`h-[2px] rounded-full bg-slate-300 transition-all duration-200 hover:w-6 hover:bg-navy-900 ${
+                        m.role === "user" ? "w-4" : "w-3"
+                      }`}
+                      title={(m.content || "").slice(0, 60) || (m.role === "user" ? "You" : "AI")}
+                    />
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* ===== INPUT ===== */}
-          <div className={`p-4 ${messages.length === 0 && !isStreaming ? "hidden" : ""}`}>
+                       {/* ===== INPUT ===== */}
+          {(messages.length > 0 || isStreaming) && (
+          <div className="p-4">
             <div className="mx-auto max-w-3xl">
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -2024,21 +2094,21 @@ useEffect(() => {
 
                             {/* ===== VOICE BAR (ChatGPT-style with live transcript) ===== */}
                   {listening && (
-                <div className="scale-in flex items-center gap-2 rounded-full border border-slate-200 bg-white py-2 pl-2 pr-2 shadow-[0_10px_35px_rgba(15,23,42,0.12)]">
-                                    <button
+                                <div className="flex items-center gap-1 rounded-2xl border border-transparent bg-white p-1.5 shadow-[0_4px_20px_rgba(15,23,42,0.08)]">
+                                               <button
                     onClick={cancelRecording}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
                     title="Cancel recording"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                   
-                  <div className="min-w-0 flex-1 px-1">
-                    <p className="max-h-10 overflow-y-auto text-sm leading-5 text-navy-900">
+                  <div className="min-w-0 flex-1 px-2 text-left">
+                    <p className="max-h-10 overflow-y-auto text-left text-sm leading-6 text-navy-900">
                       {liveText.trim() ? liveText : <span className="text-slate-400">Listening… speak now</span>}
                     </p>
                   </div>
-                  <div className="flex h-9 shrink-0 items-center gap-[3px] px-1">
+                  <div className="ml-auto flex h-10 shrink-0 items-center gap-[3px] px-1">
                     {Array.from({ length: 24 }).map((_, i) => (
                       <span
                         key={i}
@@ -2048,19 +2118,19 @@ useEffect(() => {
                       />
                     ))}
                   </div>
-                  <button
+                                    <button
                     onClick={toggleMic}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-900 text-white transition hover:bg-navy-800"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition hover:bg-slate-200"
                     title="Stop recording"
                   >
-                    <Square size={12} className="fill-current" />
+                    <Square size={15} className="fill-current" />
                   </button>
                   <button
                     onClick={sendFromVoice}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-800"
                     title="Stop and send"
                   >
-                    <Send size={14} />
+                    <Send size={16} />
                   </button>
                 </div>
               )}
@@ -2129,9 +2199,10 @@ useEffect(() => {
                 </div>
               )}
 
-              <p className="mt-2 text-center text-[11px] text-slate-400">AI can make mistakes. Check important info.</p>
+                           <p className="mt-2 text-center text-[11px] text-slate-400">AI can make mistakes. Check important info.</p>
             </div>
           </div>
+          )}
         </div>
       </div>
 
