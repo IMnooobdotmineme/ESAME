@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
   try {
     let text = "";
     if (ext === "pdf") {
-      const pdfParse = require("pdf-parse");
-      const res = await pdfParse(buf);
+            const { extractPdfText } = await import("@/lib/pdf-text");
+      const res = { text: await extractPdfText(buf) };
       text = res.text || "";
     } else if (ext === "docx" || ext === "doc") {
       const mammoth = require("mammoth");

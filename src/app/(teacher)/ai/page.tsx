@@ -1325,7 +1325,7 @@ useEffect(() => {
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title } : c)));
   }
 
-    const MAX_ATTACHMENTS = 10; // ✅ max 10 files per message — send again for more
+    const MAX_ATTACHMENTS = 100;
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;
