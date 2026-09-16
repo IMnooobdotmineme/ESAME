@@ -37,14 +37,46 @@ export function getAvailableProviders(): AIProvider[] {
 }
 
 // ---------- main entry ----------
+const OLLAMA_FALLBACK_MODEL = process.env.OLLAMA_FALLBACK_MODEL || "qwen3:8b";
+
 export async function streamChat(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
-    options: { provider?: string; temperature?: number; think?: boolean } = {}
+  options: { provider?: string; temperature?: number; think?: boolean } = {}
 ) {
+  // Track how many tokens we've sent to the UI
+  let sentTokens = 0;
+  const wrapped: StreamCallbacks = {
+    ...callbacks,
+    onToken: (t) => { sentTokens++; callbacks.onToken(t); },
+  };
+
   try {
-    await streamOllama(messages, { name: "ollama", model: OLLAMA_MODEL, maxTokens: 8192 }, callbacks, options.temperature, options.think);
+    // Try the primary 27B model first
+    await streamOllama(messages, { name: "ollama", model: OLLAMA_MODEL, maxTokens: 8192 }, wrapped, options.temperature, options.think);
   } catch (error: any) {
+    const errMsg = String(error?.message || "");
+    const isOOM = /500|memory|oom|out of memory|killed|fetch failed/i.test(errMsg);
+    
+    // ONLY retry with the 8B model if we haven't sent ANY tokens to the UI yet
+    if (isOOM && sentTokens === 0 && OLLAMA_MODEL !== OLLAMA_FALLBACK_MODEL) {
+      try {
+        await streamOllama(messages, { name: "ollama", model: OLLAMA_FALLBACK_MODEL, maxTokens: 8192 }, callbacks, options.temperature, options.think);
+        return;
+      } catch (retryError: any) {
+        callbacks.onError(retryError instanceof Error ? retryError : new Error(String(retryError)));
+        return;
+      }
+    } 
+    
+    // If the model crashed MID-STREAM (sentTokens > 0), gracefully finish 
+    // the message instead of throwing an error and appending a second response
+    if (sentTokens > 0) {
+      callbacks.onEnd({ provider: "ollama", model: OLLAMA_MODEL, tokens: sentTokens });
+      return;
+    }
+
+    // If it failed before sending anything and wasn't an OOM, show the error
     callbacks.onError(error instanceof Error ? error : new Error(String(error)));
   }
 }
@@ -60,7 +92,7 @@ async function streamOllama(
   const hasImages = messages.some((m) =>
     (m.attachments ?? []).some((a) => a.dataUrl?.startsWith("data:image/"))
   );
-  const model = hasImages ? OLLAMA_VISION_MODEL : OLLAMA_MODEL;
+    const model = hasImages && provider.model === OLLAMA_MODEL ? OLLAMA_VISION_MODEL : provider.model;
 
   const ollamaMessages = messages.map((m) => {
     const imgs = (m.attachments ?? [])

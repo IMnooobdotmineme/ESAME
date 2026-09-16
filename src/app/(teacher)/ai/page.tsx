@@ -7,7 +7,7 @@ import {
   Plus, Send, MessageSquare, Trash2, Sparkles, Paperclip, X,
   FolderPlus, Folder, Loader2, PanelLeftClose, PanelLeftOpen,
   Search, SquarePen, ChevronDown, Copy, Check, Pencil, Square, RefreshCw,
-    FileText, Eye, Mic, Pin, MoreHorizontal, ArrowDown, Volume2, Download,
+        FileText, Eye, Mic, Pin, MoreHorizontal, ArrowDown, Volume2, Download, History,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -23,7 +23,134 @@ import { toast, ToastHost } from "@/components/ui/toast";
 import { normalizeExamDraft } from "@/lib/ai-exam";
 import { pcmToWavBlob, transcribeBlob } from "@/lib/stt-fallback";
 interface Chat { id: string; title: string; isPinned: boolean; projectId: string | null; updatedAt: string; }
-interface Message { id: string; role: "user" | "assistant"; content: string; createdAt: string; provider?: string; attachments?: any[]; }
+// ===== Document export helpers (PDF / Word from markdown) =====
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function slugify(s: string): string {
+  return (s.replace(/[^\w\d]+/g, "_").replace(/^_+|_+$/g, "") || "document").slice(0, 60);
+}
+function docTitleOf(md: string): string {
+  const h = md.match(/^#\s+(.+)$/m);
+  if (h) return h[1].trim();
+  const first = md.split("\n").find((l) => l.trim().length > 3);
+  return (first || "Document").replace(/[#*`_]/g, "").trim().slice(0, 60);
+}
+function mdToHtml(md: string): string {
+  const lines = md.split("\n");
+  let html = "";
+  let inCode = false;
+  let inUl = false;
+  let inOl = false;
+  const closeLists = () => {
+    if (inUl) { html += "</ul>"; inUl = false; }
+    if (inOl) { html += "</ol>"; inOl = false; }
+  };
+  function inline(s: string): string {
+    return escapeHtml(s)
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>");
+  }
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (line.trim().startsWith("```")) {
+      closeLists();
+      inCode = !inCode;
+      html += inCode ? "<pre>" : "</pre>";
+      continue;
+    }
+    if (inCode) { html += escapeHtml(line) + "\n"; continue; }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) {
+      closeLists();
+      const lvl = Math.min(h[1].length + 1, 5);
+      html += `<h${lvl}>${inline(h[2])}</h${lvl}>`;
+      continue;
+    }
+    const ul = line.match(/^[-*]\s+(.*)$/);
+    if (ul) {
+      if (!inUl) { closeLists(); html += "<ul>"; inUl = true; }
+      html += `<li>${inline(ul[1])}</li>`;
+      continue;
+    }
+    const ol = line.match(/^\d+[.)]\s+(.*)$/);
+    if (ol) {
+      if (!inOl) { closeLists(); html += "<ol>"; inOl = true; }
+      html += `<li>${inline(ol[1])}</li>`;
+      continue;
+    }
+    closeLists();
+    if (line.trim() === "") continue;
+    html += `<p>${inline(line)}</p>`;
+  }
+  closeLists();
+  if (inCode) html += "</pre>";
+  return html;
+}
+function downloadWordDoc(md: string, title: string) {
+  const html =
+    `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">` +
+    `<head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body>` +
+    `<h1>${escapeHtml(title)}</h1>` + mdToHtml(md) + `</body></html>`;
+  const blob = new Blob(["\ufeff" + html], { type: "application/msword" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = slugify(title) + ".doc";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function downloadPdfFromMd(md: string, title: string) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 18;
+  let y = M + 2;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  const tl = doc.splitTextToSize(title, W - M * 2) as string[];
+  doc.text(tl, M, y);
+  y += tl.length * 8 + 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  for (const raw of md.split("\n")) {
+    const line = raw.replace(/\r/g, "");
+    if (line.trim().startsWith("```")) continue;
+    const hm = line.match(/^(#{1,4})\s+(.*)$/);
+    if (hm) {
+      y += 4;
+      if (y > H - M) { doc.addPage(); y = M; }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      const wl = doc.splitTextToSize(hm[2].replace(/[*`]/g, ""), W - M * 2) as string[];
+      doc.text(wl, M, y);
+      y += wl.length * 6.5 + 3;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      continue;
+    }
+    const clean = line.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/`([^`]+)`/g, "$1");
+    const wrapped = doc.splitTextToSize(clean === "" ? " " : clean, W - M * 2) as string[];
+    for (const wl of wrapped) {
+      if (y > H - M) { doc.addPage(); y = M; }
+      doc.text(wl, M, y);
+      y += 6;
+    }
+  }
+  doc.save(slugify(title) + ".pdf");
+}
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  provider?: string;
+  attachments?: any[];
+}
 interface Project { id: string; name: string; }
 interface Attachment { id: string; name: string; kind: "image" | "text"; dataUrl?: string; text?: string; }
 
@@ -685,15 +812,47 @@ export default function AIAssistantPage() {
     const nativeRotateRef = useRef(false);
   const userStopRef = useRef(false);
   const silenceMsRef = useRef(0);
-  const recordedMsRef = useRef(0);
+    const recordedMsRef = useRef(0);
+    const sendLockRef = useRef(false);
+    const runLockRef = useRef(false);
+    const attStashRef = useRef<Record<string, any[]>>({});
+  const [historyOpen, setHistoryOpen] = useState(false);
   const TEACHER_HOME = "/teacher-dashboard";
 // ---------- memoized assistant content (keeps the page fast) ----------
-const AssistantContent = memo(function AssistantContent({ content }: { content: string }) {
+function wantsDocument(userText: string): boolean {
+  // If the user wants reading/summarizing/explaining → NEVER show download buttons
+  if (/\b(summar|summary|explain|read|analyze|analyse|describe|translate|what|why|how)\b/i.test(userText)) return false;
+  return (
+    /(as|into)\s+(a\s+)?(pdf|word|docx?|document)\b/i.test(userText) ||
+    /\b(pdf|word|docx?)\s+(file|version|format|copy)\b/i.test(userText) ||
+    /\b(download|export|save)\b[^.\n]{0,30}\b(pdf|word|docx?)\b/i.test(userText) ||
+    /\b(make|create|generate|prepare|write|give)\s+(me\s+)?(a|an|the)?\s*(pdf|word|docx?|document|handout|worksheet)\b/i.test(userText)
+  );
+}
+const AssistantContent = memo(function AssistantContent({ content, exportable = false }: { content: string; exportable?: boolean }) {
   const ex = extractExamDraft(content);
   return (
     <>
       <div className="md-body w-full">
-        <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(ex.clean)}</ReactMarkdown>
+                <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(ex.clean)}</ReactMarkdown>
+                {exportable && content.length > 300 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={() => downloadPdfFromMd(content, docTitleOf(content))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition hover:border-sky-300 hover:text-sky-600"
+              title="Download this answer as a PDF file"
+            >
+              Download PDF
+            </button>
+            <button
+              onClick={() => downloadWordDoc(content, docTitleOf(content))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition hover:border-sky-300 hover:text-sky-600"
+              title="Download this answer as a Word document"
+            >
+              Download Word
+            </button>
+          </div>
+        )}
       </div>
       {ex.draft && <ExamDraftCard draft={ex.draft} />}
     </>
@@ -1092,8 +1251,9 @@ useEffect(() => {
 
 
     async function sendMessage(overrideText?: string) {
-    const baseText = overrideText !== undefined ? overrideText : input.trim();
-    if ((!baseText && attachments.length === 0) || isStreaming) return;
+        const baseText = overrideText !== undefined ? overrideText : input.trim();
+    if ((!baseText && attachments.length === 0) || isStreaming || sendLockRef.current) return;
+    sendLockRef.current = true;
     const userText =
       baseText +
       attachments
@@ -1109,7 +1269,11 @@ useEffect(() => {
     setInput("");
     setAttachments([]);
     setEditFromId(null);
-    await runChat(userText, imageAtts, base, displayAtts, editId);
+        try {
+      await runChat(userText, imageAtts, base, displayAtts, editId);
+    } finally {
+      sendLockRef.current = false;
+    }
   }
   async function runChat(
     userText: string,
@@ -1118,9 +1282,13 @@ useEffect(() => {
     displayAtts: { name: string; dataUrl?: string }[],
     editFromId?: string | null
   ) {
+        
+        if (runLockRef.current) return;
+    runLockRef.current = true;
     const assistantId = crypto.randomUUID();
     const now = new Date().toISOString();
 
+        if (displayAtts.length) attStashRef.current[userText] = displayAtts;
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -1141,6 +1309,7 @@ useEffect(() => {
     setStreamFor(activeChatId ?? "new");
     setIsStreaming(true);
 
+        let acc = "";
     try {
       const res = await fetch("/api/teacher/ai/chat", {
         method: "POST",
@@ -1160,9 +1329,8 @@ useEffect(() => {
         throw new Error(`API ${res.status}: ${errText.slice(0, 200)}`);
       }
 
-      const reader = res.body.getReader();
+            const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let acc = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1173,15 +1341,24 @@ useEffect(() => {
           if (!line.startsWith("data: ")) continue;
           try {
             const payload = JSON.parse(line.slice(6));
-            if (payload.type === "token") {
+                        if (payload.type === "token") {
               acc += payload.text;
               setStreamingText(acc);
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m))
-              );
-            } else if (payload.type === "done") {
+                        } else if (payload.type === "done") {
               if (payload.chatId && !activeChatId) {
                 setActiveChatId(payload.chatId);
+              }
+              const cid = payload.chatId || activeChatId;
+              if (cid) {
+                const t = userText.replace(/\s+/g, " ").trim().slice(0, 48);
+                if (t) {
+                  setChats((prev) => {
+                    const has = prev.some((c) => c.id === cid);
+                                        if (!has) return [{ id: cid, title: t, isPinned: false, createdAt: now, updatedAt: now, lastMessageAt: now } as any, ...prev];
+                    return prev.map((c) => (c.id === cid && (!c.title || c.title === "New chat") ? { ...c, title: t } : c));
+                  });
+                                    fetch("/api/teacher/ai/chats", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chatId: cid, title: t }) }).catch(() => {});
+                }
               }
               setMessages((prev) =>
                 prev.map((m) =>
@@ -1196,13 +1373,36 @@ useEffect(() => {
           } catch {}
         }
       }
-    } catch (err: any) {
+        } catch (err: any) {
+      if (acc) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m))
+        );
+      }
       toast(err?.message || "Failed to reach AI", "error");
     } finally {
-      setIsStreaming(false);
+      if (!acc) {
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+      }
+            setIsStreaming(false);
       setStreamingText("");
+      runLockRef.current = false;
       setStreamFor(null);
     }
+  }
+
+    function regenerateFresh() {
+    if (isStreaming) return;
+    let ui = -1;
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "user") { ui = i; break; }
+    if (ui < 0) return;
+    const um = messages[ui];
+    const base = messages.slice(0, ui); // ⛔ excludes the old answer so the model can't copy it
+    const imageAtts = (um.attachments ?? [])
+      .filter((a: any) => typeof a.dataUrl === "string" && a.dataUrl.startsWith("data:image/"))
+      .map((a: any) => ({ type: "image", name: a.name, dataUrl: a.dataUrl }));
+    setMessages(base);
+    runChat(um.content, imageAtts, base, um.attachments ?? [], null);
   }
 
   function regenerate() {
@@ -1425,7 +1625,7 @@ useEffect(() => {
           </button>
         )}
         {msg.role === "assistant" && index === lastAssistantIdx && (
-          <button onClick={regenerate} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-navy-900" title="Regenerate">
+          <button onClick={regenerateFresh} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-navy-900" title="Regenerate">
             <RefreshCw size={12} /> Regenerate
           </button>
         )}
@@ -1642,40 +1842,85 @@ useEffect(() => {
 
 {!chatLoading && messages.length === 0 && !isStreaming && (
   <div className="fade-in-up flex h-full items-center justify-center">
-    <div className="max-w-lg text-center">
-      <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-sky-400 via-sky-500 to-indigo-600 shadow-lg shadow-sky-200/60">
-        <Sparkles size={36} className="text-white" />
-      </div>
-      <h2 className="mb-2 text-2xl font-bold tracking-tight text-navy-900">Welcome to ESAME AI</h2>
-      <p className="mb-6 text-sm leading-relaxed text-slate-500">
-        Ask anything in English or Khmer — attach images, PDFs, Word, Excel, or generate full exams from a single prompt.
+        <div className="w-full max-w-3xl px-4 text-center">
+            <h2 className="mb-3 text-[26px] font-semibold leading-snug tracking-tight text-navy-900">
+        {new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening"} — what's on your mind?
+      </h2>
+          <p className="mx-auto max-w-md text-[13.5px] leading-relaxed text-slate-400">
+        Ask in English or Khmer, attach images and documents, or generate a full exam from a single prompt.
       </p>
-      <div className="flex flex-wrap justify-center gap-2">
-        {QUICK_PROMPTS.map((p) => (
+            <div className="mt-8 w-full max-w-3xl">
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap justify-center gap-2">
+            {attachments.map((a) => (
+              <span key={a.id} className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                {a.kind === "image" && a.dataUrl ? <img src={a.dataUrl} alt="" className="h-4 w-4 rounded object-cover" /> : <Paperclip size={12} />}
+                <span className="max-w-[140px] truncate">{a.name}</span>
+                <button onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))} className="hover:text-rose-500"><X size={12} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-1 rounded-2xl border border-slate-200/80 bg-white p-1.5 shadow-[0_4px_20px_rgba(15,23,42,0.06)] transition-all duration-200 focus-within:border-sky-300 focus-within:shadow-[0_4px_24px_rgba(14,165,233,0.15)]">
           <button
-            key={p}
-            onClick={() => { setInput(p); inputRef.current?.focus(); }}
-            className="group rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 hover:shadow-md active:translate-y-0"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-navy-900"
+            title="Attach image / PDF / Word / Excel"
           >
-            <span className="mr-1 opacity-60 transition-opacity group-hover:opacity-100">✨</span>
-            {p}
+            <Plus size={19} />
           </button>
-        ))}
+          <textarea
+            rows={1}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onInput={(e) => {
+              const el = e.currentTarget;
+              el.style.height = "40px";
+              el.style.height = Math.min(el.scrollHeight, 160) + "px";
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            placeholder="Ask anything"
+            style={{ height: 40 }}
+            className="flex-1 resize-none overflow-y-auto bg-transparent px-1 py-2 text-[15px] leading-6 text-navy-900 outline-none placeholder:text-slate-400"
+          />
+          <button
+            onClick={toggleMic}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-navy-900"
+            title="Voice input"
+          >
+            <Mic size={18} />
+          </button>
+          <button
+            onClick={() => sendMessage()}
+            disabled={!input.trim() && attachments.length === 0}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition hover:bg-navy-800 disabled:opacity-30"
+            title="Send"
+          >
+            <Send size={16} />
+          </button>
+        </div>
+        <p className="mt-3 text-center text-xs text-slate-400">AI can make mistakes. Check important info.</p>
       </div>
     </div>
   </div>
 )}
 
-            {messages.map((msg, i) => {
+                        {messages.map((msg, i) => {
+              if (msg.role === "assistant" && !msg.content && isStreaming) return null;
               const ex = msg.role === "assistant" ? extractExamDraft(msg.content) : null;
               return (
                 <div key={msg.id} className="msg-in group mx-auto w-full max-w-3xl">
                                     {msg.role === "user" ? (
                     <div className="flex justify-end">
-                      <UserBubble msg={msg} />
+                                           <UserBubble msg={msg.attachments?.length ? msg : attStashRef.current[msg.content] ? { ...msg, attachments: attStashRef.current[msg.content] } : msg} />
                     </div>
                                     ) : (
-                    <AssistantContent content={msg.content} />
+                    <AssistantContent content={msg.content} exportable={i > 0 && messages[i - 1]?.role === "user" && wantsDocument(messages[i - 1].content)} />
                   )}
                   <div className={msg.role === "user" ? "flex justify-end" : ""}>
                       <MsgActions msg={msg} index={i} alwaysShow={msg.role === "assistant" && i === lastAssistantIdx} />
@@ -1702,18 +1947,66 @@ useEffect(() => {
             <div ref={messagesEndRef} />
           </div>
 
-                    {showJump && (
+                              {showJump && (
             <button
               onClick={() => { stickRef.current = true; setShowJump(false); messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }}
-                            className="absolute bottom-24 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-slate-200/60 bg-white/70 text-slate-400 opacity-60 shadow-sm backdrop-blur transition hover:opacity-100 hover:text-navy-900"
-              title="Scroll to bottom"
+                            className={`absolute bottom-30 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border bg-white/80 shadow-sm backdrop-blur transition hover:text-navy-900 ${
+                isStreaming ? "animate-pulse border-sky-300 text-sky-500 opacity-90 hover:opacity-100" : "border-slate-200/60 text-slate-400 opacity-60 hover:opacity-100"
+              }`}
+              title={isStreaming ? "Generating — click to jump to the latest" : "Scroll to bottom"}
             >
-              <ArrowDown size={16} />
+              {isStreaming ? <Loader2 size={16} className="animate-spin" /> : <ArrowDown size={16} />}
             </button>
           )}
 
+                      {/* ===== HISTORY TOGGLE (top-right) ===== */}
+            <button
+              onClick={() => setHistoryOpen((v) => !v)}
+              className={`absolute right-14 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-xl border transition ${
+                historyOpen ? "border-sky-300 bg-sky-50 text-sky-600" : "border-slate-200 bg-white/80 text-slate-500 shadow-sm backdrop-blur hover:bg-slate-100 hover:text-navy-900"
+              }`}
+              title="Search old chats"
+            >
+              <History size={16} />
+            </button>
+
+            {/* ===== HISTORY DRAWER (right slide-over, ChatGPT-style) ===== */}
+            {historyOpen && (
+              <div className="absolute inset-0 z-40 flex justify-end bg-slate-900/20 backdrop-blur-[1px]" onClick={() => setHistoryOpen(false)}>
+                <div className="fade-in-up flex h-full w-[320px] flex-col border-l border-slate-200 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2 border-b border-slate-100 p-3">
+                    <div className="relative flex-1">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        autoFocus
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search chats"
+                        className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      />
+                    </div>
+                    <button
+                      onClick={() => { setHistoryOpen(false); setSearch(""); }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-navy-900"
+                      title="Close"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2" onClick={() => setHistoryOpen(false)}>
+                    {(q ? searchResults : chats).length === 0 && (
+                      <p className="px-3 py-6 text-center text-xs text-slate-400">No conversations yet.</p>
+                    )}
+                    {(q ? searchResults : chats).map((c) => (
+                      <ChatRow key={c.id} chat={c} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ===== INPUT ===== */}
-          <div className="p-4">
+          <div className={`p-4 ${messages.length === 0 && !isStreaming ? "hidden" : ""}`}>
             <div className="mx-auto max-w-3xl">
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -1785,14 +2078,20 @@ useEffect(() => {
                       <Plus size={19} />
                     </button>
 
-                    <textarea
+                                        <textarea
                       ref={inputRef}
                       rows={1}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
+                      onInput={(e) => {
+                        const el = e.currentTarget;
+                        el.style.height = "40px";
+                        el.style.height = Math.min(el.scrollHeight, 160) + "px";
+                      }}
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                       placeholder="Ask anything"
-                      className="flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm text-navy-900 placeholder-slate-400 outline-none"
+                      style={{ height: 40 }}
+                      className="flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-6 text-navy-900 placeholder-slate-400 outline-none"
                     />
 
                     <button
