@@ -21,7 +21,7 @@ import { EsameLogo } from "@/components/organization/EsameLogo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast, ToastHost } from "@/components/ui/toast";
 import { normalizeExamDraft } from "@/lib/ai-exam";
-
+import { pcmToWavBlob, transcribeBlob } from "@/lib/stt-fallback";
 interface Chat { id: string; title: string; isPinned: boolean; projectId: string | null; updatedAt: string; }
 interface Message { id: string; role: "user" | "assistant"; content: string; createdAt: string; provider?: string; attachments?: any[]; }
 interface Project { id: string; name: string; }
@@ -664,6 +664,28 @@ export default function AIAssistantPage() {
   const streamingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const recRef = useRef<any>(null);
+  const nativeSttFailedRef = useRef(false);
+  const [transcribing, setTranscribing] = useState(false);
+    const cancelledRecRef = useRef(false);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const waveRafRef = useRef(0);
+    const barRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const liveBaseRef = useRef("");
+  const voiceSendRef = useRef(false);
+    const [liveText, setLiveText] = useState("");
+      const pcmChunksRef = useRef<Float32Array[]>([]);
+  const pcmCtxRef = useRef<AudioContext | null>(null);
+  const pcmSrcRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const pcmProcRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmModeRef = useRef(false);
+  const liveTimerRef = useRef(0);
+  const liveBusyRef = useRef(false);
+    const nativeRotateRef = useRef(false);
+  const userStopRef = useRef(false);
+  const silenceMsRef = useRef(0);
+  const recordedMsRef = useRef(0);
   const TEACHER_HOME = "/teacher-dashboard";
 // ---------- memoized assistant content (keeps the page fast) ----------
 const AssistantContent = memo(function AssistantContent({ content }: { content: string }) {
@@ -765,162 +787,315 @@ useEffect(() => {
   function stopGeneration() {
     abortRef.current?.abort();
   }
-
-  function toggleMic() {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { toast("Voice input is not supported in this browser.", "error"); return; }
-    if (listening) { recRef.current?.stop(); return; }
-    const rec = new SR();
-    rec.lang = /[\u1780-\u17FF]/.test(input) ? "km-KH" : "en-US";
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.onresult = (e: any) => {
-      let t = "";
-      for (const r of e.results) t += r[0].transcript;
-      setInput((prev) => (prev ? prev + " " : "") + t);
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => { setListening(false); toast("Microphone error — check browser permissions.", "error"); };
-    recRef.current = rec;
-    setListening(true);
-    rec.start();
+    function startWaveMeter(stream: MediaStream, onSilence?: () => void) {
+    try {
+      const Ctx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx = new Ctx();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      audioCtxRef.current = ctx;
+      analyserRef.current = analyser;
+            const data = new Uint8Array(analyser.frequencyBinCount);
+      let ema = 0;
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        const rms = Math.sqrt(sum / data.length) / 255;
+                const bars = barRefs.current;
+        for (let i = 0; i < bars.length - 1; i++) {
+          if (bars[i]) bars[i]!.style.height = bars[i + 1]?.style.height || "8%";
+        }
+        const last = bars[bars.length - 1];
+                ema = ema * 0.45 + rms * 0.55;
+        if (last) last.style.height = `${Math.max(6, Math.min(100, ema * 320))}%`;
+        recordedMsRef.current += 16.7;
+        if (onSilence) {
+          silenceMsRef.current = ema > 0.02 ? 0 : silenceMsRef.current + 16.7;
+          if (silenceMsRef.current > 2600 && recordedMsRef.current > 1500) {
+            silenceMsRef.current = 0;
+            onSilence();
+          }
+        }
+        waveRafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {}
   }
 
-    async function runChat(userText: string, imageAtts: any[], baseHistory: Message[], displayAtts: any[] = [], editFromId: string | null = null) {
-        setIsStreaming(true);
-    streamingRef.current = true;
-    stickRef.current = true;
-    try { window.speechSynthesis.cancel(); } catch {}
-    setStreamingText("");
-    streamRef.current = "";
-    const controller = new AbortController();
-    abortRef.current = controller;
-        const hadChat = !!activeChatId;
-    const originKey = activeChatId ?? "new";
-    setStreamFor(originKey);
+  function stopWaveMeter() {
+    cancelAnimationFrame(waveRafRef.current);
+    try { micStreamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+    micStreamRef.current = null;
+        try { audioCtxRef.current?.close(); } catch {}
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+  
+  }
 
-    setMessages((prev) => [
-      ...prev,
-      { id: `temp-u-${Date.now()}`, role: "user", content: userText, createdAt: new Date().toISOString(), attachments: displayAtts.length ? displayAtts : undefined },
-    ]);
+      function cancelRecording() {
+    cancelledRecRef.current = true;
+    userStopRef.current = true;
+    voiceSendRef.current = false;
+    liveBaseRef.current = "";
+    setLiveText("");
+        if (pcmModeRef.current) finishPcmRecording();
+    else if (recRef.current) { try { recRef.current.abort(); } catch { recRef.current.stop(); } }
+    setListening(false);
+    stopWaveMeter();
+    toast("Recording cancelled.", "info");
+  }
 
-    let newChatId: string | null = null;
-    let gotDone = false;
+    
+  function sendFromVoice() {
+        const extra = liveText.trim() || liveBaseRef.current.trim();
+        userStopRef.current = true;
+    if (pcmModeRef.current) {
+      const t = extra;
+      stopPcmCapture();
+      stopWaveMeter();
+      setListening(false);
+      pcmChunksRef.current = [];
+      liveBaseRef.current = "";
+      setLiveText("");
+      const combined = (input.trim() + " " + t).trim();
+      if (combined) sendMessage(combined);
+      return;
+    }
+    voiceSendRef.current = true;
+    if (recRef.current) { try { recRef.current.stop(); } catch {} }
+    setListening(false);
+    stopWaveMeter();
+    const combined = (input.trim() + " " + extra).trim();
+    liveBaseRef.current = "";
+    setLiveText("");
+    if (combined) sendMessage(combined);
+  }
 
-    try {
-      const response = await fetch("/api/teacher/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          chatId: activeChatId,
-          message: userText,
-          attachments: imageAtts,
-          projectId: expandedProjectId,
-          editFromId,
-          history: baseHistory.map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
-
-            refreshChats(); // ✅ sidebar re-orders immediately, no manual refresh
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) throw new Error("No response stream");
-      if (!response.ok) {
-        throw new Error(`Server error (${response.status}) — please try again.`);
-      }
-      const handleLine = (line: string) => {
-        if (!line.startsWith("data: ")) return;
-        let json: any;
-        try { json = JSON.parse(line.slice(6)); } catch { return; }
-                    if (json.type === "token") {
-          streamRef.current += json.text;
-          tokenCountRef.current = (tokenCountRef.current || 0) + 1;
-          if (!rafPending.current && tokenCountRef.current % 3 === 0) {
-            rafPending.current = true;
-            requestAnimationFrame(() => {
-              rafPending.current = false;
-              setStreamingText(streamRef.current);
-            });
-          }
-        } else if (json.type === "done") {
-          gotDone = true;
-          newChatId = json.chatId;
-        } else if (json.type === "error") {
-          toast(json.message || "AI error", "error");
-        }
-      };
-
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buf.indexOf("\n")) >= 0) {
-          const line = buf.slice(0, idx);
-          buf = buf.slice(idx + 1);
-          handleLine(line);
-        }
-      }
-      if (buf.trim()) for (const line of buf.split("\n")) handleLine(line);
-
-      streamRef.current = "";
-      setStreamingText("");
-      setIsStreaming(false);
-      streamingRef.current = false;
-
-      if (!hadChat && newChatId) {
-        await fetch("/api/teacher/ai/chats", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chatId: newChatId, title: userText.slice(0, 40) || "New chat" }),
-        });
-      }
-
-            // ✅ resync from DB — only update the view if user is still on the originating chat
-      const viewKey = activeChatIdRef.current ?? "new";
-      if (viewKey === originKey) {
-        const list = await fetch("/api/teacher/ai/chats").then((r) => r.json()).then((d) => d.chats || []);
-        const target = activeChatIdRef.current
-          ? list.find((c: Chat) => c.id === activeChatIdRef.current)
-          : newChatId
-          ? list.find((c: Chat) => c.id === newChatId)
-          : list[0];
-        if (target) {
-          const d = await fetch(`/api/teacher/ai/chats?chatId=${target.id}`).then((r) => r.json());
-          if (d.messages?.length) {
-            setMessages(d.messages);
-            setActiveChatId(target.id);
-          }
-        }
-      }
-      setStreamFor(null);
-      await refreshChats();
-    } catch (error: any) {
-      if (error?.name === "AbortError") {
-        if (streamRef.current) {
-          setMessages((prev) => [
-            ...prev,
-            { id: `msg-${Date.now()}`, role: "assistant", content: streamRef.current, createdAt: new Date().toISOString(), provider: "stopped" },
-          ]);
-        }
-        streamRef.current = "";
-        setStreamingText("");
-        toast("Generation stopped.", "info");
-      } else {
-        toast(error.message || "Failed to send message.", "error");
-      }
-           setIsStreaming(false);
-      streamingRef.current = false;
-      setStreamFor(null);
+  function toggleMic() {
+    if (transcribing) return;
+        if (listening) {
+      userStopRef.current = true;
+      silenceMsRef.current = 0;
+            if (pcmModeRef.current) finishPcmRecording();
+      else recRef.current?.stop();
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SR && !nativeSttFailedRef.current) {
+      startNativeRec();
+    } else {
+      startRecorderMic();
     }
   }
 
-  async function sendMessage() {
-    if ((!input.trim() && attachments.length === 0) || isStreaming) return;
+    function startNativeRec() {
+    if (nativeSttFailedRef.current) return;
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const rec = new SR();
+        rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = (e: any) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) liveBaseRef.current += t;
+        else interim += t;
+      }
+      setLiveText(liveBaseRef.current + interim);
+    };
+          rec.onend = () => {
+      if (nativeRotateRef.current) {
+        nativeRotateRef.current = false;
+        stopWaveMeter();
+        startNativeRec();
+        return;
+      }
+      if (nativeSttFailedRef.current) return;
+      stopWaveMeter();
+      if (cancelledRecRef.current) {
+        cancelledRecRef.current = false;
+        liveBaseRef.current = "";
+        setLiveText("");
+        setListening(false);
+        return;
+      }
+      if (!userStopRef.current) {
+        setLiveText(liveBaseRef.current);
+        startNativeRec();
+        return;
+      }
+      userStopRef.current = false;
+      setListening(false);
+      const commit = liveBaseRef.current.trim();
+      liveBaseRef.current = "";
+      setLiveText("");
+      if (commit && !voiceSendRef.current) setInput((prev) => (prev ? prev + " " : "") + commit);
+      voiceSendRef.current = false;
+    };
+    rec.onerror = (e: any) => {
+      const code = e?.error || "";
+      if (code === "aborted") return;
+      setListening(false);
+      if (code === "not-allowed") {
+        toast("Microphone blocked — allow mic access in browser site settings and macOS System Settings, Privacy and Security, Microphone.", "error");
+      } else if (code === "audio-capture") {
+        toast("No microphone detected — connect one and try again.", "error");
+      } else if (code === "no-speech") {
+        toast("No speech detected — speak closer to the mic and try again.", "info");
+            } else {
+        const firstFail = !nativeSttFailedRef.current;
+        nativeSttFailedRef.current = true;
+                if (firstFail && !pcmModeRef.current) {
+          toast("Browser speech service unavailable — switching to on-device mode…", "info");
+          startRecorderMic();
+        }
+      }
+    };
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }).then((s) => {
+      micStreamRef.current = s;
+      startWaveMeter(s);
+    }).catch(() => {});
+  }
+
+    const AUDIO_CONSTRAINTS: MediaStreamConstraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
+
+  function stopPcmCapture() {
+    clearInterval(liveTimerRef.current);
+    try { pcmProcRef.current?.disconnect(); } catch {}
+    try { pcmSrcRef.current?.disconnect(); } catch {}
+    try { pcmCtxRef.current?.close(); } catch {}
+    pcmProcRef.current = null;
+    pcmSrcRef.current = null;
+    pcmCtxRef.current = null;
+    pcmModeRef.current = false;
+  }
+
+  async function rotatePcmSource() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
+      const old = micStreamRef.current;
+      micStreamRef.current = stream;
+      const src = pcmCtxRef.current!.createMediaStreamSource(stream);
+      src.connect(pcmProcRef.current!);
+      try { pcmSrcRef.current?.disconnect(); } catch {}
+      pcmSrcRef.current = src;
+      old?.getTracks().forEach((t) => t.stop());
+      stopWaveMeter();
+      startWaveMeter(stream, () => {
+        userStopRef.current = true;
+        finishPcmRecording();
+      });
+    } catch {}
+  }
+
+  function finishPcmRecording() {
+    if (!pcmModeRef.current) return;
+    const ctx = pcmCtxRef.current;
+    const chunks = pcmChunksRef.current;
+    stopPcmCapture();
+    stopWaveMeter();
+    setListening(false);
+    setLiveText("");
+    if (cancelledRecRef.current) {
+      cancelledRecRef.current = false;
+      pcmChunksRef.current = [];
+      return;
+    }
+    let len = 0;
+    for (const c of chunks) len += c.length;
+    if (!ctx || len < 8000) {
+      toast("Recording too short — try again.", "info");
+      pcmChunksRef.current = [];
+      return;
+    }
+    const blob = pcmToWavBlob(chunks, ctx.sampleRate);
+    pcmChunksRef.current = [];
+    setTranscribing(true);
+    transcribeBlob(blob, (s) => toast(s, "info"), "en")
+      .then((text) => {
+        if (voiceSendRef.current) {
+          voiceSendRef.current = false;
+          if (text) sendMessage(text);
+          else toast("No speech detected — try again.", "info");
+        } else if (text) setInput((prev) => (prev ? prev + " " : "") + text);
+        else toast("No speech detected — try again.", "info");
+      })
+      .catch((err: any) => {
+        toast("On-device transcription failed — " + String(err?.message || err).slice(0, 120), "error");
+      })
+      .finally(() => setTranscribing(false));
+  }
+
+  async function startRecorderMic() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
+      const Ctx: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx = new Ctx();
+      const src = ctx.createMediaStreamSource(stream);
+      const proc = ctx.createScriptProcessor(4096, 1, 1);
+      pcmChunksRef.current = [];
+      proc.onaudioprocess = (e) => {
+        pcmChunksRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+      src.connect(proc);
+      proc.connect(ctx.destination);
+      pcmCtxRef.current = ctx;
+      pcmSrcRef.current = src;
+      pcmProcRef.current = proc;
+      pcmModeRef.current = true;
+      micStreamRef.current = stream;
+      setListening(true);
+      recordedMsRef.current = 0;
+      silenceMsRef.current = 0;
+      startWaveMeter(stream, () => {
+        userStopRef.current = true;
+        finishPcmRecording();
+      });
+      liveTimerRef.current = window.setInterval(async () => {
+        if (liveBusyRef.current || !pcmModeRef.current) return;
+        let len = 0;
+        for (const c of pcmChunksRef.current) len += c.length;
+        if (len < ctx.sampleRate * 1.2) return;
+        liveBusyRef.current = true;
+        try {
+          const t = await transcribeBlob(pcmToWavBlob(pcmChunksRef.current, ctx.sampleRate), undefined, "en");
+          if (t && pcmModeRef.current) setLiveText(t);
+        } catch {}
+        liveBusyRef.current = false;
+      }, 2200);
+    } catch {
+      toast("Microphone blocked — allow mic access in browser site settings and macOS System Settings, Privacy and Security, Microphone.", "error");
+    }
+  }
+
+  useEffect(() => {
+    if (!listening) return;
+    const onDevChange = () => {
+      toast("Audio device changed — reconnecting mic…", "info");
+            if (pcmModeRef.current) {
+        rotatePcmSource();
+      } else if (recRef.current) {
+        nativeRotateRef.current = true;
+        try { recRef.current.abort(); } catch {}
+      }
+    };
+    navigator.mediaDevices?.addEventListener?.("devicechange", onDevChange);
+    return () => navigator.mediaDevices?.removeEventListener?.("devicechange", onDevChange);
+  }, [listening]);
+
+
+    async function sendMessage(overrideText?: string) {
+    const baseText = overrideText !== undefined ? overrideText : input.trim();
+    if ((!baseText && attachments.length === 0) || isStreaming) return;
     const userText =
-      input.trim() +
+      baseText +
       attachments
         .filter((a) => a.kind === "text" && a.text)
         .map((a) => `\n\n--- Attached file: ${a.name} ---\n${a.text}`)
@@ -935,6 +1110,99 @@ useEffect(() => {
     setAttachments([]);
     setEditFromId(null);
     await runChat(userText, imageAtts, base, displayAtts, editId);
+  }
+  async function runChat(
+    userText: string,
+    imageAtts: { type: string; name: string; dataUrl?: string }[],
+    baseMessages: Message[],
+    displayAtts: { name: string; dataUrl?: string }[],
+    editFromId?: string | null
+  ) {
+    const assistantId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: userText,
+      createdAt: now,
+      attachments: displayAtts.length ? displayAtts : undefined,
+    };
+
+    const assistantPlaceholder: Message = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      createdAt: now,
+    };
+
+    setMessages((prev) => [...prev, userMsg, assistantPlaceholder]);
+    setStreamingText("");
+    setStreamFor(activeChatId ?? "new");
+    setIsStreaming(true);
+
+    try {
+      const res = await fetch("/api/teacher/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: activeChatId,
+          message: userText,
+          history: baseMessages.map((m) => ({ role: m.role, content: m.content })),
+          attachments: imageAtts,
+                    projectId: activeProject?.id ?? null,
+          editFromId: editFromId ?? null,
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => "Unknown error");
+        throw new Error(`API ${res.status}: ${errText.slice(0, 200)}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const payload = JSON.parse(line.slice(6));
+            if (payload.type === "token") {
+              acc += payload.text;
+              setStreamingText(acc);
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m))
+              );
+            } else if (payload.type === "done") {
+              if (payload.chatId && !activeChatId) {
+                setActiveChatId(payload.chatId);
+              }
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: acc, provider: payload.metadata?.provider }
+                    : m
+                )
+              );
+            } else if (payload.type === "error") {
+              toast(payload.message || "AI error", "error");
+            }
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      toast(err?.message || "Failed to reach AI", "error");
+    } finally {
+      setIsStreaming(false);
+      setStreamingText("");
+      setStreamFor(null);
+    }
   }
 
   function regenerate() {
@@ -1444,7 +1712,7 @@ useEffect(() => {
             </button>
           )}
 
-          {/* ===== INPUT ===== */}
+            {/* ===== INPUT ===== */}
           <div className="p-4">
             <div className="mx-auto max-w-3xl">
               {attachments.length > 0 && (
@@ -1461,58 +1729,106 @@ useEffect(() => {
 
               <input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.csv,.xlsx,.xls,.pdf,.docx,.doc" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
 
-              <div className="flex items-end gap-1 rounded-2xl border border-transparent bg-white p-1.5 shadow-[0_4px_20px_rgba(15,23,42,0.08)] transition-all duration-200 focus-within:border-sky-300 focus-within:shadow-[0_4px_24px_rgba(14,165,233,0.15)]">
-                                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isStreaming}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-navy-900 disabled:opacity-40"
-                  title="Attach image / PDF / Word / Excel"
-                >
-                  <Plus size={19} />
-                </button>
-
-                <textarea
-                  ref={inputRef}
-                  rows={1}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                  placeholder="Ask anything"
-                  className="flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm text-navy-900 placeholder-slate-400 outline-none"
-                />
-
-                <button
-                  onClick={toggleMic}
-                  disabled={isStreaming}
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition disabled:opacity-40 ${
-                    listening ? "animate-pulse bg-rose-50 text-rose-600" : "text-slate-500 hover:bg-slate-100 hover:text-navy-900"
-                  }`}
-                  title="Voice input (auto English / Khmer)"
-                >
-                  <Mic size={17} />
-                </button>
-
-                {isStreaming ? (
-                  <button
-                    onClick={stopGeneration}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white transition hover:bg-rose-600"
-                    title="Stop generating"
+                            {/* ===== VOICE BAR (ChatGPT-style with live transcript) ===== */}
+                  {listening && (
+                <div className="scale-in flex items-center gap-2 rounded-full border border-slate-200 bg-white py-2 pl-2 pr-2 shadow-[0_10px_35px_rgba(15,23,42,0.12)]">
+                                    <button
+                    onClick={cancelRecording}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
+                    title="Cancel recording"
                   >
-                    <Square size={15} />
+                    <X size={16} />
                   </button>
-                ) : (
+                  
+                  <div className="min-w-0 flex-1 px-1">
+                    <p className="max-h-10 overflow-y-auto text-sm leading-5 text-navy-900">
+                      {liveText.trim() ? liveText : <span className="text-slate-400">Listening… speak now</span>}
+                    </p>
+                  </div>
+                  <div className="flex h-9 shrink-0 items-center gap-[3px] px-1">
+                    {Array.from({ length: 24 }).map((_, i) => (
+                      <span
+                        key={i}
+                        ref={(el) => { barRefs.current[i] = el; }}
+                        className="w-[3px] shrink-0 rounded-full bg-sky-500"
+                        style={{ height: "6%" }}
+                      />
+                    ))}
+                  </div>
                   <button
-  onClick={sendMessage}
-  disabled={!input.trim() && attachments.length === 0}
-  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition-all duration-200 hover:bg-navy-800 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${
-    (input.trim() || attachments.length > 0) && !isStreaming ? "send-ready" : ""
-  }`}
-  title="Send"
->
-                    <Send size={15} />
+                    onClick={toggleMic}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-900 text-white transition hover:bg-navy-800"
+                    title="Stop recording"
+                  >
+                    <Square size={12} className="fill-current" />
                   </button>
-                )}
-              </div>
+                  <button
+                    onClick={sendFromVoice}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600"
+                    title="Stop and send"
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* ===== COMPOSER (fades out while listening) ===== */}
+              {!listening && (
+                <div className="transition-opacity duration-300">
+                  <div className="flex items-end gap-1 rounded-2xl border border-transparent bg-white p-1.5 shadow-[0_4px_20px_rgba(15,23,42,0.08)] transition-all duration-200 focus-within:border-sky-300 focus-within:shadow-[0_4px_24px_rgba(14,165,233,0.15)]">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isStreaming}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-navy-900 disabled:opacity-40"
+                      title="Attach image / PDF / Word / Excel"
+                    >
+                      <Plus size={19} />
+                    </button>
+
+                    <textarea
+                      ref={inputRef}
+                      rows={1}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                      placeholder="Ask anything"
+                      className="flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm text-navy-900 placeholder-slate-400 outline-none"
+                    />
+
+                    <button
+                      onClick={toggleMic}
+                      disabled={isStreaming || transcribing}
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition disabled:opacity-40 ${
+                        listening ? "animate-pulse bg-rose-50 text-rose-600" : "text-slate-500 hover:bg-slate-100 hover:text-navy-900"
+                      }`}
+                      title="Voice input (auto English / Khmer)"
+                    >
+                      {transcribing ? <Loader2 size={17} className="animate-spin" /> : <Mic size={17} />}
+                    </button>
+
+                    {isStreaming ? (
+                      <button
+                        onClick={stopGeneration}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white transition hover:bg-rose-600"
+                        title="Stop generating"
+                      >
+                        <Square size={15} />
+                      </button>
+                    ) : (
+                      <button
+                                              onClick={() => sendMessage()}
+                        disabled={!input.trim() && attachments.length === 0}
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition-all duration-200 hover:bg-navy-800 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${
+                          (input.trim() || attachments.length > 0) && !isStreaming ? "send-ready" : ""
+                        }`}
+                        title="Send"
+                      >
+                        <Send size={15} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <p className="mt-2 text-center text-[11px] text-slate-400">AI can make mistakes. Check important info.</p>
             </div>
