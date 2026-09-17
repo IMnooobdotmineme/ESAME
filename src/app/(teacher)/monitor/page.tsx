@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogHeader } from "@/components/ui/dialog";
 
-type Tab = "all" | "attention" | "rejected" | "finished";
+type Tab = "all" | "attention" | "rejected" | "finished" | "pending";
 
 type ConfirmAction =
   | { kind: "end" }
@@ -41,8 +41,10 @@ export default function TeacherLiveMonitorPage() {
   const endExam = useExamStore((state) => state.endExam);
   const pauseExam = useExamStore((state) => state.pauseExam);
   const resumeExam = useExamStore((state) => state.resumeExam);
-  const grantContinue = useExamStore((state) => state.grantContinue);
+    const grantContinue = useExamStore((state) => state.grantContinue);
   const rejectLiveStudent = useExamStore((state) => state.rejectLiveStudent);
+  const approveStudent = useExamStore((state) => state.approveStudent);
+  const rejectStudent = useExamStore((state) => state.rejectStudent);
   const fetchExams = useExamStore((state) => state.fetchExams);
 
   useEffect(() => { fetchExams(); }, [fetchExams]);
@@ -150,23 +152,26 @@ export default function TeacherLiveMonitorPage() {
     );
   }
 
+    const pendingStudents = activeExam.requests.filter((r) => r.status === "pending");
   const approvedStudents = activeExam.requests.filter((r) => r.status === "approved");
   const activeStudents = approvedStudents.filter((r) => !r.isRejectedLive);
   const attentionStudents = activeStudents.filter((r) => r.isLocked);
   const rejectedStudents = approvedStudents.filter((r) => r.isRejectedLive);
   const finishedStudents = activeStudents.filter((r) => r.isSubmitted || r.isForcedSubmit);
 
-  const counts = {
+    const counts = {
     all: activeStudents.length,
     attention: attentionStudents.length,
     rejected: rejectedStudents.length,
     finished: finishedStudents.length,
+    pending: pendingStudents.length,
   };
 
-  const visibleStudents =
+    const visibleStudents =
     activeTab === "attention" ? attentionStudents :
     activeTab === "rejected" ? rejectedStudents :
     activeTab === "finished" ? finishedStudents :
+    activeTab === "pending" ? pendingStudents :
     activeStudents;
 
   // ✅ Open modal instead of browser confirm()
@@ -306,12 +311,13 @@ export default function TeacherLiveMonitorPage() {
         </div>
 
         {/* TABS */}
-        <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap">
           {([
             { key: "all", label: "All Students" },
             { key: "attention", label: "Requires Attention" },
             { key: "rejected", label: "Rejected" },
             { key: "finished", label: "Finished" },
+            { key: "pending", label: "Join Requests" },
           ] as { key: Tab; label: string }[]).map((tab) => (
             <button
               key={tab.key}
@@ -319,8 +325,11 @@ export default function TeacherLiveMonitorPage() {
               className={activeTab === tab.key
                 ? "rounded-full px-4 py-1.5 text-sm font-medium bg-navy-900 text-white"
                 : "rounded-full px-4 py-1.5 text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}
-            >
+                        >
               {tab.label} ({counts[tab.key]})
+              {tab.key === "pending" && counts.pending > 0 && (
+                <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              )}
             </button>
           ))}
         </div>
@@ -349,8 +358,10 @@ export default function TeacherLiveMonitorPage() {
                         {student.name}
                         <span className="ml-1.5 text-xs font-mono font-normal text-slate-400">({student.studentId})</span>
                       </td>
-                      <td className="px-5 py-3.5">
-                        {student.isRejectedLive ? (
+                                            <td className="px-5 py-3.5">
+                        {student.status === "pending" ? (
+                          <Badge variant="info">Waiting to Join</Badge>
+                        ) : student.isRejectedLive ? (
                           <Badge variant="neutral">Rejected (Force Submitted)</Badge>
                         ) : student.isLocked ? (
                           <Badge variant="danger">Needs Review</Badge>
@@ -360,16 +371,56 @@ export default function TeacherLiveMonitorPage() {
                           <Badge variant="neutral">In Progress</Badge>
                         )}
                       </td>
-                      <td className="px-5 py-3.5">
-                        {(student.tabSwitches ?? 0) > 0 ? (
+                                            <td className="px-5 py-3.5">
+                        {student.status === "pending" ? (
+                          <span className="text-slate-300">—</span>
+                        ) : (student.tabSwitches ?? 0) > 0 ? (
                           <span className="inline-flex items-center gap-1 text-rose-700 font-semibold">
                             <ShieldAlert size={13} /> {student.tabSwitches}
                           </span>
                         ) : <span className="text-slate-300">0</span>}
                       </td>
-                      <td className="px-5 py-3.5 text-slate-600 whitespace-nowrap">{formatDateTime(student.timestamp)}</td>
-                      <td className="px-5 py-3.5 text-right space-x-2">
-                        {student.isRejectedLive || student.isSubmitted || student.isForcedSubmit ? (
+                                            <td className="px-5 py-3.5 text-slate-600 whitespace-nowrap">
+                        {student.status === "pending" ? (
+                          <span className="text-xs">{formatDateTime(student.timestamp)}</span>
+                        ) : (
+                          formatDateTime(student.timestamp)
+                        )}
+                      </td>
+                                            <td className="px-5 py-3.5 text-right space-x-2">
+                        {student.status === "pending" ? (
+                          <>
+                            <Button
+                              size="sm"
+                              disabled={isActionLoading}
+                              onClick={async () => {
+                                setLoadingAction(student.id);
+                                try {
+                                  await approveStudent(activeExam.roomCode, student.id);
+                                } finally {
+                                  setLoadingAction(null);
+                                }
+                              }}
+                            >
+                              {isActionLoading ? "..." : <>Approve</>}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              disabled={isActionLoading}
+                              onClick={async () => {
+                                setLoadingAction(student.id);
+                                try {
+                                  await rejectStudent(activeExam.roomCode, student.id);
+                                } finally {
+                                  setLoadingAction(null);
+                                }
+                              }}
+                            >
+                              {isActionLoading ? "..." : <>Reject</>}
+                            </Button>
+                          </>
+                        ) : student.isRejectedLive || student.isSubmitted || student.isForcedSubmit ? (
                           <span className="text-slate-300 text-xs">—</span>
                         ) : student.isLocked ? (
                           <>
