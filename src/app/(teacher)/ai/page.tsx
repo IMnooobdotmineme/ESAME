@@ -883,24 +883,38 @@ useEffect(() => {
       .catch(() => setChatLoading(false));
   }, [activeChatId]);
 
-  useEffect(() => {
-    if (stickRef.current) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+   useEffect(() => {
+    if (stickRef.current) {
+      // Instant during streaming — overlapping "smooth" animations on every
+      // token are what fight a user's manual scroll in the first place.
+      messagesEndRef.current?.scrollIntoView({ behavior: streamingText ? "auto" : "smooth" });
+    }
   }, [messages, streamingText]);
 
 
 
-  function onScrollBox() {
+    function onScrollBox() {
     const el = scrollBoxRef.current;
     if (!el) return;
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     stickRef.current = near;
     setShowJump(!near);
   }
+  function onUserWheel(e: React.WheelEvent) {
+    if (e.deltaY < 0) {
+      stickRef.current = false;
+      setShowJump(true);
+    }
+  }
+  function onUserTouchStart() {
+    stickRef.current = false;
+  }
 
   const q = search.trim().toLowerCase();
   const searchResults = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : [];
   const standaloneChats = chats.filter((c) => !c.projectId);
-  const activeProject = projects.find((p) => p.id === expandedProjectId) || null;
+    const activeChatProjectId = activeChatId ? chats.find((c) => c.id === activeChatId)?.projectId ?? null : expandedProjectId;
+  const activeProject = projects.find((p) => p.id === activeChatProjectId) || null;
   const lastAssistantIdx = messages.map((m) => m.role).lastIndexOf("assistant");
 
   async function refreshChats() {
@@ -1352,7 +1366,7 @@ useEffect(() => {
               }
               const cid = payload.chatId || activeChatId;
               if (cid) {
-                const t = userText.replace(/\s+/g, " ").trim().slice(0, 48);
+                              const t = String(payload.title || userText).replace(/\s+/g, " ").trim().slice(0, 48);
                 if (t) {
                   setChats((prev) => {
                     const has = prev.some((c) => c.id === cid);
@@ -1816,9 +1830,11 @@ useEffect(() => {
             <span className="truncate text-sm font-semibold text-navy-900">
               {activeChatId ? chats.find((c) => c.id === activeChatId)?.title ?? "Chat" : "New chat"}
             </span>
-                        {activeProject && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-700">
-                <Folder size={11} /> {activeProject.name}
+                                    {activeProject && (
+              <span className="inline-flex items-center gap-1.5 text-slate-400">
+                <span className="text-slate-300">/</span>
+                <Folder size={13} strokeWidth={2} className="shrink-0" />
+                <span className="text-[13px] font-medium text-slate-500">{activeProject.name}</span>
               </span>
             )}
             {activeChatId && messages.length > 0 && (
@@ -1836,7 +1852,13 @@ useEffect(() => {
             )}
           </div>
 
-                    <div ref={scrollBoxRef} onScroll={onScrollBox} className="flex-1 space-y-6 overflow-y-auto px-6 py-6 md:px-12">
+                               <div
+              ref={scrollBoxRef}
+              onScroll={onScrollBox}
+              onWheel={onUserWheel}
+              onTouchStart={onUserTouchStart}
+              className="flex-1 space-y-6 overflow-y-auto px-6 py-6 md:px-12"
+            >
             {chatLoading && messages.length === 0 && (
   <div className="mx-auto w-full max-w-3xl space-y-6 px-2 py-4">
     <div className="flex justify-end"><div className="h-16 w-2/3 rounded-2xl bg-slate-100 sk-pulse" /></div>

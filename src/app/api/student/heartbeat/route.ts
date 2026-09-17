@@ -21,10 +21,15 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     let lock = false;
 
-    // 20. Heartbeat gap (tab killed / frozen / script blocked)
-    if (student.lastHeartbeatAt && now.getTime() - new Date(student.lastHeartbeatAt).getTime() > 20000) {
-      await insertProctorEvent(student.id, "heartbeat_gap", "lock", {});
+        // 20. Heartbeat gap (tab killed / frozen / script blocked)
+    const gapMs = student.lastHeartbeatAt ? now.getTime() - new Date(student.lastHeartbeatAt).getTime() : 0;
+    if (gapMs > 20000) {
+      await insertProctorEvent(student.id, "heartbeat_gap", "lock", { gapMs });
       lock = true;
+    }
+        // ✅ Prolonged heartbeat loss → escalate to teacher (lock already applied above)
+    if (gapMs > 60000 && !student.completedAt) {
+      await insertProctorEvent(student.id, "heartbeat_lost_long", "flag", { gapMs });
     }
     // 16. Fingerprint bind / mismatch mid-exam
     if (student.fingerprint && fingerprint && student.fingerprint !== fingerprint) {

@@ -6,6 +6,8 @@ import {
   examStudents, studentExamAttempts, studentAnswers,
   departments, subjects,
 } from "@/db/schema";
+import { buildSmartHistory } from "@/lib/ai/context-builder";
+import { getChatDocumentContext } from "@/lib/ai/document-memory";
 import { eq, and, gte } from "drizzle-orm";
 import { requireTeacherSession } from "@/lib/session";
 import { streamChat } from "@/lib/ai/adapter";
@@ -13,7 +15,7 @@ import { checkQuota, incrementQuota } from "@/lib/ai/quota";
 
 export const maxDuration = 900; // 15 minutes for large AI grading tasks
 
-// ✅ AI judge — acts as a human teacher grading each question
+// ========== AI GRADING ENGINE ==========
 async function aiGradeQuestion(params: {
   questionType: string;
   questionText: string;
@@ -91,6 +93,35 @@ async function aiGradeQuestion(params: {
   }
 }
 
+// ========== AI TITLE GENERATOR (ChatGPT-style smart titles) ==========
+async function autoTitle(chatId: string, firstUserText: string): Promise<string | null> {
+  try {
+    const [chat] = await db.select({ title: aiChats.title }).from(aiChats).where(eq(aiChats.id, chatId));
+    if (!chat) return null;
+    const cur = String(chat.title || "");
+    if (cur && cur !== "Newchat" && cur !== "New chat") return null; // already has a real title
+    const res = await fetch(`${process.env.OLLAMA_BASE_URL || "http://localhost:11434"}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.OLLAMA_FAST_MODEL || "qwen3:8b",
+        prompt: `Create a very short title (max 6 words, no quotes, no ending punctuation) for a conversation that starts with this message:\n\n${String(firstUserText).slice(0, 400)}\n\nTitle:`,
+        stream: false,
+        options: { temperature: 0.2 },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const title = String(data.response || "").replace(/["'*`!?\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!title) return null;
+    await db.update(aiChats).set({ title }).where(eq(aiChats.id, chatId));
+    return title;
+  } catch {
+    return null;
+  }
+}
+
+// ========== MAIN CHAT HANDLER ==========
 export async function POST(req: NextRequest) {
   const session = await requireTeacherSession();
   if (!session) return new Response("Unauthorized", { status: 401 });
@@ -108,7 +139,7 @@ export async function POST(req: NextRequest) {
 
   let currentChatId = chatId;
   if (!currentChatId) {
-    const [newChat] = await db.insert(aiChats).values({ orgId, teacherId: session.userId, title: "New chat", projectId }).returning();
+    const [newChat] = await db.insert(aiChats).values({ orgId, teacherId: session.userId, title: "Newchat", projectId }).returning();
     currentChatId = newChat.id;
   }
 
@@ -119,11 +150,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const [userMsg] = await db.insert(aiMessages).values({ chatId: currentChatId, role: "user", content: message, attachments: attachments.length ? attachments : null }).returning();
-
+    const [userMsg] = await db.insert(aiMessages).values({ chatId: currentChatId, role: "user", content: message, attachments: attachments.length ? attachments : null }).returning();
   await db.update(aiChats).set({ updatedAt: new Date() }).where(eq(aiChats.id, currentChatId));
+  const titlePromise = autoTitle(currentChatId, message); // runs in parallel with the answer
 
-    // ✅ Fetch teacher's departments and subjects for context
+  // Fetch teacher's departments and subjects for context
   const teacherDepts = teacher
     ? await db.select({ name: departments.name }).from(departments).where(eq(departments.orgId, teacher.orgId))
     : [];
@@ -138,83 +169,49 @@ export async function POST(req: NextRequest) {
   const deptList = teacherDepts.map((d: any) => d.name).join(", ") || "none";
   const subjList = teacherSubjs.map((s: any) => `${s.deptName} → ${s.name}`).join(", ") || "none";
 
+  // ========== PROFESSIONAL SYSTEM PROMPT (de-duplicated, concise) ==========
   const systemPrompt = [
-    "You are ESAME AI, a helpful assistant for teachers in Cambodia. You can:",
-    "- Answer questions in English or Khmer (auto-detect language)",
-    "- Help generate exam questions",
+    "You are ESAME AI, a professional teaching assistant for Cambodian educators.",
+    "",
+    "**Core capabilities:**",
+    "- Answer questions in English or Khmer (auto-detect and match user's language)",
+    "- Generate exam papers with structured JSON output",
+    "- Grade student answers fairly like a human teacher",
     "- Analyze uploaded files and images",
-    "- Provide educational content",
+    "- Provide educational content with clear structure",
     "",
-    "FORMATTING RULES (always): structure answers with short paragraphs separated by blank lines, ## headings, bullet lists and numbered steps. Only use a markdown table when the user explicitly asks for one. When providing code, ALWAYS use fenced code blocks with the language tag (cpp, js, python, java, bash).",
+    "**Response format:**",
+    "- Use short paragraphs separated by blank lines",
+    "- Use ## headings for major sections",
+    "- Use bullet lists and numbered steps for clarity",
+    "- For code: ALWAYS use fenced code blocks with language tag (cpp, js, python, java, bash)",
+    "- For tables: ONLY when user explicitly requests, use valid GitHub-flavored markdown",
     "",
-    "WHEN MAKING TABLES: ALWAYS use valid GitHub-flavored markdown table syntax.",
+    "**Reasoning protocol:**",
+    "Think step-by-step internally before answering complex questions. Structure your reasoning clearly.",
     "",
-    `TEACHER CONTEXT: This teacher teaches in these departments: ${deptList}. Their subjects are: ${subjList}.`,
+    `**Teacher context:** Departments: ${deptList}. Subjects: ${subjList}.`,
     "",
-    "EXAM GENERATION RULE: When the user asks to generate/create an exam, you MUST first ask for:",
-    "1. **Department** (REQUIRED) — must be one of the teacher's departments listed above",
-    "2. **Subject** (REQUIRED) — must be one of the teacher's subjects listed above",
-    "3. **Title** (optional) — if not provided, you will auto-generate one",
-    "4. **Date** (optional)",
-    "5. **Duration in minutes** (optional, default 60)",
-    "6. **Instructions** (optional)",
+    "**EXAM GENERATION:**",
+    "When user asks to generate/create an exam:",
+    "1. Require both department AND subject (must be from teacher's list above)",
+    "2. If missing, ask for both and wait. Do NOT generate until both provided.",
+    "3. Output EXACTLY ONE JSON block: [[EXAM_JSON]] ... [[/EXAM_JSON]]",
+    "4. JSON schema: {\"title\":\"...\",\"department\":\"...\",\"subject\":\"...\",\"durationMinutes\":60,\"sections\":[{\"title\":\"...\",\"type\":\"mcq|multi_select|true_false|short_answer|long_answer|coding|fill_blank|matching|ordering\",\"questions\":[{\"questionText\":\"...\",\"points\":5,\"options\":[{\"optionText\":\"...\",\"isCorrect\":true}],\"payload\":{}}]]}",
+    "5. Use 2-4 sections, 8-15 questions total. Distribute types by subject (math→MCQ, literature→essay)",
+    "6. Keep questionText under 20 words. No markdown inside JSON block.",
+    "7. Closing tag MUST be exactly [[/EXAM_JSON]] — single slash, no extra characters.",
     "",
-    "If the user does NOT provide department AND subject, ask them to provide both and wait. Do NOT generate the exam until both are given.",
-    "",
-        "WHEN THE USER ASKS TO CREATE/GENERATE AN EXAM:",
-    "The app renders the exam ONLY from the JSON block below. Your prose is NEVER used. If the block is missing, short, or invalid, the exam is BROKEN.",
-    "1. Output the [[EXAM_JSON]] block FIRST, before any explanation. Keep the explanation after it under 5 lines.",
-    "2. The block MUST contain EXACTLY the sections and types the user asked for. Example: user says 'three part mcq true false long answer' → the block MUST have 3 sections with types mcq, true_false, long_answer.",
-    "3. Every section MUST contain its FULL questions array — never empty, never abbreviated, no placeholders.",
-    "4. Keep each questionText under 20 words so the block stays small. 8-14 questions total.",
-    "5. The closing tag MUST be exactly [[/EXAM_JSON]] — single slash, no extra characters.",
-    '{"title":"...","department":"...","subject":"...","sections":[{"title":"Section A: Multiple Choice","type":"mcq","questions":[{"questionText":"...","points":5,"options":[{"optionText":"...","isCorrect":true},{"optionText":"...","isCorrect":false}]}]},{"title":"Section B: True / False","type":"true_false","questions":[{"questionText":"...","points":4,"options":[{"optionText":"True","isCorrect":true},{"optionText":"False","isCorrect":false}]}]},{"title":"Section C: Long Answer","type":"long_answer","questions":[{"questionText":"...","points":15}]}]}',
-    "No markdown inside the block.",
-        "EXAM GENERATION RULE: When the user asks to generate/create an exam, you MUST first ask for:",
-    "1. **Department** (REQUIRED) — must be one of the teacher's departments listed above",
-    "2. **Subject** (REQUIRED) — must be one of the teacher's subjects listed above",
-    "3. **Title** (optional) — if not provided, you will auto-generate one",
-    "4. **Date** (optional)",
-    "5. **Duration in minutes** (optional, default 60)",
-    "6. **Instructions** (optional)",
-    "",
-    "If the user does NOT provide department AND subject, ask them to provide both and wait. Do NOT generate the exam until both are given.",
-    "",
-    "WHEN THE USER ASKS TO CREATE/GENERATE AN EXAM: after your explanation, output exactly ONE block starting with [[EXAM_JSON]] and ending with [[/EXAM_JSON]] containing valid JSON:",
-    "CRITICAL: The closing tag MUST be exactly [[/EXAM_JSON]] — with a single forward slash, no spaces, no extra characters. Never write [[//EXAM_JSON]] or [[EXAM_JSON] (missing bracket).",
-    "",
-    "You MUST use a MIX of question types across sections. Available types:",
-    "- **mcq** (Multiple Choice): one correct option",
-    "- **multi_select** (Multiple Select): multiple correct options",
-    "- **true_false** (True/False): two options (True/False or Yes/No)",
-    "- **short_answer** (Short Answer): no options, student writes brief text",
-    "- **long_answer** (Essay): no options, student writes detailed response",
-    "- **coding** (Coding): code question with expected output",
-    "- **fill_blank** (Fill in the Blank): sentence with blanks to fill",
-    "- **matching** (Matching): pairs of terms and definitions",
-    "- **ordering** (Ordering): items to arrange in correct sequence",
-    "",
-    "Example JSON structure showing ALL types:",
-    '{"title":"...","department":"...","subject":"...","sections":[',
-    '{"title":"Section A: Multiple Choice","type":"mcq","questions":[{"questionText":"What is 2+2?","points":5,"options":[{"optionText":"3","isCorrect":false},{"optionText":"4","isCorrect":true},{"optionText":"5","isCorrect":false}]}]},',
-    '{"title":"Section B: Multiple Select","type":"multi_select","questions":[{"questionText":"Select all prime numbers","points":10,"options":[{"optionText":"2","isCorrect":true},{"optionText":"4","isCorrect":false},{"optionText":"5","isCorrect":true},{"optionText":"6","isCorrect":false}]}]},',
-    '{"title":"Section C: True/False","type":"true_false","questions":[{"questionText":"Water boils at 100°C","points":3,"options":[{"optionText":"True","isCorrect":true},{"optionText":"False","isCorrect":false}]}]},',
-    '{"title":"Section D: Short Answer","type":"short_answer","questions":[{"questionText":"Define photosynthesis","points":8}]},',
-    '{"title":"Section E: Essay","type":"long_answer","questions":[{"questionText":"Explain the water cycle","points":15}]},',
-    '{"title":"Section F: Fill in the Blank","type":"fill_blank","questions":[{"questionText":"The capital of France is ____","points":4,"payload":{"answerKey":["Paris"]}}]},',
-    '{"title":"Section G: Matching","type":"matching","questions":[{"questionText":"Match each country with its capital","points":12,"payload":{"pairs":[{"term":"France","definition":"Paris"},{"term":"Japan","definition":"Tokyo"},{"term":"Egypt","definition":"Cairo"}]}}]},',
-    '{"title":"Section H: Ordering","type":"ordering","questions":[{"questionText":"Arrange in order of size: small, medium, large","points":6,"payload":{"items":["small","medium","large"]}}]},',
-    '{"title":"Section I: Coding","type":"coding","questions":[{"questionText":"Write a function to reverse a string","points":20,"payload":{"expectedOutput":"Reverse of input"}}]}',
-    ']}',
-    "",
-    "Use 2-4 sections and 8-15 questions total. Distribute question types based on subject (e.g., math → more MCQ, literature → more essay). No markdown inside the block.",
-    "Use 2-4 sections and 8-15 questions total. No markdown inside the block.",
-    "",
-    "AI GRADING: when the teacher asks to grade an exam by room code, the AI has ALREADY evaluated every student's answer like a human teacher — scoring each question fairly (MCQ/T/F/fill-blank against the answer key, short/long/coding/matching/ordering by reasoning) — and SAVED the marks as the TEACHER'S score (manualPoints). The attempt is automatically finalized to Pass or Fail based on score. Format a clean report table (Student, Score/Max, Percentage, Status) ordered by percentage descending, add per-student feedback from details, and state clearly that marks are SAVED and visible under Grading & Results.",
+    "**AI GRADING:**",
+    "When grading by exam code: evaluate each student answer like a human teacher, score fairly (MCQ/T/F/fill-blank vs answer key, short/long/coding/matching/ordering by reasoning), save marks as manualPoints, finalize to Pass/Fail. Format clean report table (Student, Score/Max, Percentage, Status) ordered by percentage descending. State marks are SAVED under Grading & Results.",
   ].join("\n");
 
-    const wantsGrading = /grad|\bscore\b|\bmark\b|auto[- ]?grade|\bresult/i.test(message);
-  const codeMatch = message.match(/\b([A-Z0-9]{6})\b/);
+  // Strip attached-file content before intent detection
+  const stripAttachedFileText = (text: string) => String(text || "").split(/\n\n--- Attached file:/)[0];
+  const messageIntentOnly = stripAttachedFileText(message);
+
+  const wantsGrading = /grad|\bscore\b|\bmark\b|auto[- ]?grade|\bresult/i.test(messageIntentOnly);
+  const codeMatch = messageIntentOnly.match(/\b([A-Z0-9]{6})\b/);
   const gradeMatch = wantsGrading && codeMatch ? codeMatch : null;
 
   if (gradeMatch) {
@@ -263,7 +260,6 @@ export async function POST(req: NextRequest) {
 
             const details: any[] = [];
 
-            // ✅ AI grades each question like a human teacher, saves to manualPoints
             for (const ans of answers) {
               const q = questionMap.get(ans.questionId);
               if (!q) continue;
@@ -291,16 +287,13 @@ export async function POST(req: NextRequest) {
                 feedback,
               });
 
-                            // ✅ Write AI score ONLY — never mutate student's answerText or selectedOptionIds
               await db.update(studentAnswers).set({
                 manualPoints: points,
                 markedCorrect: points > 0,
                 feedback,
-                // ❌ NEVER set: answerText, selectedOptionIds (those are the student's original submission)
               }).where(eq(studentAnswers.id, ans.id));
             }
 
-            // ✅ Recalculate totals the SAME way save-grades does
             const allRows = await db
               .select({ answer: studentAnswers, question: examQuestions })
               .from(studentAnswers)
@@ -310,10 +303,9 @@ export async function POST(req: NextRequest) {
             let autoTotal = 0, manualTotal = 0, maxTotal = 0, needsManual = false;
             for (const { answer, question } of allRows as any[]) {
               const qType = question?.questionType;
-              const isAuto = qType === "mcq" || qType === "multiple_select" || qType === "true_false" || qType === "fill_in_blank";
+              const isAuto = qType === "mcq" || qType === "multiple_select" || qType === "true_false"|| qType === "fill_in_blank";
               maxTotal += question?.points || 0;
               if (isAuto && answer.markedCorrect !== null) {
-                // system auto-graded (or overridden by teacher/AI)
                 autoTotal += answer.manualPoints;
               } else if (isAuto) {
                 autoTotal += answer.autoPoints;
@@ -323,7 +315,6 @@ export async function POST(req: NextRequest) {
               }
             }
 
-            // ✅ Finalize attempt — Pass/Fail, no more "Pending Review"
             await db.update(studentExamAttempts).set({
               autoPoints: autoTotal,
               manualPoints: manualTotal,
@@ -347,7 +338,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-                console.log("[AI-GRADING] results:", results.length);
+        console.log("[AI-GRADING] results:", results.length);
         console.log(`[AI-GRADING] completed: ${gradedCount}/${totalStudents} students graded`);
         if (!results.length) {
           message = `Exam ${examCode} (${exam.title}) has no student submissions yet.`;
@@ -365,7 +356,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-    // ✅ Cap history so local Ollama never runs out of memory
+  const smartHistory = await buildSmartHistory(currentChatId);
+  const docContext = await getChatDocumentContext(currentChatId, userMsg.id);
+
   const trimmedHistory = history
     .slice(-6)
     .map((h: any) => ({ role: h.role, content: String(h.content || "").slice(0, 1500) }));
@@ -378,13 +371,15 @@ export async function POST(req: NextRequest) {
 
   const encoder = new TextEncoder();
   let fullResponse = "";
-  // ✅ EXAM GENERATION: dedicated JSON-only call so the exam card ALWAYS renders
-    const combined = [...history.map((h: any) => h.content), message].join("\n");
+
+  const combined = [
+    ...history.map((h: any) => stripAttachedFileText(h.content)),
+    messageIntentOnly,
+  ].join("\n");
   const wantsExam =
-    /(generate|create|make|build|write|do it)/i.test(combined) &&
+    /(generate|create|make|build|do it)/i.test(combined) &&
     /(exam|paper|test|quiz)/i.test(combined);
 
-      // ✅ Detect dept/subject with word boundaries, from the MOST RECENT message that mentions a subject
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const matchByName = (list: any[], lowerText: string) =>
     list.find((item: any) => {
@@ -393,10 +388,9 @@ export async function POST(req: NextRequest) {
     });
 
   const userMsgs = [
-    ...history.filter((h: any) => h.role === "user").map((h: any) => h.content),
-    message,
+    ...history.filter((h: any) => h.role === "user").map((h: any) => stripAttachedFileText(h.content)),
+    messageIntentOnly,
   ];
-
   let foundSubj: any = null;
   let foundDept: any = null;
   for (let i = userMsgs.length - 1; i >= 0 && !foundSubj; i--) {
@@ -411,18 +405,15 @@ export async function POST(req: NextRequest) {
   let deptSubjectNote = "";
   if (foundSubj) {
     if (!foundDept) {
-      // subject without department → use the subject's own department
       foundDept = teacherDepts.find((d: any) => d.name === foundSubj.deptName);
     } else if (foundDept.name !== foundSubj.deptName) {
-      // ❗ only warn when the SAME message really mismatches
       deptSubjectNote = `⚠️ Note: "${foundSubj.name}" belongs to **${foundSubj.deptName}**, not ${foundDept.name} — I generated it under ${foundSubj.deptName}.`;
       foundDept = teacherDepts.find((d: any) => d.name === foundSubj.deptName);
     }
   }
 
-    // ✅ Grading requests ALWAYS win over generation
   const gradeIntentNow =
-    /grad|\bscore\b|\bmark\b|\bresult/i.test(message) && /\b[A-Z][A-Z0-9]{5}\b/.test(message);
+    /grad|\bscore\b|\bmark\b|\bresult/i.test(messageIntentOnly) && /\b[A-Z][A-Z0-9]{5}\b/.test(messageIntentOnly);
 
   if (wantsExam && !gradeIntentNow && foundDept && foundSubj) {
     const recentUser = [
@@ -430,10 +421,10 @@ export async function POST(req: NextRequest) {
       message,
     ].join("\n");
     const examOnlyPrompt = [
-            "You are an exam paper generator. Your ENTIRE response must be ONLY valid JSON. Do NOT use markdown code blocks like ```json. Do NOT include explanations, greetings, or any text outside the JSON object. Just the raw { ... } JSON.",
+      "You are an exam paper generator. Your ENTIRE response must be ONLY valid JSON. Do NOT use markdown code blocks like ```json. Do NOT include explanations, greetings, or any text outside the JSON object. Just the raw { ... } JSON.",
       `Teacher request: ${recentUser}`,
-            `Use department: ${foundDept.name}. Use subject: ${foundSubj.name}.`,
-            'JSON schema: {"title":string,"department":string,"subject":string,"durationMinutes":number,"sections":[{"title":string,"type":"mcq|multi_select|true_false|short_answer|long_answer|coding|fill_blank|matching|ordering","questions":[{"questionText":string,"points":number,"options":[{"optionText":string,"isCorrect":boolean}],"payload":{"pairs":[{"term":string,"definition":string}],"items":[string],"answerKey":[string]}}]}]}',
+      `Use department: ${foundDept.name}. Use subject: ${foundSubj.name}.`,
+      'JSON schema: {"title":string,"department":string,"subject":string,"durationMinutes":number,"sections":[{"title":string,"type":"mcq|multi_select|true_false|short_answer|long_answer|coding|fill_blank|matching|ordering","questions":[{"questionText":string,"points":number,"options":[{"optionText":string,"isCorrect":boolean}],"payload":{"pairs":[{"term":string,"definition":string}],"items":[string],"answerKey":[string]}}]}]}',
       "Rules: include exactly the section types the user asked for; mcq/true_false/multi_select questions MUST include options with the correct flag(s); short_answer/long_answer questions MUST NOT include options; 8-14 questions total; keep questionText under 20 words.",
     ].join("\n");
 
@@ -451,21 +442,18 @@ export async function POST(req: NextRequest) {
           console.error("[EXAM-GEN] call failed:", e);
         }
 
-                let reply = "";
+        let reply = "";
         try {
           let jsonStr = "";
           
-          // 1. Look for our custom tags
           const tagged = raw.match(/\[\[EXAM_JSON\]\]([\s\S]*?)\[\[\/?EXAM_JSON\]\]/);
           if (tagged) jsonStr = tagged[1].trim();
           
-          // 2. Look for markdown ```json ... ``` blocks
           if (!jsonStr) {
             const codeBlock = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
             if (codeBlock) jsonStr = codeBlock[1].trim();
           }
           
-          // 3. Fallback: grab the biggest { ... } block
           if (!jsonStr) {
             const brackets = raw.match(/\{[\s\S]*\}/);
             if (brackets) jsonStr = brackets[0];
@@ -473,7 +461,6 @@ export async function POST(req: NextRequest) {
           
           if (!jsonStr) throw new Error("no json found");
           
-          // 4. Fix common LLM mistakes (trailing commas before } or ])
           jsonStr = jsonStr.replace(/,\s*([\]}])/g, "$1");
           
           const parsed = JSON.parse(jsonStr);
@@ -483,25 +470,24 @@ export async function POST(req: NextRequest) {
             (s: number, sec: any) => s + (sec.questions || []).reduce((a: number, q: any) => a + (q.points || 0), 0),
             0
           );
-                    const sectionLines = parsed.sections
+          const sectionLines = parsed.sections
             .map((sec: any, i: number) => {
               const qs = sec.questions?.length || 0;
               const pts = (sec.questions || []).reduce((a: number, q: any) => a + (q.points || 0), 0);
-              // Strip redundant "Section X:" prefix from title
               const cleanTitle = (sec.title || sec.type || "").replace(/^Section [A-Z]:\s*/i, "").trim();
               return `• **Section ${String.fromCharCode(65 + i)} — ${cleanTitle}**: ${qs} questions, ${pts} points`;
             })
             .join("\n");
-                    reply =
+          reply =
             (deptSubjectNote ? deptSubjectNote + "\n\n" : "") +
-            `Here is your exam paper — **${parsed.title}** (${parsed.department} / ${parsed.subject}, ${parsed.durationMinutes || 60} min, ${totalQ} questions, ${totalPts} points).\n\n` +
+            `Here is your exam paper — **${parsed.title}** (${parsed.department} / ${parsed.subject},${parsed.durationMinutes || 60} min, ${totalQ} questions, ${totalPts} points).\n\n` +
             `${sectionLines}\n\n` +
-            `You can **View** the full paper, **Download** it as PDF, or **Save Exam** to publish it. ` +
+            `You can **View** the full paper, **Download** it as PDF, or **Save Exam** to publish it.` +
             `Want changes? Just ask: "make it harder", "only MCQ", "add 5 questions"…\n\n` +
             `[[EXAM_JSON]]${JSON.stringify(parsed)}[[/EXAM_JSON]]`;
-                } catch (e: any) {
+        } catch (e: any) {
           console.error("[EXAM-GEN] parse failed. Raw output was:", raw.slice(0, 800));
-          reply = "I could not format the exam paper correctly this time. The AI output was not valid JSON. Please try rephrasing your request (e.g., 'generate 3 parts: mcq, true false, long answer').";
+          reply = "I could not format the exam paper correctly this time. The AI output was not validJSON. Please try rephrasing your request (e.g., 'generate 3 parts: mcq, true false, long answer').";
         }
 
         await db.insert(aiMessages).values({
@@ -514,7 +500,8 @@ export async function POST(req: NextRequest) {
         });
         await incrementQuota(session.userId, orgId, metadata.tokens || 0);
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "token", text: reply })}\n\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", chatId: currentChatId, messageId: userMsg.id, metadata })}\n\n`));
+                const generatedTitle = await titlePromise;
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", chatId: currentChatId, messageId: userMsg.id, metadata, title: generatedTitle })}\n\n`));
         controller.close();
       },
     });
@@ -525,7 +512,6 @@ export async function POST(req: NextRequest) {
   }
 
   const stream = new ReadableStream({
-    
     async start(controller) {
       try {
         await streamChat(messages, {
@@ -535,8 +521,9 @@ export async function POST(req: NextRequest) {
           },
           onEnd: async (metadata) => {
             await db.insert(aiMessages).values({ chatId: currentChatId, role: "assistant", content: fullResponse, provider: metadata.provider, model: metadata.model, tokensUsed: metadata.tokens });
-            await incrementQuota(session.userId, orgId, metadata.tokens);
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", chatId: currentChatId, messageId: userMsg.id, metadata })}\n\n`));
+                        await incrementQuota(session.userId, orgId, metadata.tokens);
+            const generatedTitle = await titlePromise;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done", chatId: currentChatId, messageId: userMsg.id, metadata, title: generatedTitle })}\n\n`));
             controller.close();
           },
           onError: (error) => {

@@ -3,7 +3,8 @@ import { getFingerprint } from "./fingerprint";
 export type ProctorEventType =
   | "tab_switch" | "window_blur" | "fullscreen_exit" | "copy_attempt" | "cut_attempt"
   | "paste_attempt" | "right_click" | "blocked_key" | "devtools_key" | "devtools_open"
-  | "second_display" | "navigation_attempt" | "dom_tamper" | "uniform_typing" | "no_mouse_movement";
+    | "second_display" | "navigation_attempt" | "dom_tamper" | "uniform_typing" | "no_mouse_movement"
+  | "screenshot_attempt" | "screen_record_attempt";
 
 export function startProctor(opts: {
   requestId: string;
@@ -102,18 +103,50 @@ export function startProctor(opts: {
   document.addEventListener("contextmenu", onContext);
 
   // ✅ Blocked keys
-  const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
     const k = e.key;
     const mod = e.ctrlKey || e.metaKey;
     if (k === "F11" || k === "Escape" || k === "PrintScreen") {
       e.preventDefault(); flagNow("blocked_key", { key: k });
+      if (k === "PrintScreen") flagNow("screenshot_attempt", { key: k });
+    } else if (mod && e.shiftKey && ["3", "4", "5", "6"].includes(k)) {
+      // macOS screenshot shortcuts: Cmd+Shift+3/4/5/6
+      flagNow("screenshot_attempt", { combo: `meta+shift+${k}` });
+    } else if (mod && e.shiftKey && k.toLowerCase() === "s") {
+      // Windows Snipping Tool: Win+Shift+S
+      flagNow("screenshot_attempt", { combo: "meta+shift+s" });
+    } else if (mod && e.shiftKey && k.toLowerCase() === "r") {
+      // common recorder / save-page shortcuts
+      flagNow("screen_record_attempt", { combo: "meta+shift+r" });
     } else if (mod && ["t", "n", "w", "p", "u", "s"].includes(k.toLowerCase())) {
       e.preventDefault(); flagNow("blocked_key", { key: k });
     } else if (mod && e.shiftKey && ["k", "i", "j", "c"].includes(k.toLowerCase())) {
       e.preventDefault(); flagNow("devtools_key", { key: k });
     }
   };
-  window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey);
+
+  // ✅ SCREEN RECORD / CAPTURE API trap (in-page scripts or injected extensions)
+  try {
+    const md = navigator.mediaDevices;
+    if (md && typeof md.getDisplayMedia === "function") {
+      const origGDM = md.getDisplayMedia.bind(md);
+      md.getDisplayMedia = ((...args: any[]) => {
+        flagNow("screen_record_attempt", { source: "getDisplayMedia" });
+        return origGDM(...args);
+      }) as typeof md.getDisplayMedia;
+    }
+    const OrigMediaRecorder = (window as any).MediaRecorder;
+    if (OrigMediaRecorder) {
+      const PatchedRecorder = function (this: any, ...args: any[]) {
+        flagNow("screen_record_attempt", { source: "MediaRecorder" });
+        return new OrigMediaRecorder(...args);
+      } as any;
+      PatchedRecorder.prototype = OrigMediaRecorder.prototype;
+      PatchedRecorder.isTypeSupported = OrigMediaRecorder.isTypeSupported?.bind(OrigMediaRecorder);
+      (window as any).MediaRecorder = PatchedRecorder;
+    }
+  } catch { /* ignore */ }
 
   // Second monitor best-effort
   if ((screen as unknown as { isExtended?: boolean }).isExtended) flagNow("second_display");

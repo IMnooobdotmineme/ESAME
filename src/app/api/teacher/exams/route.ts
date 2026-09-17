@@ -14,7 +14,7 @@ import {
   examQuestions,
   examQuestionOptions,
 } from "@/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, asc } from "drizzle-orm";
 
 type ExamRow = {
   id: string;
@@ -120,13 +120,14 @@ export async function GET(req: NextRequest) {
         );
 
         const attemptIds = attemptRows.map((a: AttemptRow) => a.id);
-        const answerRows: AnswerRow[] =
+                const answerRows: AnswerRow[] =
           attemptIds.length > 0
             ? await db
                 .select({ answer: studentAnswers, question: examQuestions })
                 .from(studentAnswers)
                 .leftJoin(examQuestions, eq(studentAnswers.questionId, examQuestions.id))
                 .where(inArray(studentAnswers.attemptId, attemptIds))
+                .orderBy(asc(examQuestions.questionOrder))
             : [];
 
         const questionIds = Array.from(

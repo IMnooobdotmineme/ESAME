@@ -1,5 +1,13 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
+const PRINT_BLOCK_CSS = `
+@media print {
+  body * { visibility: hidden !important; }
+  [data-print-block], [data-print-block] * { visibility: visible !important; }
+  [data-print-block] { position: absolute; left: 0; top: 0; width: 100%; padding: 40px; }
+}
+`;
 import { useParams, useRouter } from "next/navigation";
 import { Clock, AlertTriangle, Check, ShieldAlert, Send, PauseCircle } from "lucide-react";
 import { ExamQuestionCard } from "@/components/student/ExamQuestionCard";
@@ -57,9 +65,21 @@ export default function StudentExamPage() {
   const wasFsRef = useRef(false);
 
   // ✅ Single entry point for locking — marks lock as "pending" until server confirms
-  const applyLock = () => {
+    const applyLock = () => {
     pendingLockRef.current = true;
     setIsLocked(true);
+    // ✅ Flush the latest answers the instant a violation locks the exam
+    try {
+      const raw = sessionStorage.getItem("esame_student_session");
+      const rid = raw ? JSON.parse(raw).requestId : "";
+      if (rid && Object.keys(answersRef.current).length) {
+        fetch("/api/student/save-progress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: rid, answers: answersRef.current }),
+        }).catch(() => {});
+      }
+    } catch { /* ignore */ }
   };
 
   useEffect(() => { isLockedRef.current = isLocked; }, [isLocked]);
@@ -230,10 +250,12 @@ export default function StudentExamPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsRemaining, isLocked, serverPaused]);
 
-  // REAL autosave
+    // ✅ REAL autosave — every click / keystroke persists within 400ms
+  const dirtyRef = useRef(false);
   useEffect(() => {
     if (!isAuthorized || !session?.requestId) return;
     if (Object.keys(answers).length === 0) return;
+    dirtyRef.current = true;
     setIsSaving(true);
     const t = setTimeout(async () => {
       try {
@@ -242,11 +264,42 @@ export default function StudentExamPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ requestId: session.requestId, answers }),
         });
-      } catch { /* retry on next change */ }
+        dirtyRef.current = false;
+      } catch { /* retry on next change or safety net */ }
       setIsSaving(false);
-    }, 1200);
+    }, 400);
     return () => clearTimeout(t);
   }, [answers, isAuthorized, session?.requestId]);
+
+  // ✅ Safety net — flush anything unsaved every 5 seconds
+  useEffect(() => {
+    if (!isAuthorized || !session?.requestId) return;
+    const iv = setInterval(() => {
+      if (!dirtyRef.current) return;
+      fetch("/api/student/save-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: session.requestId!, answers: answersRef.current }),
+      }).then(() => { dirtyRef.current = false; }).catch(() => {});
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [isAuthorized, session?.requestId]);
+
+    // ✅ Flush on unmount (in-app navigation away from the exam)
+  useEffect(() => {
+    return () => {
+      try {
+        const raw = sessionStorage.getItem("esame_student_session");
+        const rid = raw ? JSON.parse(raw).requestId : "";
+        if (rid && Object.keys(answersRef.current).length && navigator.sendBeacon) {
+          navigator.sendBeacon(
+            "/api/student/save-progress",
+            new Blob([JSON.stringify({ requestId: rid, answers: answersRef.current })], { type: "application/json" })
+          );
+        }
+      } catch { /* ignore */ }
+    };
+  }, []);
 
   // Crash-save on tab close
   useEffect(() => {
@@ -331,7 +384,13 @@ export default function StudentExamPage() {
   if (!section || secondsRemaining === null) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+         <div data-exam-page className="min-h-screen bg-slate-50">
+      <style>{PRINT_BLOCK_CSS}</style>
+      {/* Print-blocked message */}
+      <div data-print-block className="hidden print:block text-center">
+        <h1 className="text-2xl font-bold text-red-600">Printing is disabled</h1>
+        <p className="text-slate-600 mt-2">This exam cannot be printed or saved as PDF.</p>
+      </div>
       <ConfirmDialog
         open={showSubmitConfirm}
         onClose={() => setShowSubmitConfirm(false)}
@@ -500,7 +559,13 @@ export default function StudentExamPage() {
         </div>
       </div>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-6">
+            <main
+        className="relative max-w-5xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-6 select-none"
+        style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" }}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
+      >
+      
         {/* Section sidebar */}
         <div className="md:w-60 shrink-0">
           <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-1 md:pb-0 md:sticky md:top-6">

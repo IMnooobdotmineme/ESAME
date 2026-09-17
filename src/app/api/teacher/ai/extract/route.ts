@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRequire } from "module";
 import { requireTeacherSession } from "@/lib/session";
+import { processLargeDocument } from "@/lib/ai/document-processor";
 
 export const maxDuration = 60;
 const require = createRequire(import.meta.url);
@@ -34,7 +35,12 @@ export async function POST(req: NextRequest) {
     if (!text) {
       return NextResponse.json({ error: "No readable text found (scanned/image-only files are not supported yet)." }, { status: 422 });
     }
-    return NextResponse.json({ text });
+
+    // NEW: if the document is large, condense it via chunked summarization
+    // instead of relying on the blind 30000-char cutoff above.
+    const processed = await processLargeDocument(text);
+
+    return NextResponse.json({ text: processed.text, wasSummarized: processed.wasSummarized });
   } catch (e: any) {
     return NextResponse.json({ error: `Could not read file: ${String(e?.message || e).slice(0, 150)}` }, { status: 500 });
   }

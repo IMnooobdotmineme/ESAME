@@ -189,3 +189,19 @@ body {
   }
   .ai-cursor::after { animation: none; opacity: 1; }
 }
+/* ✅ Anti-cheat: disable text selection and drag on student exam */
+[data-exam-page] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+[data-exam-page] * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+[data-exam-page] input,
+[data-exam-page] textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}

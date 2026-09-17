@@ -19,15 +19,25 @@ export async function POST(req: NextRequest) {
     const [student] = await db.select().from(examStudents).where(eq(examStudents.id, requestId));
     if (!student || student.completedAt) return NextResponse.json({ success: true });
 
-    if (severity === "lock") {
-      await db
+        if (severity === "lock") {
+      const [updated] = await db
         .update(examStudents)
         .set({
           isLocked: true,
           lastLockedAt: new Date(),
           tabSwitches: type === "tab_switch" ? sql`${examStudents.tabSwitches} + 1` : examStudents.tabSwitches,
         })
-        .where(and(eq(examStudents.id, requestId), isNull(examStudents.completedAt)));
+        .where(and(eq(examStudents.id, requestId), isNull(examStudents.completedAt)))
+        .returning({ tabSwitches: examStudents.tabSwitches });
+
+            // ✅ Teacher stays in control: violations are counted + escalated as a flag
+      const violations = updated?.tabSwitches ?? 0;
+      if (violations >= 3) {
+        await insertProctorEvent(requestId, "violation_threshold", "flag", {
+          violations,
+          reason: "student exceeded 3 lock violations — teacher review required",
+        });
+      }
     }
     return NextResponse.json({ success: true });
   } catch (error) {

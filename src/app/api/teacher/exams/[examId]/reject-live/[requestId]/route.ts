@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireTeacherSession } from "@/lib/session";
 import { db } from "@/db";
-import { exams, examStudents, studentExamAttempts } from "@/db/schema";
+import { exams, examStudents } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { finalizeAttempt } from "@/lib/student-finalize";
 
 export async function POST(
   req: NextRequest,
@@ -15,7 +16,6 @@ export async function POST(
 
   try {
     const { examId, requestId } = await params;
-    const now = new Date();
 
     const [exam] = await db
       .select()
@@ -33,36 +33,20 @@ export async function POST(
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
-    // ✅ Reject + force submit + wipe the old violation message
+    // ✅ REJECT + FORCE SUBMIT using the same finalize logic as normal submit
+    //    This guarantees studentAnswers rows exist so grading shows questions + answers.
     await db
       .update(examStudents)
       .set({
         isRejectedLive: true,
         isLocked: false,
-        completedAt: now,
         violationMessage: null,
       })
       .where(eq(examStudents.id, requestId));
 
-    const [attempt] = await db
-      .select()
-      .from(studentExamAttempts)
-      .where(eq(studentExamAttempts.examStudentId, requestId));
-
-    if (attempt) {
-      await db
-        .update(studentExamAttempts)
-        .set({ submittedAt: now, isForcedSubmit: true })
-        .where(eq(studentExamAttempts.id, attempt.id));
-    } else {
-      await db.insert(studentExamAttempts).values({
-        examStudentId: requestId,
-        submittedAt: now,
-        isForcedSubmit: true,
-        status: "needs_review",
-        gradingStatus: "in_progress",
-      });
-    }
+    // Use autosaved progress as the answers (whatever the student typed before force-submit)
+    const savedProgress = (student.progress && typeof student.progress === "object" ? student.progress : {}) as Record<string, string>;
+    await finalizeAttempt(requestId, savedProgress, "force");
 
     return NextResponse.json({ success: true });
   } catch (error) {

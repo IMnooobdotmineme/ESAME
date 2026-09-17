@@ -1,10 +1,12 @@
 // ============================================================
-// ESAME AI Adapter — Ollama only (local or self-hosted)
+// ESAME AI Adapter — Smart routing with task classification
 // ============================================================
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.8:27b-mlx";
 const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || OLLAMA_MODEL;
+const OLLAMA_FAST_MODEL = process.env.OLLAMA_FAST_MODEL || "qwen3:8b";
+const OLLAMA_FALLBACK_MODEL = process.env.OLLAMA_FALLBACK_MODEL || "qwen3:8b";
 
 // ---------- types ----------
 export interface AIProvider {
@@ -36,14 +38,62 @@ export function getAvailableProviders(): AIProvider[] {
   return [{ name: "ollama", model: OLLAMA_MODEL, maxTokens: 8192 }];
 }
 
-// ---------- main entry ----------
-const OLLAMA_FALLBACK_MODEL = process.env.OLLAMA_FALLBACK_MODEL || "qwen3:8b";
+// ---------- TASK CLASSIFICATION ----------
+type TaskType = "simple" | "complex" | "code" | "creative" | "translate";
 
+interface TaskConfig {
+  model: string;
+  temperature: number;
+  think: boolean;
+  reason: string;
+}
+
+function classifyTask(messages: ChatMessage[]): TaskConfig {
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  if (!lastUser) return { model: OLLAMA_FAST_MODEL, temperature: 0.7, think: false, reason: "no user message" };
+  
+  const text = (lastUser.content || "").toLowerCase();
+  
+  // 1. Code tasks → 27B, low temp, think mode
+  if (/\b(code|program|debug|refactor|function|algorithm|sql|regex|python|java|javascript|typescript|html|css|api|compile|syntax|script)\b/.test(text)) {
+    return { model: OLLAMA_MODEL, temperature: 0.2, think: true, reason: "code" };
+  }
+  
+  // 2. Complex tasks → 27B, low temp, think mode
+  if (/\b(exam|quiz|test|grade|grading|rubric|analyz|analyse|analysis|summar|summary|essay|lesson|curriculum|plan|design|architect|math|calculat|solve|prove|proof|compare|contrast|research|thesis|report|step.by.step|complex|why|how does|explain in detail)\b/.test(text)) {
+    return { model: OLLAMA_MODEL, temperature: 0.3, think: true, reason: "complex" };
+  }
+  
+  // 3. Creative writing → 27B, high temp, no think
+  if (/\b(story|poem|creative|imagine|fiction|write a|compose|invent|brainstorm)\b/.test(text)) {
+    return { model: OLLAMA_MODEL, temperature: 0.9, think: false, reason: "creative" };
+  }
+  
+  // 4. Translation → 8B, low temp, no think (fast + precise)
+  if (/\b(translate|translation|in khmer|in english|to khmer|to english)\b/.test(text)) {
+    return { model: OLLAMA_FAST_MODEL, temperature: 0.3, think: false, reason: "translate" };
+  }
+  
+  // 5. Simple chat/questions → 8B, moderate temp, no think (fast lane)
+  return { model: OLLAMA_FAST_MODEL, temperature: 0.7, think: false, reason: "simple" };
+}
+
+// ---------- main entry ----------
 export async function streamChat(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
-  options: { provider?: string; temperature?: number; think?: boolean } = {}
+  options: { provider?: string; temperature?: number; think?: boolean; forceModel?: string } = {}
 ) {
+  // Classify the task to determine optimal model + settings
+  const task = classifyTask(messages);
+  
+  // Use explicit options if provided (for manual Deep Think toggle), otherwise use classifier
+  const model = options.forceModel || task.model;
+  const temperature = options.temperature ?? task.temperature;
+  const think = options.think ?? task.think;
+  
+  console.log(`[AI-ROUTER] Task: ${task.reason} → ${model} (temp: ${temperature}, think: ${think})`);
+  
   // Track how many tokens we've sent to the UI
   let sentTokens = 0;
   const wrapped: StreamCallbacks = {
@@ -52,16 +102,17 @@ export async function streamChat(
   };
 
   try {
-    // Try the primary 27B model first
-    await streamOllama(messages, { name: "ollama", model: OLLAMA_MODEL, maxTokens: 8192 }, wrapped, options.temperature, options.think);
+    // Try the selected model first
+    await streamOllama(messages, { name: "ollama", model, maxTokens: 8192 }, wrapped, temperature, think);
   } catch (error: any) {
     const errMsg = String(error?.message || "");
     const isOOM = /500|memory|oom|out of memory|killed|fetch failed/i.test(errMsg);
     
-    // ONLY retry with the 8B model if we haven't sent ANY tokens to the UI yet
-    if (isOOM && sentTokens === 0 && OLLAMA_MODEL !== OLLAMA_FALLBACK_MODEL) {
+    // ONLY retry with the fallback model if we haven't sent ANY tokens to the UI yet
+    if (isOOM && sentTokens === 0 && model !== OLLAMA_FALLBACK_MODEL) {
+      console.log(`[AI-ROUTER] OOM detected, falling back to ${OLLAMA_FALLBACK_MODEL}`);
       try {
-        await streamOllama(messages, { name: "ollama", model: OLLAMA_FALLBACK_MODEL, maxTokens: 8192 }, callbacks, options.temperature, options.think);
+        await streamOllama(messages, { name: "ollama", model: OLLAMA_FALLBACK_MODEL, maxTokens: 8192 }, callbacks, temperature, think);
         return;
       } catch (retryError: any) {
         callbacks.onError(retryError instanceof Error ? retryError : new Error(String(retryError)));
@@ -72,7 +123,7 @@ export async function streamChat(
     // If the model crashed MID-STREAM (sentTokens > 0), gracefully finish 
     // the message instead of throwing an error and appending a second response
     if (sentTokens > 0) {
-      callbacks.onEnd({ provider: "ollama", model: OLLAMA_MODEL, tokens: sentTokens });
+      callbacks.onEnd({ provider: "ollama", model, tokens: sentTokens });
       return;
     }
 
@@ -81,7 +132,7 @@ export async function streamChat(
   }
 }
 
-// ---------- ✅ LOCAL OLLAMA (unlimited, private, vision-native) ----------
+// ---------- LOCAL OLLAMA (unlimited, private, vision-native) ----------
 async function streamOllama(
   messages: ChatMessage[],
   provider: AIProvider,
@@ -92,7 +143,7 @@ async function streamOllama(
   const hasImages = messages.some((m) =>
     (m.attachments ?? []).some((a) => a.dataUrl?.startsWith("data:image/"))
   );
-    const model = hasImages && provider.model === OLLAMA_MODEL ? OLLAMA_VISION_MODEL : provider.model;
+  const model = hasImages && provider.model === OLLAMA_MODEL ? OLLAMA_VISION_MODEL : provider.model;
 
   const ollamaMessages = messages.map((m) => {
     const imgs = (m.attachments ?? [])
@@ -147,7 +198,7 @@ async function streamOllama(
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-                const json = JSON.parse(line);
+        const json = JSON.parse(line);
         const th = json?.message?.thinking;
         if (th) callbacks.onThinking?.(th);
         const text = json?.message?.content;
