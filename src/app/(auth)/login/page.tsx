@@ -3,6 +3,24 @@
 import React, { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+const REMEMBER_KEY = "esame-remember-me";
+
+// ✅ Light obfuscation (not encryption) — keeps credentials out of plain sight
+function encodeSecret(s: string): string {
+  try {
+    return btoa(encodeURIComponent(s));
+  } catch {
+    return "";
+  }
+}
+function decodeSecret(s: string): string {
+  try {
+    return decodeURIComponent(atob(s));
+  } catch {
+    return "";
+  }
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -15,13 +33,59 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Added submitting state
-  const [error, setError] = useState(""); // Added error state
+   const [error, setError] = useState(""); // Added error state
+  const [checkingAuth, setCheckingAuth] = useState(true); // Are we already logged in?
 
-  // Surface errors coming back from the Google OAuth redirect flow
+   // Surface errors coming back from the Google OAuth redirect flow
   useEffect(() => {
     const oauthError = searchParams.get("error");
     if (oauthError) setError(oauthError);
   }, [searchParams]);
+
+  // ✅ Check if a valid session already exists (new tab, reopen after closing, etc.)
+  //    If yes, skip the form entirely and go straight to the dashboard.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.user) {
+          const target =
+            data.user.userType === "org"
+              ? "/dashboard"
+              : data.user.userType === "admin"
+              ? "/admin-dashboard"
+              : "/teacher-dashboard";
+          router.replace(target);
+          return; // don't unblock the form
+        }
+      } catch {
+        // ignore — treat as not logged in
+      }
+      if (!cancelled) setCheckingAuth(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  // ✅ Prefill email + password when "Remember me" was saved on a previous login
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(REMEMBER_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { email?: string; p?: string };
+      if (saved?.email) {
+        setFormData({ email: saved.email, password: decodeSecret(saved.p || "") });
+        setRememberMe(true);
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -40,12 +104,25 @@ function LoginForm() {
       });
       const data = await res.json();
 
-      if (!res.ok) {
+            if (!res.ok) {
         setError(data.error || "Invalid email or password.");
         setIsSubmitting(false);
         return;
       }
 
+      // ✅ Remember me: save credentials for next visit, or clear them if unchecked
+      try {
+        if (rememberMe) {
+          window.localStorage.setItem(
+            REMEMBER_KEY,
+            JSON.stringify({ email: formData.email.trim(), p: encodeSecret(formData.password) })
+          );
+        } else {
+          window.localStorage.removeItem(REMEMBER_KEY);
+        }
+      } catch {
+        // ignore storage failures
+      }
       if (data.redirect) {
         // Admin: session was already created server-side, no code to verify.
         router.push(data.redirect);
@@ -65,7 +142,17 @@ function LoginForm() {
     window.location.href = "/api/auth/google/redirect";
   };
 
-  const isValid = formData.email.trim() !== "" && formData.password.trim() !== "";
+    const isValid = formData.email.trim() !== "" && formData.password.trim() !== "";
+
+  // ✅ Don't paint the form until we know the user is NOT already logged in.
+  //    This prevents the "form flash then redirect" when someone revisits /login.
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EDF1FA] via-[#F5F7FC] to-[#E4EAF7]">
+        <div className="w-8 h-8 rounded-full border-2 border-[#395886] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EDF1FA] via-[#F5F7FC] to-[#E4EAF7] py-12 px-4 sm:px-6 lg:px-8">
