@@ -38,3 +38,4 @@ next-env.d.ts
 trace.txt
 trace-filtered.txt
 .env
+.env

@@ -13,7 +13,7 @@ import { requireTeacherSession } from "@/lib/session";
 import { streamChat } from "@/lib/ai/adapter";
 import { checkQuota, incrementQuota } from "@/lib/ai/quota";
 
-export const maxDuration = 900; // 15 minutes for large AI grading tasks
+export const maxDuration = 300; // 15 minutes for large AI grading tasks
 
 // ========== AI GRADING ENGINE ==========
 async function aiGradeQuestion(params: {
