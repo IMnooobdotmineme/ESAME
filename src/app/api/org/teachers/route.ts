@@ -214,6 +214,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "At least one department and subject is required." }, { status: 400 });
     }
 
+        // 1. Ensure the email isn't already an Organization account
     const [existingOrg] = await db
       .select({ id: organizations.id, name: organizations.name })
       .from(organizations)
@@ -226,6 +227,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 2. Check if the email is already a Teacher
     const [existingTeacher] = await db
       .select()
       .from(teachers)
@@ -237,64 +239,71 @@ export async function POST(req: Request) {
       .where(eq(organizations.id, session.userId));
 
     if (existingTeacher) {
-      if (existingTeacher.orgId !== session.userId) {
-        return NextResponse.json(
-          {
-            error:
-              "This email is already associated with another organization. Each teacher account can belong to only one organization.",
-          },
-          { status: 409 }
-        );
-      }
+      // RULE: An email can belong to ONLY ONE organization at a time.
+      // If the account is NOT deleted, strictly enforce the one-org rule.
       if (existingTeacher.status !== "deleted") {
+        if (existingTeacher.orgId !== session.userId) {
+          return NextResponse.json(
+            { error: "This email is already associated with another organization. Each teacher account can belong to only one organization." },
+            { status: 409 }
+          );
+        }
         return NextResponse.json(
           { error: "A teacher with this email already exists in your organization." },
           { status: 409 }
         );
       }
 
-      // If previously deleted within this organization, allow re-inviting
-      const inviteToken = crypto.randomBytes(32).toString("hex");
-      const [updated] = await db
-        .update(teachers)
-        .set({
-          name: name || existingTeacher.name,
-          status: "invited",
-          suspendedBy: null,
-          deletedBy: null,
-          deletedAt: null,
-          assignments: normalizedAssignments,
-          inviteToken,
-          inviteTokenExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
-          updatedAt: new Date(),
-        })
-        .where(eq(teachers.id, existingTeacher.id))
-        .returning();
+      // RULE: "Until the account has been deleted" -> If it IS deleted, the restriction is lifted.
+      // If it was deleted from ANOTHER organization, we must hard-delete the old orphaned record 
+      // to prevent data leakage (AI chats, etc.) and free up the email for this new org.
+      if (existingTeacher.orgId !== session.userId) {
+        await db.delete(teachers).where(eq(teachers.id, existingTeacher.id));
+        // Fall through to the "Create new teacher" logic below
+      } else {
+        // If previously deleted within THIS SAME organization, allow re-inviting by updating the existing record
+        const inviteToken = crypto.randomBytes(32).toString("hex");
+        const [updated] = await db
+          .update(teachers)
+          .set({
+            name: name || existingTeacher.name,
+            status: "invited",
+            suspendedBy: null,
+            deletedBy: null,
+            deletedAt: null,
+            assignments: normalizedAssignments,
+            inviteToken,
+            inviteTokenExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
+            updatedAt: new Date(),
+          })
+          .where(eq(teachers.id, existingTeacher.id))
+          .returning();
 
-      const link = `${process.env.APP_URL || "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
-      try {
-        await sendInviteEmail(email, link, org?.name || "your organization", normalizedAssignments);
-      } catch (mailError) {
-        console.error("send invite email error", mailError);
-        return NextResponse.json(
-          { error: "Invitation email could not be sent. Please check email settings and try again." },
-          { status: 502 }
-        );
+        const link = `${process.env.APP_URL || "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
+        try {
+          await sendInviteEmail(email, link, org?.name || "your organization", normalizedAssignments);
+        } catch (mailError) {
+          console.error("send invite email error", mailError);
+          return NextResponse.json(
+            { error: "Invitation email could not be sent. Please check email settings and try again." },
+            { status: 502 }
+          );
+        }
+
+        await createOrgNotification({
+          orgId: session.userId,
+          title: "Teacher Invitation Sent",
+          message: `${name || email} was invited to join ${org?.name || "your organization"} as a teacher.`,
+          type: "teacher_invite_sent",
+          relatedEntityId: updated.id,
+          relatedEntityType: "teacher",
+        });
+
+        return NextResponse.json({
+          ok: true,
+          teacher: normalizeTeacher(updated),
+        });
       }
-
-      await createOrgNotification({
-        orgId: session.userId,
-        title: "Teacher Invitation Sent",
-        message: `${name || email} was invited to join ${org?.name || "your organization"} as a teacher.`,
-        type: "teacher_invite_sent",
-        relatedEntityId: updated.id,
-        relatedEntityType: "teacher",
-      });
-
-      return NextResponse.json({
-        ok: true,
-        teacher: normalizeTeacher(updated),
-      });
     }
 
     const inviteToken = crypto.randomBytes(32).toString("hex");

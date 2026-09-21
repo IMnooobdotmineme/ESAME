@@ -34,14 +34,11 @@ export async function POST(req: Request) {
 
     const emailLower = String(workEmail).toLowerCase().trim();
 
+        // RULE: One email account can create only one organization
     const [existingOrg] = await db
       .select()
       .from(organizations)
       .where(eq(organizations.email, emailLower));
-    const [existingTeacher] = await db
-      .select()
-      .from(teachers)
-      .where(eq(teachers.email, emailLower));
 
     if (existingOrg) {
       return NextResponse.json(
@@ -50,9 +47,15 @@ export async function POST(req: Request) {
       );
     }
 
-    if (existingTeacher) {
+    // RULE: An email cannot create an organization if it is currently an active teacher
+    const [existingTeacher] = await db
+      .select()
+      .from(teachers)
+      .where(eq(teachers.email, emailLower));
+
+    if (existingTeacher && existingTeacher.status !== "deleted") {
       return NextResponse.json(
-        { error: "This email address is already registered as a teacher account." },
+        { error: "This email address is already registered as an active teacher account." },
         { status: 409 }
       );
     }

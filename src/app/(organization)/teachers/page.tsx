@@ -145,10 +145,11 @@ export default function TeacherManagementPage() {
   const [removeTarget, setRemoveTarget] = useState<Teacher | null>(null);
   const [removeStep, setRemoveStep] = useState<1 | 2>(1);
 
-  const filtered = teachers.filter((t) => {
+    const filtered = teachers.filter((t) => {
+    const q = (search ?? "").toLowerCase();
     const matchesSearch =
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.email.toLowerCase().includes(search.toLowerCase());
+      (t.name ?? "").toLowerCase().includes(q) ||
+      (t.email ?? "").toLowerCase().includes(q);
 
     let matchesFilter = false;
     if (filter === "All") {

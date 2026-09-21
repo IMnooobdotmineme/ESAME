@@ -118,12 +118,13 @@ export function InviteTeacherModal({ open, onClose, onInvite }: InviteTeacherMod
     onClose();
   }
 
-  function handleSubmit(e: React.FormEvent) {
+    function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const validAssignments = assignments.filter((a) => a.departmentId && a.subjectId);
     if (!name || !email || validAssignments.length === 0) return;
     onInvite({ name, email, assignments: validAssignments });
     resetForm();
+    onClose(); 
   }
 
   return (

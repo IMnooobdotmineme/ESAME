@@ -141,19 +141,56 @@ export default function GradeStudentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request?.id]);
 
-  // ✅ Walk exam.parts to map question TEXT → { def, sectionTitle }
-  const questionMap = useMemo<Record<string, QuestionDefWithSection>>(() => {
+    // ✅ Walk exam.parts to map question TEXT → { def, sectionTitle } AND keep ordered keys
+  const { questionMap, orderedKeys } = useMemo(() => {
     const map: Record<string, QuestionDefWithSection> = {};
+    const keys: string[] = [];
     const parts: any[] = (currentExam as any)?.parts ?? [];
     parts.forEach((sec) => {
       const title = sec?.title ?? "Untitled Section";
       (sec?.questions ?? []).forEach((q: any) => {
         const key = String(q?.text ?? "").trim();
-        if (key) map[key] = { def: q, sectionTitle: title };
+        if (key) {
+          map[key] = { def: q, sectionTitle: title };
+          keys.push(key);
+        }
       });
     });
-    return map;
+    return { questionMap: map, orderedKeys: keys };
   }, [currentExam]);
+
+  // ✅ Sort student answers to match the exact order of the exam paper
+  const sortedAnswers = useMemo(() => {
+    if (!request?.answers) return [];
+    
+    const answerMap = new Map<string, GradedAnswer>();
+    request.answers.forEach((a) => {
+      const key = String(a.questionText ?? "").trim();
+      answerMap.set(key, a);
+    });
+
+    const sorted: GradedAnswer[] = [];
+    const seen = new Set<string>();
+
+    // 1. Add answers in the exact order they appear in the exam paper
+    orderedKeys.forEach((key) => {
+      const ans = answerMap.get(key);
+      if (ans) {
+        sorted.push(ans);
+        seen.add(key);
+      }
+    });
+
+    // 2. Fallback: append any remaining answers that didn't match a key
+    request.answers.forEach((a) => {
+      const key = String(a.questionText ?? "").trim();
+      if (!seen.has(key)) {
+        sorted.push(a);
+      }
+    });
+
+    return sorted;
+  }, [request?.answers, orderedKeys]);
 
   // ✅ Stable callback — passed to every GradingCard so memo works correctly
   const handleScoreChange = (id: string, value: number | "") => {
@@ -280,9 +317,9 @@ export default function GradeStudentPage() {
           </div>
         </Card>
 
-        {/* Questions — memoized, stable, no flicker */}
+                {/* Questions — memoized, stable, sorted to match exam paper order */}
         <div className="space-y-6">
-          {(request.answers || []).map((q: GradedAnswer, i: number) => {
+          {sortedAnswers.map((q: GradedAnswer, i: number) => {
             const mapEntry = questionMap[String(q.questionText ?? "").trim()];
             return (
               <GradingCard

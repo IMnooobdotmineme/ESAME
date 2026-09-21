@@ -1520,11 +1520,24 @@ useEffect(() => {
     if (activeChatId === chatId) { setActiveChatId(null); setMessages([]); }
   }
 
+    const MAX_PINNED_CHATS = 3; // 👈 Change to 5 here if you prefer 5
+
   async function pinChat(chatId: string, e: React.MouseEvent) {
     e.stopPropagation();
     const target = chats.find((c) => c.id === chatId);
     if (!target) return;
+    
     const isPinned = !target.isPinned;
+
+    // 🛑 Enforce pin limit
+    if (isPinned) {
+      const currentPinnedCount = chats.filter((c) => c.isPinned).length;
+      if (currentPinnedCount >= MAX_PINNED_CHATS) {
+        toast(`You can only pin up to ${MAX_PINNED_CHATS} chats. Unpin one first.`, "error");
+        return;
+      }
+    }
+
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, isPinned } : c)));
     await fetch("/api/teacher/ai/chats", {
       method: "PATCH",
@@ -1797,12 +1810,32 @@ useEffect(() => {
                   <button onClick={() => setAllChatsOpen((v) => !v)} className="flex w-full items-center justify-between px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600">
                     All chats <ChevronDown size={13} className={`transition-transform ${allChatsOpen ? "" : "-rotate-90"}`} />
                   </button>
-                  {allChatsOpen && groupChats(standaloneChats).map((g) => (
-                    <div key={g.label}>
-                      <p className="px-3 pb-1 pt-2 text-[11px] text-slate-400">{g.label}</p>
-                      <div className="space-y-0.5">{g.items.map((c) => <ChatRow key={c.id} chat={c} />)}</div>
-                    </div>
-                  ))}
+                                    {allChatsOpen && (() => {
+                    const pinnedChats = standaloneChats
+                      .filter((c) => c.isPinned)
+                      .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
+                    const unpinnedChats = standaloneChats.filter((c) => !c.isPinned);
+                    return (
+                      <>
+                        {pinnedChats.length > 0 && (
+                          <div>
+                            <p className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-sky-600">
+                              <Pin size={11} /> Pinned
+                            </p>
+                            <div className="space-y-0.5">
+                              {pinnedChats.map((c) => <ChatRow key={c.id} chat={c} />)}
+                            </div>
+                          </div>
+                        )}
+                        {groupChats(unpinnedChats).map((g) => (
+                          <div key={g.label}>
+                            <p className="px-3 pb-1 pt-2 text-[11px] text-slate-400">{g.label}</p>
+                            <div className="space-y-0.5">{g.items.map((c) => <ChatRow key={c.id} chat={c} />)}</div>
+                          </div>
+                        ))}
+                      </>
+                    );
+                  })()}
                   {allChatsOpen && standaloneChats.length === 0 && <p className="px-3 py-1 text-xs text-slate-400">No chats yet</p>}
                 </>
               )}
