@@ -75,7 +75,7 @@ export default function StudentJoinPage() {
           <EsameLogo height={32} />
           <p className="mt-2 text-sm text-slate-500">Welcome To Esame</p>
         </div>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 gap-4 mb-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-navy-900 mb-1.5">Student Name</label>
             <input

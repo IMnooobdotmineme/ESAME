@@ -1405,7 +1405,7 @@ function ExamBuilderContent() {
                     {/* MATCHING */}
                     {currentFormat === "matching" && (
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <div className="space-y-2">
                             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                               Left Items (numbered)

@@ -9,7 +9,7 @@ interface AdminTopbarProps {
 
 export function AdminTopbar({ title, description }: AdminTopbarProps) {
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/80 backdrop-blur px-6 h-16">
+    <header className="sticky top-0 z-10 flex min-w-0 items-center justify-between gap-3 border-b border-slate-200 bg-white/80 pl-16 pr-3 backdrop-blur sm:gap-4 sm:pl-16 sm:pr-6 lg:px-6 h-16">
       <div>
         <h1 className="text-lg font-semibold text-navy-900">{title}</h1>
         {description && (
@@ -34,4 +34,3 @@ export function AdminTopbar({ title, description }: AdminTopbarProps) {
     </header>
   );
 }
-

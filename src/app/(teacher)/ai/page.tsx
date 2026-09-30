@@ -526,7 +526,7 @@ function QuestionView({ q, index }: { q: any; index: number }) {
       )}
 
       {q.type === "matching" && Array.isArray(q.matchLeft) && (
-        <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+        <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <div className="space-y-1">{q.matchLeft.map((l: string, i: number) => <div key={i} className="rounded-lg bg-slate-50 px-3 py-1.5 text-slate-700">{i + 1}. {l}</div>)}</div>
           <div className="space-y-1">{q.matchRight.map((r: string, i: number) => <div key={i} className="rounded-lg bg-slate-50 px-3 py-1.5 text-slate-700">{String.fromCharCode(65 + i)}. {r}</div>)}</div>
           <div className="col-span-2 flex flex-wrap gap-1.5">
@@ -672,9 +672,9 @@ function ExamDraftCard({ draft }: { draft: any }) {
             <Eye size={13} /> View
           </Button>
         </div>
-        <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+        <div className="flex flex-col items-stretch gap-3 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[11px] text-slate-400">Want changes? Just ask: &quot;make it harder&quot;, &quot;only MCQ&quot;, &quot;add 5 questions&quot;…</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 sm:shrink-0">
                         <Button variant="outline" size="sm" onClick={downloadExam} disabled={downloading}>
               <Download size={13} /> {downloading ? "Preparing…" : "Download"}
             </Button>
@@ -1581,6 +1581,12 @@ useEffect(() => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  function closeSidebarOnMobile() {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setSidebarOpen(false);
+    }
+  }
+
   function ChatRow({ chat }: { chat: Chat }) {
     if (renamingId === chat.id) {
       return (
@@ -1601,14 +1607,14 @@ useEffect(() => {
     }
         return (
       <div
-        onClick={() => setActiveChatId(chat.id)}
+        onClick={() => { setActiveChatId(chat.id); closeSidebarOnMobile(); }}
                 className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
           activeChatId === chat.id ? "bg-slate-200/70 font-medium text-navy-900" : "text-slate-600 hover:bg-slate-100"
         }`}
       >
         <MessageSquare size={14} className="shrink-0 text-slate-400" />
         <span className="flex-1 truncate text-sm">{chat.title}</span>
-        <span className={`${chat.isPinned ? "flex" : "hidden group-hover:flex"} items-center`}>
+        <span className={`${chat.isPinned ? "flex" : "hidden group-hover:flex max-md:flex"} items-center`}>
           <span className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setMenuChatId(menuChatId === chat.id ? null : chat.id); }}
@@ -1673,10 +1679,17 @@ useEffect(() => {
   return (
     <>
       <TeacherTopbar title="AI Assistant" description="Chat with AI to get help with your exams" />
-      <div className="flex h-[calc(100vh-80px)]">
+      <div className="flex h-[calc(100dvh-4rem)] min-h-0 w-full min-w-0 overflow-hidden">
         {/* ===== SIDEBAR ===== */}
         {sidebarOpen && (
-                    <div className="sidebar-in flex w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60 md:relative md:translate-x-0 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-2xl">
+          <>
+            <button
+              type="button"
+              aria-label="Close AI navigation"
+              onClick={() => setSidebarOpen(false)}
+              className="fixed inset-x-0 bottom-0 top-16 z-30 bg-transparent md:hidden"
+            />
+                    <div className="sidebar-in z-40 flex w-72 min-w-0 shrink-0 flex-col border-r border-slate-200 bg-slate-50 md:relative md:translate-x-0 max-md:fixed max-md:bottom-0 max-md:left-0 max-md:top-16 max-md:shadow-2xl">
                                    <div className="flex h-14 items-center justify-between border-b border-slate-100 pl-2 pr-2">
               <div className="flex items-center gap-2">
                 <button
@@ -1719,6 +1732,7 @@ useEffect(() => {
                         onMouseDown={(e) => {
                           e.preventDefault();
                           setActiveChatId(c.id);
+                          closeSidebarOnMobile();
                           setSearch("");
                           setSearchOpen(false);
                         }}
@@ -1737,7 +1751,7 @@ useEffect(() => {
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <button onClick={() => { setActiveChatId(null); inputRef.current?.focus(); }} className="flex flex-1 items-center gap-3 rounded-xl bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800">
+                  <button onClick={() => { setActiveChatId(null); closeSidebarOnMobile(); inputRef.current?.focus(); }} className="flex flex-1 items-center gap-3 rounded-xl bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800">
                     <SquarePen size={15} /> New Chat
                   </button>
                   <button onClick={() => setSearchOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-navy-900" title="Search chats">
@@ -1775,7 +1789,7 @@ useEffect(() => {
                                 <span className={`flex-1 truncate text-left ${open ? "font-medium text-navy-900" : "text-slate-600"}`}>{p.name}</span>
                                 <ChevronDown size={13} className={`text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
                               </button>
-                              <span className="relative mr-1 hidden shrink-0 group-hover:block">
+                              <span className="relative mr-1 hidden shrink-0 group-hover:block max-md:block">
                                 <button onClick={() => setMenuProjectId(menuProjectId === p.id ? null : p.id)} className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-navy-900" title="Project options">
                                   <MoreHorizontal size={13} />
                                 </button>
@@ -1841,10 +1855,11 @@ useEffect(() => {
               )}
             </div>
           </div>
+          </>
         )}
 
         {/* ===== CHAT AREA ===== */}
-        <div className="relative flex flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
                         {!sidebarOpen && (
               <button
@@ -1890,10 +1905,10 @@ useEffect(() => {
               onScroll={onScrollBox}
               onWheel={onUserWheel}
               onTouchStart={onUserTouchStart}
-              className="flex-1 space-y-6 overflow-y-auto px-6 py-6 md:px-12"
+              className="min-w-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto px-6 py-6 md:px-12"
             >
             {chatLoading && messages.length === 0 && (
-  <div className="mx-auto w-full max-w-3xl space-y-6 px-2 py-4">
+  <div className="mx-auto min-w-0 w-full max-w-3xl space-y-6 px-2 py-4">
     <div className="flex justify-end"><div className="h-16 w-2/3 rounded-2xl bg-slate-100 sk-pulse" /></div>
     <div className="flex justify-start"><div className="h-24 w-5/6 rounded-2xl bg-slate-100 sk-pulse" /></div>
     <div className="flex justify-end"><div className="h-12 w-1/2 rounded-2xl bg-slate-100 sk-pulse" /></div>
@@ -2016,7 +2031,7 @@ useEffect(() => {
               if (msg.role === "assistant" && !msg.content && isStreaming) return null;
               const ex = msg.role === "assistant" ? extractExamDraft(msg.content) : null;
               return (
-                                <div key={msg.id} id={`msg-${msg.id}`} className="msg-in group mx-auto w-full max-w-3xl">
+                                <div key={msg.id} id={`msg-${msg.id}`} className="msg-in group mx-auto min-w-0 w-full max-w-3xl">
                                     {msg.role === "user" ? (
                     <div className="flex justify-end">
                                            <UserBubble msg={msg.attachments?.length ? msg : attStashRef.current[msg.content] ? { ...msg, attachments: attStashRef.current[msg.content] } : msg} />
@@ -2033,14 +2048,14 @@ useEffect(() => {
             })}
 
           {isStreaming && streamFor === (activeChatId ?? "new") && streamingText && (
-  <div className="msg-in mx-auto w-full max-w-3xl">
+  <div className="msg-in mx-auto min-w-0 w-full max-w-3xl">
     <div className="md-body w-full">
       <ReactMarkdown components={MD_COMPONENTS} remarkPlugins={[remarkGfm, remarkBreaks]}>{renderMarkdownText(extractExamDraft(streamingText).clean)}</ReactMarkdown>
     </div>
   </div>
 )}
 {isStreaming && streamFor === (activeChatId ?? "new") && !streamingText && (
-  <div className="mx-auto w-full max-w-3xl">
+  <div className="mx-auto min-w-0 w-full max-w-3xl">
     <div className="flex items-center gap-2 text-sm text-slate-500">
       <Loader2 size={14} className="animate-spin" /> Thinking...
     </div>
@@ -2132,7 +2147,7 @@ useEffect(() => {
                        {/* ===== INPUT ===== */}
           {(messages.length > 0 || isStreaming) && (
           <div className="p-4">
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto min-w-0 w-full max-w-3xl">
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
                   {attachments.map((a) => (

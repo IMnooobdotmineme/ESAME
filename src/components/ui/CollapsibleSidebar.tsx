@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, LogOut } from "lucide-react";
+import { Menu, LogOut, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EsameLogo } from "@/components/organization/EsameLogo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -35,6 +35,7 @@ export function CollapsibleSidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Hydrate from localStorage without SSR flash
   useEffect(() => {
@@ -60,9 +61,85 @@ export function CollapsibleSidebar({
   const isItemActive = (href: string) =>
     pathname === href || (href !== "/" && pathname?.startsWith(href + "/"));
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   return (
     <>
-      <div className="relative hidden lg:block shrink-0">
+      {/* Mobile navigation keeps the same links and logout behavior as desktop. */}
+      <div className="lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open navigation"
+          aria-expanded={mobileOpen}
+          className="fixed left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-xl bg-navy-900 text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
+        >
+          <Menu size={19} />
+        </button>
+
+        {mobileOpen && (
+          <div className="fixed inset-0 z-[60] lg:hidden">
+            <button
+              type="button"
+              aria-label="Close navigation"
+              onClick={() => setMobileOpen(false)}
+              className="absolute inset-0 bg-navy-900/45"
+            />
+            <aside className="sidebar-in relative flex h-full w-[min(86vw,20rem)] flex-col bg-navy-900 text-white shadow-2xl">
+              <div className="flex h-16 shrink-0 items-center justify-between bg-white px-5">
+                <EsameLogo height={26} />
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(false)}
+                  aria-label="Close navigation"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-navy-900 transition-colors hover:bg-slate-100"
+                >
+                  <X size={19} />
+                </button>
+              </div>
+              <div className="shrink-0 px-5 pb-3 pt-5">
+                <p className="text-xs uppercase tracking-wide text-white/40">{roleLabel}</p>
+                <p className="truncate text-sm font-medium">{name}</p>
+              </div>
+              <nav className="flex-1 overflow-y-auto px-3 py-3">
+                <div className="space-y-1">
+                  {items.map(({ label, href, icon: Icon }) => {
+                    const active = isItemActive(href);
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => setMobileOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200",
+                          active ? "bg-sky-400 text-navy-900" : "text-white/70 hover:bg-white/10 hover:text-white"
+                        )}
+                      >
+                        <Icon size={18} strokeWidth={2} className="shrink-0" />
+                        <span>{label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </nav>
+              <div className="shrink-0 border-t border-white/10 px-3 py-4">
+                <button
+                  type="button"
+                  onClick={() => { setMobileOpen(false); setLogoutOpen(true); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-white/70 transition-all duration-200 hover:bg-white/10 hover:text-white"
+                >
+                  <LogOut size={18} strokeWidth={2} />
+                  <span>Log out</span>
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+      </div>
+
+      <div className="relative hidden shrink-0 lg:block">
         <aside
           className={cn(
             "flex flex-col h-screen sticky top-0 bg-navy-900 text-white",

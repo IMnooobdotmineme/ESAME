@@ -152,7 +152,7 @@ export default function TeacherProfilePage() {
           </div>
 
           {teacher && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-100">
+            <div className="grid grid-cols-1 gap-4 mt-6 pt-5 border-t border-slate-100 sm:grid-cols-2 xl:grid-cols-4">
               <InfoTile icon={Building2} label="Department">
                 <MultiValueList values={departments} />
               </InfoTile>
@@ -170,7 +170,7 @@ export default function TeacherProfilePage() {
         </Card>
 
         {/* Quick stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatTile label="Total Exams" value={String(teacherExams.length)} />
           <StatTile label="Completed Exams" value={String(completedCount)} />
           <StatTile label="Students Assessed" value={totalStudentsTaught.toLocaleString()} />

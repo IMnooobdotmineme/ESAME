@@ -183,7 +183,7 @@ export default function TeacherNotificationsPage() {
                           {NOTIF_CATEGORY_MAP[n.type] || "General"}
                         </span>
                         <p className="text-sm text-navy-900 leading-relaxed">{n.message}</p>
-                        <dl className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-3 text-sm">
+                        <dl className="grid grid-cols-1 gap-4 border-t border-slate-100 pt-3 text-sm sm:grid-cols-2">
                           <div>
                             <dt className="text-xs text-slate-400">Triggered by</dt>
                             <dd className="text-navy-900 font-medium mt-0.5">System</dd>

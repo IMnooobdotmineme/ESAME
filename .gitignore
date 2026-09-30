@@ -39,3 +39,4 @@ trace.txt
 trace-filtered.txt
 .env
 .env
+.env*

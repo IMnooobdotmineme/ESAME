@@ -59,22 +59,22 @@ const NAV_LINKS = [
 const SOCIAL_LINKS = [
   {
     label: "X / Twitter",
-    href: "#",
+    href: "https://x.com/",
     path: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z",
   },
   {
     label: "LinkedIn",
-    href: "#",
+    href: "https://www.linkedin.com/",
     path: "M4.983 3.5a2.5 2.5 0 11-.005 5 2.5 2.5 0 01.005-5zM.5 8.75h4v14.75h-4zm7.5 0h3.83v2.02h.054c.534-1.01 1.84-2.076 3.79-2.076 4.054 0 4.8 2.667 4.8 6.13v8.676h-4v-7.69c0-1.835-.033-4.195-2.556-4.195-2.56 0-2.953 2-2.953 4.06v7.825h-4z",
   },
   {
     label: "Instagram",
-    href: "#",
+    href: "https://www.instagram.com/",
     path: "M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.332.014 7.052.072 2.695.272.273 2.69.073 7.052.014 8.332 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.332 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.668-.072-4.948-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z",
   },
   {
     label: "Facebook",
-    href: "#",
+    href: "https://www.facebook.com/",
     path: "M22 12.06C22 6.505 17.523 2 12 2S2 6.505 2 12.06c0 5.02 3.657 9.184 8.438 9.94v-7.03H7.898v-2.91h2.54V9.845c0-2.507 1.492-3.89 3.777-3.89 1.094 0 2.238.196 2.238.196v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562v1.877h2.773l-.443 2.91h-2.33V22c4.78-.756 8.437-4.92 8.437-9.94z",
   },
 ];
@@ -641,30 +641,30 @@ export default function Home() {
             <div className="col-span-1">
               <h3 className="font-bold mb-4 text-white text-[0.9rem]">Platform</h3>
               <ul className="space-y-3 text-[0.85rem] text-[#9ca3af]">
-                <li><a href="#services" className="hover:text-white transition-colors">For Organizations</a></li>
-                <li><a href="#services" className="hover:text-white transition-colors">For Teachers</a></li>
-                <li><a href="#home" className="hover:text-white transition-colors">For Students</a></li>
-                <li><a href="#team" className="hover:text-white transition-colors">Our Team</a></li>
+                <li><Link href="/#services" className="hover:text-white transition-colors">For Organizations</Link></li>
+                <li><Link href="/#services" className="hover:text-white transition-colors">For Teachers</Link></li>
+                <li><Link href="/#home" className="hover:text-white transition-colors">For Students</Link></li>
+                <li><Link href="/#team" className="hover:text-white transition-colors">Our Team</Link></li>
               </ul>
             </div>
 
             <div className="col-span-1">
               <h3 className="font-bold mb-4 text-white text-[0.9rem]">Features</h3>
               <ul className="space-y-3 text-[0.85rem] text-[#9ca3af]">
-                <li><a href="#services" className="hover:text-white transition-colors">Anti-Cheating Detection</a></li>
-                <li><a href="#services" className="hover:text-white transition-colors">AI Question Generation</a></li>
-                <li><a href="#services" className="hover:text-white transition-colors">Automated Grading</a></li>
-                <li><a href="#services" className="hover:text-white transition-colors">Analytics &amp; Reporting</a></li>
+                <li><Link href="/#services" className="hover:text-white transition-colors">Anti-Cheating Detection</Link></li>
+                <li><Link href="/#services" className="hover:text-white transition-colors">AI Question Generation</Link></li>
+                <li><Link href="/#services" className="hover:text-white transition-colors">Automated Grading</Link></li>
+                <li><Link href="/#services" className="hover:text-white transition-colors">Analytics &amp; Reporting</Link></li>
               </ul>
             </div>
 
             <div className="col-span-1">
               <h3 className="font-bold mb-4 text-white text-[0.9rem]">Resources</h3>
               <ul className="space-y-3 text-[0.85rem] text-[#9ca3af]">
-                <li><a href="#about" className="hover:text-white transition-colors">About Us</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">FAQs</a></li>
+                <li><Link href="/about" className="hover:text-white transition-colors">About Us</Link></li>
+                <li><Link href="/faqs" className="hover:text-white transition-colors">FAQs</Link></li>
                 <li><a href="mailto:ESAME@gmail.com" className="hover:text-white transition-colors">Contact Us</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Support</a></li>
+                <li><Link href="/support" className="hover:text-white transition-colors">Support</Link></li>
               </ul>
             </div>
           </div>
@@ -676,8 +676,8 @@ export default function Home() {
               © 2026 Esame. All rights reserved. Secure, intelligent online examinations.
             </p>
             <div className="flex items-center gap-5 order-1 md:order-2 text-[0.75rem] text-[#9ca3af]">
-              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
             </div>
           </div>
         </div>

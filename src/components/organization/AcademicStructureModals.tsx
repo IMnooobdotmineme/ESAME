@@ -38,7 +38,7 @@ export function AcademicYearModal({
           <Field label="Label">
             <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. 2026-2027" className={inputClass} required />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Start Date">
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} required />
             </Field>
@@ -97,7 +97,7 @@ export function SemesterModal({
               ))}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Start Date">
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} required />
             </Field>
@@ -192,7 +192,7 @@ export function SubjectModal({
           <Field label="Subject Name">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Data Structures" className={inputClass} required />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Code">
               <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. CS201" className={inputClass} required />
             </Field>

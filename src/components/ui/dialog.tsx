@@ -27,7 +27,7 @@ export function Dialog({ open, onClose, children, className }: DialogProps) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-navy-900/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-navy-900/40"
         onClick={onClose}
       />
       <div
@@ -70,7 +70,7 @@ export function DialogHeader({
 
 export function DialogFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100">
+    <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-4 border-t border-slate-100 sm:px-6">
       {children}
     </div>
   );

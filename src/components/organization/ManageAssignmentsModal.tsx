@@ -176,7 +176,7 @@ export function ManageAssignmentsModal({
                     <Trash2 size={13} />
                   </button>
                 )}
-                <div className="grid grid-cols-2 gap-3 pr-6">
+                <div className="grid grid-cols-1 gap-3 pr-6 sm:grid-cols-2">
                   <div>
                     <label className="text-xs font-medium text-slate-500 mb-1 block">
                       Department <span className="text-rose-500">*</span>

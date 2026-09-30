@@ -603,7 +603,7 @@ export default function StudentExamPage() {
           <h1 className="text-sm font-bold text-navy-900">
             Section {sectionIndex + 1} of {sections.length} — {section.title}
           </h1>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
               <p className="text-xs text-slate-400 mb-1">Answered</p>
               <p className="text-sm font-bold text-navy-900">{answeredInSection}/{sectionQuestions.length}</p>

@@ -220,7 +220,7 @@ export default function TeacherLiveMonitorPage() {
             </div>
             <h2 className="text-xl font-bold text-navy-900">Exam Session Ended</h2>
             <p className="text-sm text-slate-500">{activeExam.title} · Room Code {activeExam.roomCode}</p>
-            <div className="grid grid-cols-3 gap-3 pt-2 max-w-md mx-auto">
+            <div className="grid grid-cols-1 gap-3 pt-2 max-w-md mx-auto sm:grid-cols-3">
               <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
                 <p className="text-2xl font-bold text-navy-900">{counts.all}</p>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">Participants</p>

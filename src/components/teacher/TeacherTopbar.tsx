@@ -32,22 +32,22 @@ export function TeacherTopbar({ title, description }: TeacherTopbarProps) {
   const onAI = pathname === "/ai";
 
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/80 backdrop-blur px-6 h-16">
-      <div>
-        <h1 className="text-lg font-semibold text-navy-900">{title}</h1>
+    <header className="sticky top-0 z-10 flex min-w-0 items-center justify-between gap-3 border-b border-slate-200 bg-white/80 pl-16 pr-3 backdrop-blur sm:gap-4 sm:pl-16 sm:pr-6 lg:px-6 h-16">
+      <div className="min-w-0">
+        <h1 className="truncate text-base font-semibold text-navy-900 sm:text-lg">{title}</h1>
         {description && (
           <p className="text-xs text-slate-500 hidden sm:block">{description}</p>
         )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
                 {/* AI Assistant */}
         <Link
           href="/ai"
           title="AI Assistant"
-          className="flex h-9 items-center gap-1.5 rounded-full px-2.5 hover:bg-slate-100 transition-colors"
+          className="flex h-9 items-center gap-1.5 rounded-full px-2 sm:px-2.5 hover:bg-slate-100 transition-colors"
         >
           <Sparkles size={17} className={onAI ? "text-sky-600" : "text-slate-600"} />
-          <span className={`text-sm font-medium ${onAI ? "text-sky-600" : "text-slate-600"}`}>
+          <span className={`hidden text-sm font-medium sm:inline ${onAI ? "text-sky-600" : "text-slate-600"}`}>
             AI
           </span>
         </Link>

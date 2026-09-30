@@ -66,7 +66,7 @@ export default function TeacherExamLobbyPage() {
     <>
       <TeacherTopbar title={exam.title} description={`Room Code: ${exam.roomCode}`} />
       <main className="p-6 space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center">
           <button onClick={() => router.push("/teacher-exams")} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-navy-900">
             <ArrowLeft className="w-4 h-4" /> Back to Exams List
           </button>
@@ -76,7 +76,7 @@ export default function TeacherExamLobbyPage() {
               Live Session Active — Go to Monitor
             </button>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="neutral">{exam.requests.length} Total Requests</Badge>
               <Badge variant="warning">Lobby Phase (Waiting to Start)</Badge>
             </div>
@@ -89,7 +89,7 @@ export default function TeacherExamLobbyPage() {
               {exam.courseCode || exam.department}
             </span>
             <h1 className="text-xl font-semibold text-navy-900">{exam.title}</h1>
-            <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
+            <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 font-medium">
               <span className="flex items-center gap-1"><HelpCircle className="w-3.5 h-3.5 text-slate-400" />{exam.questionCount} Questions</span>
               <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" />{exam.durationMinutes} Minutes</span>
             </div>

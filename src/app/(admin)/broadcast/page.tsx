@@ -753,7 +753,7 @@ export default function AdminBroadcastPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
+            <div className="grid grid-cols-1 gap-3 pt-1 text-xs sm:grid-cols-2">
               <div className="bg-white border border-slate-200 rounded-xl p-3">
                 <p className="text-slate-400 font-medium">Target Audience</p>
                 <p className="text-sm font-semibold text-navy-900 mt-0.5">

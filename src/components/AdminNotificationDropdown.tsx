@@ -69,7 +69,7 @@ export default function AdminNotificationDropdown() {
       {isOpen && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-3 w-96 bg-white rounded-2xl shadow-xl border border-slate-100 py-3 z-40 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="absolute right-0 mt-3 w-[min(24rem,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-slate-100 py-3 z-40 animate-in fade-in slide-in-from-top-2 duration-150">
             
             {/* Header */}
             <div className="px-5 py-2.5 border-b border-slate-100 flex items-center justify-between">

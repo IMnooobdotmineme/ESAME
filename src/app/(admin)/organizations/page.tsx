@@ -254,14 +254,14 @@ export default function AdminOrganizationsPage() {
                   </div>
 
                   {/* ✅ NEW: Org profile details from sign-up */}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <OrgInfo icon={Building2} label="Org Type" value={org.orgType} />
                     <OrgInfo icon={Globe} label="Country" value={org.country} />
                     <OrgInfo icon={MapPin} label="Region" value={org.region} />
                     <OrgInfo icon={Home} label="Address" value={org.address} />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-3">
                     <div className="bg-slate-50 rounded-xl border border-slate-100 p-3 text-center">
                       <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
                         Teachers

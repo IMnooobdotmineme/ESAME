@@ -354,7 +354,7 @@ export default function AcademicStructurePage() {
         {view.level === "departments" && (
           <>
             {/* Top stats */}
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatTile icon={Building2} label="Total Departments" value={String(totalDepartments)} badge="Stable" iconColor="text-sky-600" iconBg="bg-sky-50" />
               <StatTile icon={GraduationCap} label="Total Students" value={totalStudents.toLocaleString()} badge="+4.2%" iconColor="text-emerald-600" iconBg="bg-emerald-50" />
               <StatTile icon={BookOpen} label="Course Modules" value={String(totalCourses)} badge="Sem 2" iconColor="text-navy-700" iconBg="bg-navy-50" />
@@ -406,7 +406,7 @@ export default function AcademicStructurePage() {
                     </div>
                   </div>
                   <div className="p-5">
-                    <div className="grid grid-cols-3 text-center gap-2 mb-4">
+                    <div className="grid grid-cols-1 gap-2 text-center mb-4 sm:grid-cols-3">
                       <MiniMetric label="Courses" value={d.courses} />
                       <MiniMetric label="Students" value={d.students.toLocaleString()} />
                       <MiniMetric label="Faculty" value={d.faculty} />

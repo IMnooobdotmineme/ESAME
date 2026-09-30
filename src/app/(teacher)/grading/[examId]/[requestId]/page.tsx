@@ -270,7 +270,7 @@ export default function GradeStudentPage() {
         </div>
 
         {/* Summary card */}
-        <Card className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center">
               <FileText size={18} />

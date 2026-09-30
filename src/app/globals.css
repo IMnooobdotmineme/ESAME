@@ -32,17 +32,18 @@ input, textarea, select {
   
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
+html {
+  width: 100%;
+  overflow-x: hidden;
+}
 
 
 @keyframes check-pop {
@@ -60,9 +61,55 @@ body {
   }
 }
 
+/* Responsive foundations shared by every portal. These rules only affect
+   presentation and prevent wide content from forcing a horizontal viewport. */
+main, section, article, header, footer {
+  min-width: 0;
+}
+
+img, svg, video, canvas {
+  max-width: 100%;
+}
+
+button, input, textarea, select {
+  max-width: 100%;
+}
+
+table {
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  /* Keep cards and dialogs comfortable on narrow phones without changing
+     their desktop spacing. */
+  .fixed.inset-0 > [class*="max-w-"] {
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+  }
+
+  .md-body, .md-body pre, pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hover-lift {
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+}
+
 .check-pop {
   animation: check-pop 0.35s ease-out;
-}
 }
 /* ===== Code editor (VS Code-like tokens) ===== */
 .code-editor pre,

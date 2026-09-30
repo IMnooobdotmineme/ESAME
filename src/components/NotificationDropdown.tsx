@@ -85,7 +85,7 @@ export default function NotificationDropdown() {
 
       {/* Popover Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-3xl bg-white border border-slate-100 shadow-2xl ring-1 ring-black/5 z-50 overflow-hidden font-sans">
+        <div className="absolute right-0 mt-3 w-[min(20rem,calc(100vw-1rem))] sm:w-96 rounded-3xl bg-white border border-slate-100 shadow-2xl ring-1 ring-black/5 z-50 overflow-hidden font-sans">
           {/* Header */}
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-sky-50/60">
             <div className="flex items-center gap-2">

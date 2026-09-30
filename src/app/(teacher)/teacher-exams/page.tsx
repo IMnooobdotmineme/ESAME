@@ -312,7 +312,7 @@ export default function MyExamsPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:shrink-0 md:flex-nowrap">
                     {exam.status === "scheduled" && (
                       <Button
                         variant="outline"
@@ -374,7 +374,7 @@ export default function MyExamsPage() {
                             className="fixed inset-0 z-40"
                             onClick={() => setOpenMenuId(null)}
                           />
-                          <div className="absolute right-0 top-9 z-50 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                          <div className="absolute bottom-9 left-0 top-auto z-50 w-40 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl md:bottom-auto md:left-auto md:right-0 md:top-9 md:shadow-lg">
                             <button
                               onClick={() => handleDuplicate(exam)}
                               disabled={isDuplicating}

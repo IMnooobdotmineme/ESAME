@@ -148,7 +148,7 @@ export default function ExamDetailPage() {
         </div>
 
         {/* Info summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <InfoCard icon={GraduationCap} label="Teacher" value={exam.teacher} />
           <InfoCard icon={FileText} label="Subject" value={exam.subject} />
           <InfoCard icon={Clock} label="Duration" value={exam.duration} />
@@ -374,7 +374,7 @@ export default function ExamDetailPage() {
                         ) : q.rawType === "matching" ? (
                           leftItems.length > 0 ? (
                             <div className="mt-3">
-                              <div className="grid grid-cols-2 gap-6">
+                              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                                 <div className="space-y-2">
                                   {leftItems.map((item, idx) => (
                                     <div key={item.id} className="flex items-center gap-3 rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3 py-2.5">
