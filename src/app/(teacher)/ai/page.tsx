@@ -7,7 +7,7 @@ import {
   Plus, Send, MessageSquare, Trash2, Sparkles, Paperclip, X,
   FolderPlus, Folder, Loader2, PanelLeftClose, PanelLeftOpen,
     Search, SquarePen, ChevronDown, Copy, Check, Pencil, Square, RefreshCw,
-        FileText, Eye, Mic, Pin, MoreHorizontal, ArrowDown, Volume2, Download,
+        FileText, Eye, EyeOff, Mic, Pin, MoreHorizontal, ArrowDown, Volume2, Download, Settings, KeyRound,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -23,6 +23,10 @@ import { toast, ToastHost } from "@/components/ui/toast";
 import { normalizeExamDraft } from "@/lib/ai-exam";
 import { pcmToWavBlob, transcribeBlob } from "@/lib/stt-fallback";
 interface Chat { id: string; title: string; isPinned: boolean; projectId: string | null; updatedAt: string; }
+type AIProvider = "ollama" | "gemini";
+const DEFAULT_AI_PROVIDER: AIProvider = "ollama";
+const AI_PROVIDER_STORAGE_KEY = "esame.ai.provider";
+const AI_API_KEY_STORAGE_KEY = "esame.ai.geminiApiKey";
 // ===== Document export helpers (PDF / Word from markdown) =====
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -817,6 +821,10 @@ export default function AIAssistantPage() {
     const runLockRef = useRef(false);
     const attStashRef = useRef<Record<string, any[]>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [aiSettingsOpen, setAISettingsOpen] = useState(false);
+  const [aiProvider, setAIProvider] = useState<AIProvider>(DEFAULT_AI_PROVIDER);
+  const [apiKey, setAPIKey] = useState("");
+  const [showAPIKey, setShowAPIKey] = useState(false);
   const TEACHER_HOME = "/teacher-dashboard";
 // ---------- memoized assistant content (keeps the page fast) ----------
 function wantsDocument(userText: string): boolean {
@@ -862,7 +870,32 @@ const AssistantContent = memo(function AssistantContent({ content, exportable = 
   useEffect(() => {
     fetch("/api/teacher/ai/chats").then((r) => r.json()).then((d) => setChats(d.chats || []));
     fetch("/api/teacher/ai/projects").then((r) => r.json()).then((d) => setProjects(d.projects || []));
+
+    const savedProvider = localStorage.getItem(AI_PROVIDER_STORAGE_KEY);
+    const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+    const recommendedProvider: AIProvider = isLocalHost ? "ollama" : "gemini";
+    const provider: AIProvider = savedProvider === "ollama" || savedProvider === "gemini"
+      ? savedProvider
+      : recommendedProvider;
+    const savedKey = localStorage.getItem(AI_API_KEY_STORAGE_KEY) || "";
+    setAIProvider(provider);
+    setAPIKey(savedKey);
+    if (provider === "gemini" && !savedKey) setAISettingsOpen(true);
   }, []);
+
+  function saveAISettings() {
+    const cleanKey = apiKey.trim();
+    if (aiProvider === "gemini" && !cleanKey) {
+      toast("Enter a Gemini API key to use AI after deployment.", "error");
+      return;
+    }
+    localStorage.setItem(AI_PROVIDER_STORAGE_KEY, aiProvider);
+    if (cleanKey) localStorage.setItem(AI_API_KEY_STORAGE_KEY, cleanKey);
+    else localStorage.removeItem(AI_API_KEY_STORAGE_KEY);
+    setAPIKey(cleanKey);
+    setAISettingsOpen(false);
+    toast(aiProvider === "gemini" ? "Gemini API key saved in this browser." : "Local Ollama selected.", "success");
+  }
 
 useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -1266,6 +1299,11 @@ useEffect(() => {
     async function sendMessage(overrideText?: string) {
         const baseText = overrideText !== undefined ? overrideText : input.trim();
     if ((!baseText && attachments.length === 0) || isStreaming || sendLockRef.current) return;
+    if (aiProvider === "gemini" && !apiKey.trim()) {
+      setAISettingsOpen(true);
+      toast("Add your Gemini API key before using AI.", "info");
+      return;
+    }
     sendLockRef.current = true;
     const userText =
       baseText +
@@ -1336,6 +1374,7 @@ useEffect(() => {
           attachments: imageAtts,
                     projectId: activeProject?.id ?? null,
           editFromId: editFromId ?? null,
+          aiConfig: { provider: aiProvider, ...(aiProvider === "gemini" ? { apiKey: apiKey.trim() } : {}) },
         }),
         signal: controller.signal,
       });
@@ -1878,13 +1917,21 @@ useEffect(() => {
             <span className="truncate text-sm font-semibold text-navy-900">
               {activeChatId ? chats.find((c) => c.id === activeChatId)?.title ?? "Chat" : "New chat"}
             </span>
-                                    {activeProject && (
+            {activeProject && (
               <span className="inline-flex items-center gap-1.5 text-slate-400">
                 <span className="text-slate-300">/</span>
                 <Folder size={13} strokeWidth={2} className="shrink-0" />
                 <span className="text-[13px] font-medium text-slate-500">{activeProject.name}</span>
               </span>
             )}
+            <button
+              onClick={() => setAISettingsOpen(true)}
+              className="ml-auto flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-navy-900"
+              title="AI provider settings"
+            >
+              <Settings size={15} />
+              <span className="hidden sm:inline">{aiProvider === "gemini" ? "Gemini" : "Ollama"}</span>
+            </button>
             {activeChatId && messages.length > 0 && (
               <button
                 onClick={() => {
@@ -1892,7 +1939,7 @@ useEffect(() => {
                   const md = messages.map((m) => `**${m.role === "user" ? "You" : "ESAME AI"}:**\n\n${m.content}`).join("\n\n---\n\n");
                   downloadText(`${title.slice(0, 30) || "chat"}.md`, `# ${title}\n\n${md}`);
                 }}
-                className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-navy-900"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-navy-900"
                 title="Export chat as Markdown"
               >
                 <Download size={15} />
@@ -2284,6 +2331,84 @@ useEffect(() => {
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>Cancel</Button>
                         <Button onClick={createProject} disabled={!newProjectName.trim() || creatingProject}><FolderPlus size={14} /> {creatingProject ? "Creating..." : "Create"}</Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={aiSettingsOpen} onClose={() => setAISettingsOpen(false)} className="max-w-md">
+        <DialogHeader
+          title="AI settings"
+          description="Choose how this browser connects to ESAME AI."
+          onClose={() => setAISettingsOpen(false)}
+        />
+        <div className="space-y-5 px-6 py-5">
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setAIProvider("gemini")}
+              className={`rounded-xl border p-3 text-left transition ${aiProvider === "gemini" ? "border-sky-400 bg-sky-50 ring-2 ring-sky-100" : "border-slate-200 hover:border-slate-300"}`}
+            >
+              <span className="block text-sm font-semibold text-navy-900">Google Gemini</span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500">For Vercel and other hosted deployments</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAIProvider("ollama")}
+              className={`rounded-xl border p-3 text-left transition ${aiProvider === "ollama" ? "border-sky-400 bg-sky-50 ring-2 ring-sky-100" : "border-slate-200 hover:border-slate-300"}`}
+            >
+              <span className="block text-sm font-semibold text-navy-900">Local Ollama</span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500">Uses Qwen running on this computer</span>
+            </button>
+          </div>
+
+          {aiProvider === "gemini" && (
+            <div className="space-y-2">
+              <label htmlFor="gemini-api-key" className="text-sm font-medium text-navy-900">Gemini API key</label>
+              <div className="relative">
+                <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="gemini-api-key"
+                  type={showAPIKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(event) => setAPIKey(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && saveAISettings()}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="AQ..."
+                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-10 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAPIKey((value) => !value)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-navy-900"
+                  title={showAPIKey ? "Hide API key" : "Show API key"}
+                >
+                  {showAPIKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-xs leading-5 text-slate-500">
+                New Gemini authorization keys normally start with AQ. The key stays in this browser and is sent only with your AI requests. It is not saved in the ESAME database.
+              </p>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block text-xs font-semibold text-sky-600 hover:text-sky-700"
+              >
+                Get a Gemini API key
+              </a>
+            </div>
+          )}
+
+          {aiProvider === "ollama" && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800">
+              Ollama keeps the existing local Qwen setup. It normally cannot be reached from a Vercel deployment.
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setAISettingsOpen(false)}>Cancel</Button>
+            <Button onClick={saveAISettings}>Save settings</Button>
           </div>
         </div>
       </Dialog>

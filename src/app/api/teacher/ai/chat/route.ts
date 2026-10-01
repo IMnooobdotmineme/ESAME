@@ -10,7 +10,7 @@ import { buildSmartHistory } from "@/lib/ai/context-builder";
 import { getChatDocumentContext } from "@/lib/ai/document-memory";
 import { eq, and, gte } from "drizzle-orm";
 import { requireTeacherSession } from "@/lib/session";
-import { streamChat } from "@/lib/ai/adapter";
+import { streamChat, type AIConnectionConfig } from "@/lib/ai/adapter";
 import { checkQuota, incrementQuota } from "@/lib/ai/quota";
 
 export const maxDuration = 300; // 15 minutes for large AI grading tasks
@@ -25,10 +25,11 @@ async function aiGradeQuestion(params: {
   maxPoints: number;
   studentAnswerText?: string | null;
   selectedOptionIds?: string[];
+  aiConfig: AIConnectionConfig;
 }) {
   const {
     questionType, questionText, options = [], payload = {},
-    explanation, maxPoints, studentAnswerText, selectedOptionIds = [],
+    explanation, maxPoints, studentAnswerText, selectedOptionIds = [], aiConfig,
   } = params;
 
   const correctOptions = options.filter((o: any) => o.isCorrect).map((o: any) => ({ id: o.id, text: o.optionText, order: o.optionOrder }));
@@ -78,7 +79,7 @@ async function aiGradeQuestion(params: {
       onToken: (t: string) => { raw += t; },
       onEnd: async () => {},
       onError: () => {},
-    });
+    }, aiConfig);
   } catch (err) {
     console.error("[AI-GRADING] aiGradeQuestion failed:", err);
   }
@@ -94,25 +95,22 @@ async function aiGradeQuestion(params: {
 }
 
 // ========== AI TITLE GENERATOR (ChatGPT-style smart titles) ==========
-async function autoTitle(chatId: string, firstUserText: string): Promise<string | null> {
+async function autoTitle(chatId: string, firstUserText: string, aiConfig: AIConnectionConfig): Promise<string | null> {
   try {
     const [chat] = await db.select({ title: aiChats.title }).from(aiChats).where(eq(aiChats.id, chatId));
     if (!chat) return null;
     const cur = String(chat.title || "");
     if (cur && cur !== "Newchat" && cur !== "New chat") return null; // already has a real title
-    const res = await fetch(`${process.env.OLLAMA_BASE_URL || "http://localhost:11434"}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.OLLAMA_FAST_MODEL || "qwen3:8b",
-        prompt: `Create a very short title (max 6 words, no quotes, no ending punctuation) for a conversation that starts with this message:\n\n${String(firstUserText).slice(0, 400)}\n\nTitle:`,
-        stream: false,
-        options: { temperature: 0.2 },
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const title = String(data.response || "").replace(/["'*`!?\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+    let generated = "";
+    await streamChat([{
+      role: "user",
+      content: `Create a very short title (max 6 words, no quotes, no ending punctuation) for a conversation that starts with this message:\n\n${String(firstUserText).slice(0, 400)}\n\nTitle:`,
+    }], {
+      onToken: (text) => { generated += text; },
+      onEnd: () => {},
+      onError: () => {},
+    }, { ...aiConfig, temperature: 0.2, think: false });
+    const title = generated.replace(/["'*`!?\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
     if (!title) return null;
     await db.update(aiChats).set({ title }).where(eq(aiChats.id, chatId));
     return title;
@@ -126,7 +124,17 @@ export async function POST(req: NextRequest) {
   const session = await requireTeacherSession();
   if (!session) return new Response("Unauthorized", { status: 401 });
 
-  let { chatId, message, history, attachments = [], projectId = null, editFromId = null } = await req.json();
+  let { chatId, message, history, attachments = [], projectId = null, editFromId = null, aiConfig: rawAIConfig } = await req.json();
+  const aiConfig: AIConnectionConfig = rawAIConfig?.provider === "gemini"
+    ? { provider: "gemini", apiKey: typeof rawAIConfig.apiKey === "string" ? rawAIConfig.apiKey.trim() : "" }
+    : { provider: "ollama" };
+
+  if (aiConfig.provider === "gemini" && !aiConfig.apiKey) {
+    return new Response(JSON.stringify({ error: "Add your Gemini API key in AI settings before sending a message." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const [teacher] = await db.select({ orgId: teachers.orgId }).from(teachers).where(eq(teachers.id, session.userId));
   if (!teacher) return new Response("Teacher not found", { status: 404 });
@@ -152,7 +160,7 @@ export async function POST(req: NextRequest) {
 
     const [userMsg] = await db.insert(aiMessages).values({ chatId: currentChatId, role: "user", content: message, attachments: attachments.length ? attachments : null }).returning();
   await db.update(aiChats).set({ updatedAt: new Date() }).where(eq(aiChats.id, currentChatId));
-  const titlePromise = autoTitle(currentChatId, message); // runs in parallel with the answer
+  const titlePromise = autoTitle(currentChatId, message, aiConfig); // runs in parallel with the answer
 
   // Fetch teacher's departments and subjects for context
   const teacherDepts = teacher
@@ -274,6 +282,7 @@ export async function POST(req: NextRequest) {
                 maxPoints: q.points,
                 studentAnswerText: ans.answerText || "",
                 selectedOptionIds: ans.selectedOptionIds || [],
+                aiConfig,
               });
 
               const points = aiGrade.points;
@@ -437,7 +446,7 @@ export async function POST(req: NextRequest) {
             onToken: (t: string) => { raw += t; },
             onEnd: async (m: any) => { metadata = m; },
             onError: () => {},
-          });
+          }, aiConfig);
         } catch (e) {
           console.error("[EXAM-GEN] call failed:", e);
         }
@@ -530,7 +539,7 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`));
             controller.close();
           },
-        });
+        }, aiConfig);
       } catch (error: any) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`));
         controller.close();

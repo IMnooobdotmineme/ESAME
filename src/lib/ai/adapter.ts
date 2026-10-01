@@ -2,11 +2,14 @@
 // ESAME AI Adapter — Smart routing with task classification
 // ============================================================
 
+import { GoogleGenAI, type Interactions } from "@google/genai";
+
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.8:27b-mlx";
 const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || OLLAMA_MODEL;
 const OLLAMA_FAST_MODEL = process.env.OLLAMA_FAST_MODEL || "qwen3:8b";
 const OLLAMA_FALLBACK_MODEL = process.env.OLLAMA_FALLBACK_MODEL || "qwen3:8b";
+const GEMINI_MODEL = "gemini-3.8-flash";
 
 // ---------- types ----------
 export interface AIProvider {
@@ -32,6 +35,11 @@ export interface StreamCallbacks {
   onToken: (text: string) => void;
   onEnd: (metadata: { provider: string; model: string; tokens: number }) => void;
   onError: (error: Error) => void;
+}
+
+export interface AIConnectionConfig {
+  provider?: "ollama" | "gemini";
+  apiKey?: string;
 }
 
 export function getAvailableProviders(): AIProvider[] {
@@ -82,7 +90,7 @@ function classifyTask(messages: ChatMessage[]): TaskConfig {
 export async function streamChat(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
-  options: { provider?: string; temperature?: number; think?: boolean; forceModel?: string } = {}
+  options: AIConnectionConfig & { temperature?: number; think?: boolean; forceModel?: string } = {}
 ) {
   // Classify the task to determine optimal model + settings
   const task = classifyTask(messages);
@@ -91,6 +99,20 @@ export async function streamChat(
   const model = options.forceModel || task.model;
   const temperature = options.temperature ?? task.temperature;
   const think = options.think ?? task.think;
+
+  if (options.provider === "gemini") {
+    if (!options.apiKey?.trim()) {
+      callbacks.onError(new Error("A Gemini API key is required. Open AI settings and add your key."));
+      return;
+    }
+
+    try {
+      await streamGemini(messages, options.apiKey.trim(), callbacks);
+    } catch (error) {
+      callbacks.onError(friendlyGeminiError(error));
+    }
+    return;
+  }
   
   console.log(`[AI-ROUTER] Task: ${task.reason} → ${model} (temp: ${temperature}, think: ${think})`);
   
@@ -130,6 +152,96 @@ export async function streamChat(
     // If it failed before sending anything and wasn't an OOM, show the error
     callbacks.onError(error instanceof Error ? error : new Error(String(error)));
   }
+}
+
+// ---------- GOOGLE GEMINI (bring-your-own-key for hosted deployments) ----------
+async function streamGemini(
+  messages: ChatMessage[],
+  apiKey: string,
+  callbacks: StreamCallbacks
+) {
+  const ai = new GoogleGenAI({ apiKey });
+  const systemInstruction = messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
+
+  const input: Interactions.Step[] = messages
+    .filter((message) => message.role !== "system")
+    .map((message): Interactions.UserInputStep | Interactions.ModelOutputStep => {
+      const content: Interactions.Content[] = [];
+      if (message.content) content.push({ type: "text", text: message.content });
+      for (const attachment of message.attachments ?? []) {
+        const match = attachment.dataUrl?.match(/^data:([^;]+);base64,(.+)$/);
+        if (match?.[1]?.startsWith("image/")) {
+          content.push({ type: "image", mime_type: match[1], data: match[2] });
+        }
+      }
+      if (!content.length) content.push({ type: "text", text: " " });
+      return message.role === "assistant"
+        ? { type: "model_output", content }
+        : { type: "user_input", content };
+    });
+
+  const response = await ai.interactions.create({
+    model: GEMINI_MODEL,
+    input,
+    stream: true,
+    store: false,
+    ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
+    generation_config: { max_output_tokens: 8192 },
+  });
+
+  let tokens = 0;
+  for await (const event of response) {
+    if (event.event_type === "step.delta" && event.delta.type === "text") {
+      callbacks.onToken(event.delta.text);
+      tokens += event.delta.text.split(/\s+/).filter(Boolean).length;
+    }
+    if (event.event_type === "step.stop") {
+      const reportedTokens = event.usage?.total_output_tokens ?? event.step_usage?.total_output_tokens;
+      if (typeof reportedTokens === "number") tokens = reportedTokens;
+    }
+    if (event.event_type === "error") {
+      throw new Error(event.error?.message || "Gemini could not complete this request.");
+    }
+  }
+
+  callbacks.onEnd({ provider: "gemini", model: GEMINI_MODEL, tokens });
+}
+
+function friendlyGeminiError(error: unknown): Error {
+  const raw = error instanceof Error ? error.message : String(error);
+  let detail = raw;
+  // The SDK can wrap Google's JSON error inside another JSON error message.
+  // Unwrap it a few times so teachers see the actual project/key problem.
+  for (let i = 0; i < 3; i++) {
+    try {
+      const parsed = JSON.parse(detail);
+      const next = parsed?.error?.message || parsed?.message;
+      if (!next || String(next) === detail) break;
+      detail = String(next);
+    } catch {
+      break;
+    }
+  }
+
+  if (/api.key.invalid|invalid api key|missing api key|expired|unauthenticated|\b401\b/i.test(detail)) {
+    return new Error("Gemini rejected this API key. Check that it is active, then update it in AI settings.");
+  }
+  if (/project has been denied access/i.test(detail)) {
+    return new Error("Google denied Gemini API access for this key's project. Check the project status, account eligibility, and billing/access notices in Google AI Studio.");
+  }
+  if (/permission.denied|does not have permission|\b403\b/i.test(detail)) {
+    return new Error(`Gemini permission denied: ${detail.slice(0, 280)}`);
+  }
+  if (/quota|resource.exhausted|rate.?limit|\b429\b/i.test(detail)) {
+    return new Error("This Gemini API key has reached its usage limit. Try again later or use another key.");
+  }
+  if (/not found|no longer available|\b404\b/i.test(detail)) {
+    return new Error(`The configured Gemini model (${GEMINI_MODEL}) is unavailable for this API key.`);
+  }
+  return new Error(detail.slice(0, 400));
 }
 
 // ---------- LOCAL OLLAMA (unlimited, private, vision-native) ----------
